@@ -1,0 +1,61 @@
+portal:
+  port: 8080
+  title: "LXD-pups Dev Environment"
+
+management:
+  mcp-gateway:
+    enabled: true
+    unit: mcp-gateway.service
+    port: 8888
+    description: "MCP Gateway"
+    ui: "http://localhost:8888/"
+
+  predict-ja:
+    enabled: true
+    unit: predict-ja.service
+    port: 8190
+    description: "predict-ja"
+
+  predict-en:
+    enabled: false
+    unit: predict-en.service
+    port: 8191
+    description: "predict-en"
+
+worker-template:
+  mcp-gateway:
+    enabled: true
+    singleton: true
+    unit: mcp-gateway.service
+    port: 8888
+    description: "MCP Gateway"
+
+  llm-console-claude:
+    enabled: true
+    singleton: false
+    unit: llm-console-claude@.service
+    port-range: 8200-8299
+    instances:
+      - port: 8200
+        title: "Claude — Coding"
+      - port: 8201
+        title: "Claude — Research"
+      - port: 8202
+        title: "Claude — Docs"
+    description: "LLM Console — Claude"
+
+  workflow-editor:
+    enabled: true
+    singleton: false
+    unit: workflow-editor@.service
+    port-range: 9300-9399
+    instances:
+      - port: 9300
+        title: "Workflow — Analysis"
+      - port: 9301
+        title: "Workflow — Deploy"
+    description: "Turing Workflow Editor"
+
+remotes:
+  local:
+    description: "This machine"
