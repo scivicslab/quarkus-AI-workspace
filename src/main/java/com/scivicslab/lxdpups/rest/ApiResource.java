@@ -6,6 +6,7 @@ import com.scivicslab.lxdpups.service.ContainerManager;
 import com.scivicslab.lxdpups.service.HostServiceManager;
 import com.scivicslab.lxdpups.service.ProcessManager;
 import com.scivicslab.lxdpups.service.StatusPoller;
+import com.scivicslab.lxdpups.service.ToolInstanceManager;
 import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -13,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.resteasy.reactive.RestStreamElementType;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,6 +35,9 @@ public class ApiResource {
 
     @Inject
     ProcessManager processManager;
+
+    @Inject
+    ToolInstanceManager toolInstanceManager;
 
     // ── Status ──
 
@@ -180,5 +185,34 @@ public class ApiResource {
         boolean ok = containerManager.serviceStop(name, remote, unit);
         return ok ? Response.ok(Map.of("status", "stopped")).build()
                   : Response.serverError().entity(Map.of("error", "Failed to stop service")).build();
+    }
+
+    // ── Tool instances (container mode) ──
+
+    @POST
+    @Path("/tools/{name}/launch")
+    public Response launchTool(@PathParam("name") String name) {
+        int port = toolInstanceManager.launchTool(name);
+        if (port < 0) {
+            return Response.serverError()
+                    .entity(Map.of("error", "Failed to launch tool: " + name))
+                    .build();
+        }
+        return Response.ok(Map.of("status", "launched", "tool", name, "port", port)).build();
+    }
+
+    @POST
+    @Path("/tools/{name}/stop")
+    public Response stopTool(@PathParam("name") String name,
+                             @QueryParam("port") int port) {
+        boolean ok = toolInstanceManager.stopTool(name, port);
+        return ok ? Response.ok(Map.of("status", "stopped")).build()
+                  : Response.serverError().entity(Map.of("error", "Failed to stop tool")).build();
+    }
+
+    @GET
+    @Path("/tools/instances")
+    public List<ToolInstanceManager.ToolInstance> getToolInstances() {
+        return toolInstanceManager.getRunningInstances();
     }
 }

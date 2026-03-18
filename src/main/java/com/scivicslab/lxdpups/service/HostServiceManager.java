@@ -59,7 +59,9 @@ public class HostServiceManager {
      */
     public boolean stop(String name) {
         LOG.info("Stopping management service: " + name);
-        return processManager.stop(name);
+        var svc = findService(name);
+        int port = svc != null ? svc.getPort() : 0;
+        return processManager.stop(name, port);
     }
 
     /**
@@ -72,7 +74,7 @@ public class HostServiceManager {
             LOG.warning("Unknown management service: " + name);
             return false;
         }
-        processManager.stop(name);
+        processManager.stop(name, svc.getPort());
         return processManager.start(svc);
     }
 

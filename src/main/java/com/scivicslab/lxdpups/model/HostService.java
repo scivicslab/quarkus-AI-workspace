@@ -1,7 +1,7 @@
 package com.scivicslab.lxdpups.model;
 
 /**
- * A service running on the host, managed by systemd.
+ * A service running on the host.
  */
 public record HostService(
         String name,
@@ -9,5 +9,6 @@ public record HostService(
         int port,
         String description,
         String uiUrl,
-        ServiceStatus status
+        ServiceStatus status,
+        String processName
 ) {}

@@ -253,51 +253,143 @@ public class ProcessManager {
 
     /**
      * Stop a service by destroying its process.
+     * If the process was not started by this Portal (orphan), kills by port.
      */
-    public boolean stop(String name) {
+    public boolean stop(String name, int port) {
         progressTrackers.remove(name);
         var managed = processes.remove(name);
-        if (managed == null || !managed.process().isAlive()) {
-            LOG.info("Service not running: " + name);
+        if (managed != null && managed.process().isAlive()) {
+            LOG.info("Stopping service: " + name);
+            managed.process().destroy();
+            try {
+                boolean exited = managed.process().waitFor(5, TimeUnit.SECONDS);
+                if (!exited) {
+                    LOG.warning("Service " + name + " did not stop gracefully, forcing");
+                    managed.process().destroyForcibly();
+                    managed.process().waitFor(3, TimeUnit.SECONDS);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                managed.process().destroyForcibly();
+            }
             return true;
         }
 
-        LOG.info("Stopping service: " + name);
-        managed.process().destroy();
-        try {
-            boolean exited = managed.process().waitFor(5, TimeUnit.SECONDS);
-            if (!exited) {
-                LOG.warning("Service " + name + " did not stop gracefully, forcing");
-                managed.process().destroyForcibly();
-                managed.process().waitFor(3, TimeUnit.SECONDS);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            managed.process().destroyForcibly();
+        // Try to kill orphan process by port
+        if (port > 0) {
+            return killByPort(port, name);
         }
+        LOG.info("Service not running: " + name);
         return true;
     }
 
     /**
-     * Check if a service process is alive.
+     * Stop a service (backward-compatible overload without port).
      */
-    public ServiceStatus getStatus(String name) {
+    public boolean stop(String name) {
+        return stop(name, 0);
+    }
+
+    /**
+     * Kill a process listening on the given port using fuser.
+     */
+    private boolean killByPort(int port, String name) {
+        try {
+            var pb = new ProcessBuilder("fuser", "-k", port + "/tcp");
+            pb.redirectErrorStream(true);
+            var process = pb.start();
+            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+            if (finished && process.exitValue() == 0) {
+                LOG.info("Killed orphan process on port " + port + " for service " + name);
+                return true;
+            }
+        } catch (Exception e) {
+            LOG.warning("Failed to kill by port " + port + ": " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Check if a service process is alive.
+     * Falls back to port check for processes started outside this Portal instance.
+     */
+    public ServiceStatus getStatus(String name, int port) {
         // Check if currently starting
         if (isStarting(name)) {
             return ServiceStatus.STARTING;
         }
 
         var managed = processes.get(name);
-        if (managed == null) {
-            return ServiceStatus.INACTIVE;
+        if (managed != null) {
+            if (managed.process().isAlive()) {
+                return ServiceStatus.ACTIVE;
+            }
+            // Process exited - check exit code
+            int exitCode = managed.process().exitValue();
+            processes.remove(name);
+            return exitCode == 0 ? ServiceStatus.INACTIVE : ServiceStatus.FAILED;
         }
-        if (managed.process().isAlive()) {
+
+        // No managed process — check if port is in use (orphan process from previous Portal run)
+        if (port > 0 && isPortInUse(port)) {
             return ServiceStatus.ACTIVE;
         }
-        // Process exited - check exit code
-        int exitCode = managed.process().exitValue();
-        processes.remove(name);
-        return exitCode == 0 ? ServiceStatus.INACTIVE : ServiceStatus.FAILED;
+        return ServiceStatus.INACTIVE;
+    }
+
+    /**
+     * Check if a TCP port is in use by attempting to connect.
+     */
+    private boolean isPortInUse(int port) {
+        try (var socket = new java.net.Socket()) {
+            socket.connect(new java.net.InetSocketAddress("localhost", port), 500);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get the process name listening on a given port using ss command.
+     * Returns null if unable to determine.
+     */
+    public String getProcessNameOnPort(int port) {
+        try {
+            var pb = new ProcessBuilder("ss", "-tlnp", "sport", "=", ":" + port);
+            pb.redirectErrorStream(true);
+            var process = pb.start();
+            var output = new String(process.getInputStream().readAllBytes()).trim();
+            boolean finished = process.waitFor(3, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return null;
+            }
+            // Parse ss output: look for users:(("process-name",pid=NNN,...))
+            for (var line : output.split("\n")) {
+                int usersIdx = line.indexOf("users:((");
+                if (usersIdx >= 0) {
+                    // Extract "process-name" from users:(("process-name",pid=NNN,...))
+                    int start = line.indexOf("\"", usersIdx);
+                    int end = line.indexOf("\"", start + 1);
+                    if (start >= 0 && end > start) {
+                        var procName = line.substring(start + 1, end);
+                        // Also extract pid
+                        int pidIdx = line.indexOf("pid=", end);
+                        if (pidIdx >= 0) {
+                            int pidEnd = line.indexOf(",", pidIdx);
+                            if (pidEnd < 0) pidEnd = line.indexOf(")", pidIdx);
+                            if (pidEnd > pidIdx) {
+                                return procName + " (pid " + line.substring(pidIdx + 4, pidEnd) + ")";
+                            }
+                        }
+                        return procName;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
     }
 
     /**
@@ -307,10 +399,20 @@ public class ProcessManager {
         var result = new ArrayList<HostService>();
         for (var svc : services) {
             if (!svc.isEnabled()) continue;
-            var status = getStatus(svc.getName());
+            var status = getStatus(svc.getName(), svc.getPort());
+            String processName = null;
+            if (status == ServiceStatus.ACTIVE) {
+                var managed = processes.get(svc.getName());
+                if (managed != null && managed.process().isAlive()) {
+                    processName = String.join(" ", managed.command());
+                } else {
+                    // Orphan process — look up by port
+                    processName = getProcessNameOnPort(svc.getPort());
+                }
+            }
             result.add(new HostService(
                     svc.getName(), svc.getUnit(), svc.getPort(),
-                    svc.getDescription(), svc.getUi(), status));
+                    svc.getDescription(), svc.getUi(), status, processName));
         }
         return result;
     }

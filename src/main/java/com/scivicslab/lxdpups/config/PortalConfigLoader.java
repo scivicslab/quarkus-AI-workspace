@@ -101,6 +101,18 @@ public class PortalConfigLoader {
             cfg.setWorkerTemplate(services);
         }
 
+        // Tools (container mode)
+        if (root.get("tools") instanceof Map<?, ?> toolsMap) {
+            var toolList = new ArrayList<PortalConfig.ToolDefinition>();
+            for (var entry : ((Map<String, Object>) toolsMap).entrySet()) {
+                if (entry.getValue() instanceof Map<?, ?> toolMap) {
+                    var tool = parseToolDefinition(entry.getKey(), (Map<String, Object>) toolMap);
+                    toolList.add(tool);
+                }
+            }
+            cfg.setTools(toolList);
+        }
+
         // Remotes
         if (root.get("remotes") instanceof Map<?, ?> remotes) {
             var list = new ArrayList<PortalConfig.Remote>();
@@ -143,6 +155,19 @@ public class PortalConfigLoader {
         if (map.get("runtime") instanceof String runtime) bin.setRuntime(runtime);
         if (map.get("args") instanceof String args) bin.setArgs(args);
         return bin;
+    }
+
+    @SuppressWarnings("unchecked")
+    private PortalConfig.ToolDefinition parseToolDefinition(String name, Map<String, Object> map) {
+        var tool = new PortalConfig.ToolDefinition();
+        tool.setName(name);
+        if (map.get("description") instanceof String desc) tool.setDescription(desc);
+        if (map.get("icon") instanceof String icon) tool.setIcon(icon);
+        if (map.get("port-range") instanceof String range) tool.setPortRange(range);
+        if (map.get("binary") instanceof Map<?, ?> binMap) {
+            tool.setBinary(parseBinary((Map<String, Object>) binMap));
+        }
+        return tool;
     }
 
     @SuppressWarnings("unchecked")

@@ -180,4 +180,83 @@ class PortalConfigLoaderTest {
         var svc = config.getManagementServices().get(0);
         assertNull(svc.getBinary());
     }
+
+    @Test
+    void parseToolsSection() {
+        var root = parseYaml("""
+                tools:
+                  llm-console-claude:
+                    description: "LLM Console"
+                    icon: "X"
+                    port-range: "8200-8209"
+                    binary:
+                      repo: scivicslab/quarkus-llm-console-claude
+                      version: v1.0.0
+                      asset: quarkus-llm-console-claude-v1.0.0-linux-x86_64
+                      path: ~/bin/quarkus-llm-console-claude
+                  docusaurus:
+                    description: "Docusaurus"
+                    icon: "D"
+                    port-range: "3000-3009"
+                    binary:
+                      repo: ""
+                      runtime: "npx"
+                      args: "docusaurus start --port {port} --host 0.0.0.0"
+                """);
+        var config = loader.parse(root);
+        assertEquals(2, config.getTools().size());
+
+        var claude = config.getTools().stream()
+                .filter(t -> "llm-console-claude".equals(t.getName())).findFirst().orElseThrow();
+        assertEquals("LLM Console", claude.getDescription());
+        assertEquals("X", claude.getIcon());
+        assertEquals("8200-8209", claude.getPortRange());
+        assertEquals(8200, claude.getPortStart());
+        assertEquals(8209, claude.getPortEnd());
+        assertNotNull(claude.getBinary());
+        assertEquals("scivicslab/quarkus-llm-console-claude", claude.getBinary().getRepo());
+
+        var docusaurus = config.getTools().stream()
+                .filter(t -> "docusaurus".equals(t.getName())).findFirst().orElseThrow();
+        assertEquals("Docusaurus", docusaurus.getDescription());
+        assertEquals("npx", docusaurus.getBinary().getRuntime());
+        assertEquals("docusaurus start --port {port} --host 0.0.0.0", docusaurus.getBinary().getArgs());
+    }
+
+    @Test
+    void parseContainerModePortal() {
+        var root = parseYaml("""
+                portal:
+                  port: 8080
+                  mode: container
+                  title: "AI Worker"
+                management:
+                  mcp-gateway:
+                    enabled: true
+                    port: 8888
+                    description: "MCP Gateway"
+                tools:
+                  workflow-editor:
+                    description: "Workflow Editor"
+                    icon: "W"
+                    port-range: "8300-8309"
+                """);
+        var config = loader.parse(root);
+        assertTrue(config.isContainerMode());
+        assertFalse(config.isHostMode());
+        assertEquals("AI Worker", config.getTitle());
+        assertEquals(1, config.getManagementServices().size());
+        assertEquals(1, config.getTools().size());
+        assertEquals("workflow-editor", config.getTools().get(0).getName());
+    }
+
+    @Test
+    void parseEmptyToolsSection() {
+        var root = parseYaml("""
+                portal:
+                  mode: host
+                """);
+        var config = loader.parse(root);
+        assertTrue(config.getTools().isEmpty());
+    }
 }

@@ -31,7 +31,7 @@
             min-height: 100vh;
         }
 
-        /* ── Header ──────────────────────────────────── */
+        /* -- Header ---- */
         header {
             background: linear-gradient(135deg, var(--orange-darker) 0%, var(--orange) 100%);
             padding: 0 28px;
@@ -48,7 +48,7 @@
         .brand-name { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
         .brand-tag  { font-size: 14px; font-weight: 500; }
 
-        /* ── Main ────────────────────────────────────── */
+        /* -- Main ---- */
         main { max-width: 1000px; margin: 0 auto; padding: 36px 24px 60px; }
 
         .section-label {
@@ -57,7 +57,7 @@
             color: var(--muted); margin-bottom: 14px;
         }
 
-        /* ── Badge ───────────────────────────────────── */
+        /* -- Badge ---- */
         .badge {
             display: inline-flex; align-items: center; gap: 6px;
             padding: 4px 13px; border-radius: 20px;
@@ -80,7 +80,7 @@
         .badge-Stopped { background: #F1F5F9; color: #475569; }
         .badge-Stopped::before { background: #94A3B8; }
 
-        /* ── Management card ─────────────────────────── */
+        /* -- Management card ---- */
         .mgmt-card {
             background: var(--card); border-radius: var(--radius);
             box-shadow: var(--shadow); padding: 20px 24px;
@@ -98,7 +98,7 @@
         .mgmt-port { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; color: var(--muted); min-width: 60px; }
         .mgmt-actions { margin-left: auto; display: flex; gap: 8px; }
 
-        /* ── Progress log ────────────────────────────── */
+        /* -- Progress log ---- */
         .progress-log {
             margin-top: 8px; padding: 10px 14px;
             background: #1E293B; color: #E2E8F0;
@@ -126,7 +126,7 @@
             color: #94A3B8; font-size: 11px; margin-top: 2px;
         }
 
-        /* ── Container card ──────────────────────────── */
+        /* -- Container card ---- */
         .container-card {
             background: var(--card); border-radius: var(--radius);
             box-shadow: var(--shadow); border-left: 4px solid var(--orange);
@@ -145,7 +145,7 @@
         .container-meta .lbl { font-weight: 600; color: var(--text); }
         .container-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
-        /* ── Buttons ─────────────────────────────────── */
+        /* -- Buttons ---- */
         .btn {
             display: inline-flex; align-items: center; gap: 7px;
             padding: 8px 18px; border-radius: 9px;
@@ -160,7 +160,7 @@
         .btn-stop:hover { background: #FEF2F2; }
         .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
 
-        /* ── Launch section ───────────────────────────── */
+        /* -- Launch section ---- */
         .launch-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
@@ -185,14 +185,14 @@
         .launch-input:focus { border-color: var(--orange); }
         .launch-card .btn { width: 100%; justify-content: center; }
 
-        /* ── Empty state ─────────────────────────────── */
+        /* -- Empty state ---- */
         .empty { text-align: center; padding: 56px 24px; color: var(--muted); }
         .empty .icon { font-size: 52px; margin-bottom: 14px; }
         .empty p { font-size: 15px; }
 
         .sessions-section { margin-bottom: 32px; }
 
-        /* ── AI Work Dashboard cards ────────────────── */
+        /* -- AI Work Dashboard cards ---- */
         .dashboard-card {
             background: var(--card); border-radius: var(--radius);
             box-shadow: var(--shadow); border-left: 4px solid var(--orange);
@@ -209,6 +209,52 @@
         .dashboard-svc-port { font-family: 'SF Mono', Consolas, monospace; font-size: 11px; color: var(--muted); }
         .badge-xs { padding: 2px 8px; font-size: 10px; }
         .badge-xs::before { width: 5px; height: 5px; }
+
+        /* -- Container mode: Info bar ---- */
+        .info-bar {
+            display: flex; gap: 24px; flex-wrap: wrap;
+            background: var(--card); border-radius: var(--radius);
+            box-shadow: var(--shadow); padding: 14px 24px;
+            margin-bottom: 28px; align-items: center;
+        }
+        .info-item { display: flex; align-items: center; gap: 8px; }
+        .info-label { font-weight: 600; font-size: 13px; }
+        .info-value { font-size: 13px; color: var(--muted); font-family: 'SF Mono', Consolas, monospace; }
+
+        /* -- Container mode: Running service cards ---- */
+        .running-svc-card {
+            display: flex; align-items: center; gap: 14px;
+            background: var(--card); border-radius: var(--radius);
+            box-shadow: var(--shadow); border-left: 4px solid var(--orange);
+            padding: 14px 20px; margin-bottom: 10px;
+        }
+        .svc-icon { font-size: 20px; }
+        .svc-name { font-weight: 600; }
+
+        /* -- Container mode: Tool tile grid ---- */
+        .tool-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 16px;
+        }
+        .tool-tile {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            transition: all .2s ease;
+        }
+        .tool-tile:hover {
+            border-color: var(--orange-border);
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-3px);
+        }
+        .tool-icon { font-size: 36px; margin-bottom: 10px; }
+        .tool-tile .tool-name { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .tool-action { font-size: 13px; color: var(--orange); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -218,13 +264,66 @@
         <span class="brand-logo">&#x1f43e;</span>
         <span class="brand-name">lxd-pups</span>
         <span class="brand-sep"></span>
-        <span class="brand-tag">My Own OpenClaw and LangGraph</span>
+        <span class="brand-tag">{#if containerMode}{title}{#else}My Own OpenClaw and LangGraph{/if}</span>
     </a>
 </header>
 
 <main>
 
-    <!-- ── Management Services ── -->
+    {#if containerMode}
+    <!-- ================================================ -->
+    <!-- ====  CONTAINER MODE UI  ======================= -->
+    <!-- ================================================ -->
+
+    <!-- -- Info Bar -- -->
+    <div class="info-bar">
+        {#for svc in managementServices}
+        <div class="info-item">
+            <span class="info-label">{svc.name}</span>
+            <span class="badge badge-{svc.status}">{svc.status}</span>
+            <span class="mgmt-port">:{svc.port}</span>
+        </div>
+        {/for}
+        <div class="info-item">
+            <span class="info-label">Storage</span>
+            <span class="info-value">{storageInfo}</span>
+        </div>
+    </div>
+
+    <!-- -- Running Services -- -->
+    <div class="sessions-section">
+        <p class="section-label">Running Services</p>
+        {#for inst in toolInstances}
+        <div class="running-svc-card">
+            <span class="svc-icon">{inst.icon}</span>
+            <a class="svc-name mgmt-link" href="http://localhost:{inst.port}/" target="_blank">{inst.description}</a>
+            <span class="mgmt-port">:{inst.port}</span>
+            <span class="badge badge-{inst.status}">{inst.status}</span>
+            <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
+        </div>
+        {#else}
+        <div style="padding:12px;color:var(--muted);font-size:14px;">No running services. Launch a tool below.</div>
+        {/for}
+    </div>
+
+    <!-- -- Available Tools -- -->
+    <p class="section-label">Available Tools</p>
+    <div class="tool-grid">
+        {#for tool in tools}
+        <div class="tool-tile" onclick="launchTool('{tool.name}')">
+            <div class="tool-icon">{tool.icon}</div>
+            <div class="tool-name">{tool.description}</div>
+            <div class="tool-action">+ New</div>
+        </div>
+        {/for}
+    </div>
+
+    {#else}
+    <!-- ================================================ -->
+    <!-- ====  HOST MODE UI  ============================ -->
+    <!-- ================================================ -->
+
+    <!-- -- Management Services -- -->
     <div class="sessions-section">
         <p class="section-label">Management Services</p>
         <div class="mgmt-card">
@@ -237,6 +336,9 @@
                 {/if}
                 <span class="mgmt-port">:{svc.port}</span>
                 <span class="badge badge-{svc.status}" id="badge-{svc.name}">{svc.status}</span>
+                {#if svc.processName}
+                <span class="mgmt-process" style="font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:350px;" title="{svc.processName}">{svc.processName}</span>
+                {/if}
                 <div class="mgmt-actions">
                     {#if svc.status.name == 'ACTIVE'}
                     <button class="btn btn-stop btn-sm" onclick="mgmtAction('{svc.name}', 'stop')">Stop</button>
@@ -254,34 +356,7 @@
         </div>
     </div>
 
-    <!-- ── AI Work Dashboard (host mode, containers running) ── -->
-    {#if hostMode && containerProgress.size > 0}
-    <div class="sessions-section">
-        <p class="section-label">AI Work Dashboard</p>
-        {#for entry in containerProgress.entrySet}
-        <div class="dashboard-card">
-            <div class="dashboard-head">
-                <span class="dashboard-name">{entry.key}</span>
-                <span class="dashboard-title">{entry.value.title}</span>
-            </div>
-            <div class="dashboard-services">
-                {#for svc in entry.value.services}
-                <div class="dashboard-svc">
-                    <span class="badge badge-{svc.status} badge-xs">{svc.status}</span>
-                    <span class="dashboard-svc-name">{svc.description}</span>
-                    <span class="dashboard-svc-port">:{svc.port}</span>
-                </div>
-                {/for}
-                {#if entry.value.services.isEmpty}
-                <div class="dashboard-svc" style="color:var(--muted);font-style:italic;">Portal offline or starting...</div>
-                {/if}
-            </div>
-        </div>
-        {/for}
-    </div>
-    {/if}
-
-    <!-- ── Worker Containers (host mode only) ── -->
+    <!-- -- Worker Containers (host mode only) -- -->
     {#if hostMode}
     <div class="sessions-section">
         <p class="section-label">Worker Containers</p>
@@ -289,9 +364,26 @@
         {#for c in containers}
         <div class="container-card {#if c.status == 'Stopped'}stopped{/if}">
             <div class="container-card-head">
+                {#if c.ip}
+                <a class="container-name mgmt-link" href="http://{c.ip}:8080/" target="_blank">{c.name}</a>
+                {#else}
                 <span class="container-name">{c.name}</span>
+                {/if}
                 <span class="badge badge-{c.status}">{c.status}</span>
             </div>
+            {#if c.status == 'Running' && containerProgress.get(c.name) != null}
+            <div class="dashboard-services" style="margin:10px 0;">
+                {#for svc in containerProgress.get(c.name).services}
+                <div class="dashboard-svc">
+                    <span class="badge badge-{svc.status} badge-xs">{svc.status}</span>
+                    <span class="dashboard-svc-name">{svc.description}</span>
+                    <span class="dashboard-svc-port">:{svc.port}</span>
+                </div>
+                {/for}
+            </div>
+            {#else if c.status == 'Running'}
+            <div style="margin:10px 0;color:var(--muted);font-size:13px;font-style:italic;">Container portal starting...</div>
+            {/if}
             <div class="container-meta">
                 <span class="lbl">Remote</span> <span>{c.remote}</span>
             </div>
@@ -315,7 +407,7 @@
 
     {/if}
 
-    <!-- ── Launch a Container (host mode only) ── -->
+    <!-- -- Launch a Container (host mode only) -- -->
     {#if hostMode}
     <p class="section-label">Launch a Container</p>
     <div class="launch-grid">
@@ -332,11 +424,15 @@
     </div>
     {/if}
 
+    {/if}
+
 </main>
 
 <script>
     // Track which services are being polled for progress
     var pollingServices = {};
+
+    // ---- Host mode functions ----
 
     function mgmtAction(name, action) {
         fetch('/api/management/services/' + encodeURIComponent(name) + '/' + action, { method: 'POST' })
@@ -448,6 +544,19 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ template: template, name: name, remote: 'local' })
         }).then(function() { location.reload(); });
+    }
+
+    // ---- Container mode functions ----
+
+    function launchTool(name) {
+        fetch('/api/tools/' + encodeURIComponent(name) + '/launch', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function() { location.reload(); });
+    }
+
+    function stopTool(name, port) {
+        fetch('/api/tools/' + encodeURIComponent(name) + '/stop?port=' + port, { method: 'POST' })
+            .then(function() { location.reload(); });
     }
 
     // Auto-refresh every 10 seconds (but not while polling progress)

@@ -1,0 +1,49 @@
+portal:
+  port: 8080
+  mode: container
+  title: "AI Worker"
+
+management:
+  mcp-gateway:
+    enabled: true
+    port: 8888
+    description: "MCP Gateway"
+    ui: "http://localhost:8888/"
+    binary:
+      repo: scivicslab/quarkus-mcp-gateway
+      version: v1.0.0
+      asset: quarkus-mcp-gateway-v1.0.0-linux-x86_64
+      path: ~/bin/quarkus-mcp-gateway
+
+tools:
+  llm-console-claude:
+    description: "LLM Console"
+    icon: "\uD83D\uDCAC"
+    port-range: "8200-8209"
+    binary:
+      repo: scivicslab/quarkus-llm-console-claude
+      version: v1.0.0
+      asset: quarkus-llm-console-claude-v1.0.0-linux-x86_64
+      path: ~/bin/quarkus-llm-console-claude
+
+  workflow-editor:
+    description: "Workflow Editor"
+    icon: "\uD83D\uDD00"
+    port-range: "8300-8309"
+    binary:
+      repo: scivicslab/Turing-workflow-editor
+      version: v1.0.0
+      asset: turing-workflow-editor-v1.0.0-linux-x86_64
+      path: ~/bin/turing-workflow-editor
+
+  docusaurus:
+    description: "Docusaurus"
+    icon: "\uD83D\uDCDD"
+    port-range: "3000-3009"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: ""
+      runtime: "npx"
+      args: "docusaurus start --port {port} --host 0.0.0.0"

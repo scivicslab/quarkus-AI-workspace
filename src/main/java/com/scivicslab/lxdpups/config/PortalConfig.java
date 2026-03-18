@@ -14,6 +14,7 @@ public class PortalConfig {
     private List<ManagementService> managementServices = List.of();
     private List<WorkerService> workerTemplate = List.of();
     private List<Remote> remotes = List.of();
+    private List<ToolDefinition> tools = List.of();
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -34,6 +35,51 @@ public class PortalConfig {
 
     public List<Remote> getRemotes() { return remotes; }
     public void setRemotes(List<Remote> remotes) { this.remotes = remotes; }
+
+    public List<ToolDefinition> getTools() { return tools; }
+    public void setTools(List<ToolDefinition> tools) { this.tools = tools; }
+
+    /**
+     * A tool definition for container mode, supporting multiple concurrent instances.
+     */
+    public static class ToolDefinition {
+        private String name;
+        private String description;
+        private String icon;
+        private String portRange; // e.g. "8200-8209"
+        private ManagementService.Binary binary;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+
+        public String getIcon() { return icon; }
+        public void setIcon(String icon) { this.icon = icon; }
+
+        public String getPortRange() { return portRange; }
+        public void setPortRange(String portRange) { this.portRange = portRange; }
+
+        public ManagementService.Binary getBinary() { return binary; }
+        public void setBinary(ManagementService.Binary binary) { this.binary = binary; }
+
+        /**
+         * Get the start of the port range (inclusive).
+         */
+        public int getPortStart() {
+            if (portRange == null) return 0;
+            return Integer.parseInt(portRange.split("-")[0]);
+        }
+
+        /**
+         * Get the end of the port range (inclusive).
+         */
+        public int getPortEnd() {
+            if (portRange == null) return 0;
+            return Integer.parseInt(portRange.split("-")[1]);
+        }
+    }
 
     /**
      * A service managed on the host via direct process management.

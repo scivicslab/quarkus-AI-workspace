@@ -56,7 +56,7 @@ class ProcessManagerTest {
 
     @Test
     void getStatusUnknownService() {
-        assertEquals(ServiceStatus.INACTIVE, pm.getStatus("nonexistent"));
+        assertEquals(ServiceStatus.INACTIVE, pm.getStatus("nonexistent", 0));
     }
 
     @Test
