@@ -1,8 +1,10 @@
 package com.scivicslab.lxdpups.rest;
 
 import com.scivicslab.lxdpups.model.PortalStatus;
+import com.scivicslab.lxdpups.model.ServiceProgress;
 import com.scivicslab.lxdpups.service.ContainerManager;
 import com.scivicslab.lxdpups.service.HostServiceManager;
+import com.scivicslab.lxdpups.service.ProcessManager;
 import com.scivicslab.lxdpups.service.StatusPoller;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -27,6 +29,9 @@ public class ApiResource {
     @Inject
     ContainerManager containerManager;
 
+    @Inject
+    ProcessManager processManager;
+
     // ── Status ──
 
     @GET
@@ -40,10 +45,15 @@ public class ApiResource {
     @POST
     @Path("/management/services/{name}/start")
     public Response startManagementService(@PathParam("name") String name) {
-        boolean ok = hostServiceManager.start(name);
-        statusPoller.refresh();
-        return ok ? Response.ok(Map.of("status", "started")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to start " + name)).build();
+        boolean ok = hostServiceManager.startAsync(name);
+        return ok ? Response.accepted(Map.of("status", "starting")).build()
+                  : Response.serverError().entity(Map.of("error", "Unknown service: " + name)).build();
+    }
+
+    @GET
+    @Path("/management/services/{name}/progress")
+    public ServiceProgress getServiceProgress(@PathParam("name") String name) {
+        return processManager.getProgress(name);
     }
 
     @POST

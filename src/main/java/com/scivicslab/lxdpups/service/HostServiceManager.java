@@ -28,7 +28,7 @@ public class HostServiceManager {
     }
 
     /**
-     * Start a management service by name.
+     * Start a management service by name (synchronous).
      */
     public boolean start(String name) {
         var svc = findService(name);
@@ -38,6 +38,20 @@ public class HostServiceManager {
         }
         LOG.info("Starting management service: " + name);
         return processManager.start(svc);
+    }
+
+    /**
+     * Start a management service asynchronously with progress tracking.
+     */
+    public boolean startAsync(String name) {
+        var svc = findService(name);
+        if (svc == null) {
+            LOG.warning("Unknown management service: " + name);
+            return false;
+        }
+        LOG.info("Starting management service (async): " + name);
+        processManager.startAsync(svc);
+        return true;
     }
 
     /**

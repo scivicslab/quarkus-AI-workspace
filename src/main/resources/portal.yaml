@@ -18,10 +18,11 @@ management:
     enabled: true
     port: 8190
     description: "predict-ja"
+    ui: "http://localhost:8190/"
     binary:
       repo: oogasawa/fcitx5-predict-ja
-      version: 0.1.0-SNAPSHOT
-      asset: fcitx5-predict-ja-0.1.0-SNAPSHOT.jar
+      version: v1.0.0
+      asset: fcitx5-predict-ja-1.0.0.jar
       path: ~/bin/fcitx5-predict-ja.jar
       runtime: java
       args: "--gateway-url http://localhost:8888 --gateway-poll 60 --ime-learning false --vllm-url http://192.168.5.15:8000 --vllm-model Qwen3.5-35B-A3B"

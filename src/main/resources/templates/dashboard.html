@@ -72,6 +72,9 @@
         .badge-FAILED::before  { background: #EF4444; }
         .badge-UNKNOWN { background: #F1F5F9; color: #475569; }
         .badge-UNKNOWN::before { background: #94A3B8; }
+        .badge-STARTING { background: #FEF3C7; color: #92400E; }
+        .badge-STARTING::before { background: #F59E0B; animation: pulse-dot 1s infinite; }
+        @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
         .badge-Running { background: #D1FAE5; color: #065F46; }
         .badge-Running::before { background: #10B981; }
         .badge-Stopped { background: #F1F5F9; color: #475569; }
@@ -90,8 +93,38 @@
         }
         .mgmt-row:last-child { border-bottom: none; }
         .mgmt-name { font-weight: 600; min-width: 160px; }
+        .mgmt-link { color: var(--orange); text-decoration: none; cursor: pointer; }
+        .mgmt-link:hover { text-decoration: underline; }
         .mgmt-port { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; color: var(--muted); min-width: 60px; }
         .mgmt-actions { margin-left: auto; display: flex; gap: 8px; }
+
+        /* ── Progress log ────────────────────────────── */
+        .progress-log {
+            margin-top: 8px; padding: 10px 14px;
+            background: #1E293B; color: #E2E8F0;
+            border-radius: 8px; font-family: 'SF Mono', Consolas, monospace;
+            font-size: 12px; line-height: 1.6;
+            max-height: 160px; overflow-y: auto;
+            display: none;
+        }
+        .progress-log.visible { display: block; }
+        .progress-log .log-line { white-space: pre-wrap; }
+        .progress-log .log-phase {
+            color: #F59E0B; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .5px;
+        }
+        .progress-bar-wrap {
+            margin: 6px 0; height: 6px; border-radius: 3px;
+            background: #334155; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; border-radius: 3px;
+            background: linear-gradient(90deg, #F59E0B 0%, #10B981 100%);
+            transition: width .3s ease;
+        }
+        .progress-status {
+            color: #94A3B8; font-size: 11px; margin-top: 2px;
+        }
 
         /* ── Container card ──────────────────────────── */
         .container-card {
@@ -178,20 +211,24 @@
         <p class="section-label">Management Services</p>
         <div class="mgmt-card">
             {#for svc in managementServices}
-            <div class="mgmt-row" data-name="{svc.name}">
+            <div class="mgmt-row" data-name="{svc.name}" style="flex-wrap:wrap;">
+                {#if svc.uiUrl && svc.status.name == 'ACTIVE'}
+                <a class="mgmt-name mgmt-link" href="{svc.uiUrl}" target="_blank">{svc.name}</a>
+                {#else}
                 <span class="mgmt-name">{svc.name}</span>
+                {/if}
                 <span class="mgmt-port">:{svc.port}</span>
-                <span class="badge badge-{svc.status}">{svc.status}</span>
+                <span class="badge badge-{svc.status}" id="badge-{svc.name}">{svc.status}</span>
                 <div class="mgmt-actions">
-                    {#if svc.uiUrl}
-                    <a class="btn btn-open btn-sm" href="{svc.uiUrl}" target="_blank">Open</a>
-                    {/if}
                     {#if svc.status.name == 'ACTIVE'}
                     <button class="btn btn-stop btn-sm" onclick="mgmtAction('{svc.name}', 'stop')">Stop</button>
+                    {#else if svc.status.name == 'STARTING'}
+                    <button class="btn btn-sm" disabled style="opacity:.6;">Starting...</button>
                     {#else}
-                    <button class="btn btn-primary btn-sm" onclick="mgmtAction('{svc.name}', 'start')">Start</button>
+                    <button class="btn btn-primary btn-sm" onclick="mgmtStart('{svc.name}')">Start</button>
                     {/if}
                 </div>
+                <div class="progress-log {#if svc.status.name == 'STARTING'}visible{/if}" id="progress-{svc.name}" style="width:100%;"></div>
             </div>
             {#else}
             <div style="padding:12px;color:var(--muted);font-size:14px;">No management services configured.</div>
@@ -248,9 +285,91 @@
 </main>
 
 <script>
+    // Track which services are being polled for progress
+    var pollingServices = {};
+
     function mgmtAction(name, action) {
         fetch('/api/management/services/' + encodeURIComponent(name) + '/' + action, { method: 'POST' })
             .then(function() { location.reload(); });
+    }
+
+    function mgmtStart(name) {
+        // Show progress log immediately
+        var logEl = document.getElementById('progress-' + name);
+        var badgeEl = document.getElementById('badge-' + name);
+        if (logEl) {
+            logEl.classList.add('visible');
+            logEl.innerHTML = '<div class="log-line"><span class="log-phase">starting</span></div>';
+        }
+        if (badgeEl) {
+            badgeEl.className = 'badge badge-STARTING';
+            badgeEl.textContent = 'STARTING';
+        }
+
+        // Send async start request
+        fetch('/api/management/services/' + encodeURIComponent(name) + '/start', { method: 'POST' });
+
+        // Start polling progress
+        pollProgress(name);
+    }
+
+    function pollProgress(name) {
+        if (pollingServices[name]) return;
+        pollingServices[name] = true;
+
+        var interval = setInterval(function() {
+            fetch('/api/management/services/' + encodeURIComponent(name) + '/progress')
+                .then(function(r) { return r.json(); })
+                .then(function(prog) {
+                    renderProgress(name, prog);
+                    if (prog.done) {
+                        clearInterval(interval);
+                        delete pollingServices[name];
+                        // Reload after a short delay to show final status
+                        setTimeout(function() { location.reload(); }, 1500);
+                    }
+                })
+                .catch(function() {
+                    clearInterval(interval);
+                    delete pollingServices[name];
+                });
+        }, 800);
+    }
+
+    function renderProgress(name, prog) {
+        var logEl = document.getElementById('progress-' + name);
+        if (!logEl) return;
+        logEl.classList.add('visible');
+
+        var phaseIcons = new Map([['starting','\u23f3'],['downloading','\u2b07\ufe0f'],['launching','\ud83d\ude80'],['running','\u2705']]);
+        var phaseIcon = phaseIcons.get(prog.phase) || '\u2699\ufe0f';
+        var html = '<div class="log-line"><span class="log-phase">' + phaseIcon + ' ' + escHtml(prog.phase) + '</span></div>';
+
+        for (var i = 0; i < prog.messages.length; i++) {
+            var msg = prog.messages[i];
+            // Detect curl progress pattern (contains % or #)
+            var pctMatch = msg.match(/(\d+[\.,]\d+)\s*%/) || msg.match(/###*\s*/);
+            if (pctMatch && prog.phase === 'downloading') {
+                var pct = pctMatch[1] ? parseFloat(pctMatch[1].replace(',', '.')) : 0;
+                html += '<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:' + Math.min(pct, 100) + '%;"></div></div>';
+                html += '<div class="progress-status">' + escHtml(msg) + '</div>';
+            } else {
+                html += '<div class="log-line">' + escHtml(msg) + '</div>';
+            }
+        }
+        if (prog.done) {
+            var resultIcon = prog.success ? '\u2705' : '\u274c';
+            html += '<div class="log-line" style="color:' + (prog.success ? '#10B981' : '#EF4444') + ';">'
+                  + resultIcon + ' ' + (prog.success ? 'Done.' : 'Failed.') + '</div>';
+        }
+        logEl.innerHTML = html;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escHtml(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s));
+        return d.innerHTML;
     }
 
     function containerAction(name, remote, action) {
@@ -283,8 +402,18 @@
         }).then(function() { location.reload(); });
     }
 
-    // Auto-refresh every 10 seconds
-    setTimeout(function() { location.reload(); }, 10000);
+    // Auto-refresh every 10 seconds (but not while polling progress)
+    setTimeout(function() {
+        if (Object.keys(pollingServices).length === 0) {
+            location.reload();
+        }
+    }, 10000);
+
+    // If page loaded with STARTING services, resume polling
+    document.querySelectorAll('.badge-STARTING').forEach(function(el) {
+        var row = el.closest('.mgmt-row');
+        if (row) pollProgress(row.dataset.name);
+    });
 </script>
 
 </body>
