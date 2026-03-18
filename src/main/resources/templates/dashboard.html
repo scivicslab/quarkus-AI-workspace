@@ -234,8 +234,8 @@
         /* -- Container mode: Tool tile grid ---- */
         .tool-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 18px;
         }
         .tool-tile {
             background: var(--card);
@@ -275,18 +275,40 @@
     <!-- ====  CONTAINER MODE UI  ======================= -->
     <!-- ================================================ -->
 
-    <!-- -- Info Bar -- -->
-    <div class="info-bar">
-        {#for svc in managementServices}
-        <div class="info-item">
-            <span class="info-label">{svc.name}</span>
-            <span class="badge badge-{svc.status}">{svc.status}</span>
-            <span class="mgmt-port">:{svc.port}</span>
+    <!-- -- Management Services (container) -- -->
+    <div class="sessions-section">
+        <p class="section-label">Management Services</p>
+        <div class="mgmt-card">
+            {#for svc in managementServices}
+            <div class="mgmt-row" data-name="{svc.name}" style="flex-wrap:wrap;">
+                {#if svc.uiUrl && svc.status.name == 'ACTIVE'}
+                <a class="mgmt-name mgmt-link" href="{svc.uiUrl}" target="_blank">{svc.name}</a>
+                {#else}
+                <span class="mgmt-name">{svc.name}</span>
+                {/if}
+                <span class="mgmt-port">:{svc.port}</span>
+                <span class="badge badge-{svc.status}" id="badge-{svc.name}">{svc.status}</span>
+                {#if svc.processName}
+                <span class="mgmt-process" style="font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:350px;" title="{svc.processName}">{svc.processName}</span>
+                {/if}
+                <div class="mgmt-actions">
+                    {#if svc.status.name == 'ACTIVE'}
+                    <button class="btn btn-stop btn-sm" onclick="mgmtAction('{svc.name}', 'stop')">Stop</button>
+                    {#else if svc.status.name == 'STARTING'}
+                    <button class="btn btn-sm" disabled style="opacity:.6;">Starting...</button>
+                    {#else}
+                    <button class="btn btn-primary btn-sm" onclick="mgmtStart('{svc.name}')">Start</button>
+                    {/if}
+                </div>
+                <div class="progress-log {#if svc.status.name == 'STARTING'}visible{/if}" id="progress-{svc.name}" style="width:100%;"></div>
+            </div>
+            {/for}
         </div>
-        {/for}
-        <div class="info-item">
-            <span class="info-label">Storage</span>
-            <span class="info-value">{storageInfo}</span>
+        <div class="info-bar" style="margin-top:12px;">
+            <div class="info-item">
+                <span class="info-label">Storage</span>
+                <span class="info-value">{storageInfo}</span>
+            </div>
         </div>
     </div>
 
