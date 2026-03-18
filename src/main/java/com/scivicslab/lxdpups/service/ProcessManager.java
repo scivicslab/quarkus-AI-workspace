@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 /**
@@ -44,12 +45,14 @@ public class ProcessManager {
         private volatile boolean success = false;
         // Index of the mutable download progress line (-1 = none)
         private volatile int downloadLineIndex = -1;
+        // SSE listeners for real-time push
+        private final CopyOnWriteArrayList<Consumer<ServiceProgress>> listeners = new CopyOnWriteArrayList<>();
 
         ProgressTracker(String name) { this.name = name; }
 
-        void setPhase(String phase) { this.phase = phase; }
-        void addMessage(String msg) { messages.add(msg); }
-        void complete(boolean ok) { this.done = true; this.success = ok; }
+        void setPhase(String phase) { this.phase = phase; notifyListeners(); }
+        void addMessage(String msg) { messages.add(msg); notifyListeners(); }
+        void complete(boolean ok) { this.done = true; this.success = ok; notifyListeners(); }
 
         /**
          * Update the download progress line in-place (replaces last progress line).
@@ -61,6 +64,21 @@ public class ProcessManager {
                 messages.add(line);
             } else {
                 messages.set(downloadLineIndex, line);
+            }
+            notifyListeners();
+        }
+
+        void addListener(Consumer<ServiceProgress> listener) { listeners.add(listener); }
+        void removeListener(Consumer<ServiceProgress> listener) { listeners.remove(listener); }
+
+        private void notifyListeners() {
+            var snapshot = toProgress();
+            for (var listener : listeners) {
+                try {
+                    listener.accept(snapshot);
+                } catch (Exception e) {
+                    // ignore broken listeners
+                }
             }
         }
 
@@ -203,6 +221,26 @@ public class ProcessManager {
             return ServiceProgress.idle(name);
         }
         return tracker.toProgress();
+    }
+
+    /**
+     * Add a listener for real-time progress events (used by SSE endpoint).
+     */
+    public void addProgressListener(String name, Consumer<ServiceProgress> listener) {
+        var tracker = progressTrackers.get(name);
+        if (tracker != null) {
+            tracker.addListener(listener);
+        }
+    }
+
+    /**
+     * Remove a progress listener.
+     */
+    public void removeProgressListener(String name, Consumer<ServiceProgress> listener) {
+        var tracker = progressTrackers.get(name);
+        if (tracker != null) {
+            tracker.removeListener(listener);
+        }
     }
 
     /**

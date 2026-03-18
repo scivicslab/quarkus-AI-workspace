@@ -10,6 +10,7 @@ public class PortalConfig {
 
     private String title = "LXD-pups Portal";
     private int port = 8080;
+    private String mode = "host"; // "host" or "container"
     private List<ManagementService> managementServices = List.of();
     private List<WorkerService> workerTemplate = List.of();
     private List<Remote> remotes = List.of();
@@ -19,6 +20,11 @@ public class PortalConfig {
 
     public int getPort() { return port; }
     public void setPort(int port) { this.port = port; }
+
+    public String getMode() { return mode; }
+    public void setMode(String mode) { this.mode = mode; }
+    public boolean isContainerMode() { return "container".equals(mode); }
+    public boolean isHostMode() { return !"container".equals(mode); }
 
     public List<ManagementService> getManagementServices() { return managementServices; }
     public void setManagementServices(List<ManagementService> managementServices) { this.managementServices = managementServices; }

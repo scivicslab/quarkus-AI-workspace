@@ -6,10 +6,12 @@ import com.scivicslab.lxdpups.service.ContainerManager;
 import com.scivicslab.lxdpups.service.HostServiceManager;
 import com.scivicslab.lxdpups.service.ProcessManager;
 import com.scivicslab.lxdpups.service.StatusPoller;
+import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.jboss.resteasy.reactive.RestStreamElementType;
 
 import java.util.Map;
 
@@ -54,6 +56,31 @@ public class ApiResource {
     @Path("/management/services/{name}/progress")
     public ServiceProgress getServiceProgress(@PathParam("name") String name) {
         return processManager.getProgress(name);
+    }
+
+    @GET
+    @Path("/management/services/{name}/progress/stream")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    public Multi<ServiceProgress> streamProgress(@PathParam("name") String name) {
+        var current = processManager.getProgress(name);
+        return Multi.createFrom().emitter(emitter -> {
+            // Send current state immediately
+            emitter.emit(current);
+            if (current.done()) {
+                emitter.complete();
+                return;
+            }
+            // Register for future updates
+            java.util.function.Consumer<ServiceProgress> listener = progress -> {
+                emitter.emit(progress);
+                if (progress.done()) {
+                    emitter.complete();
+                }
+            };
+            processManager.addProgressListener(name, listener);
+            emitter.onTermination(() -> processManager.removeProgressListener(name, listener));
+        });
     }
 
     @POST

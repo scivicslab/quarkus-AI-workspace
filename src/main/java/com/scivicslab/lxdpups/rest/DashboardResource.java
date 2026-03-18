@@ -1,6 +1,7 @@
 package com.scivicslab.lxdpups.rest;
 
 import com.scivicslab.lxdpups.config.PortalConfigLoader;
+import com.scivicslab.lxdpups.service.ContainerPortalPoller;
 import com.scivicslab.lxdpups.service.StatusPoller;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -25,6 +26,9 @@ public class DashboardResource {
     @Inject
     PortalConfigLoader configLoader;
 
+    @Inject
+    ContainerPortalPoller containerPortalPoller;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index() {
@@ -32,8 +36,10 @@ public class DashboardResource {
         var config = configLoader.getConfig();
         return dashboard
                 .data("title", config.getTitle())
+                .data("hostMode", config.isHostMode())
                 .data("managementServices", status.managementServices())
                 .data("containers", status.containers())
-                .data("workerTemplate", config.getWorkerTemplate());
+                .data("workerTemplate", config.getWorkerTemplate())
+                .data("containerProgress", containerPortalPoller.getAllProgress());
     }
 }

@@ -191,6 +191,24 @@
         .empty p { font-size: 15px; }
 
         .sessions-section { margin-bottom: 32px; }
+
+        /* ── AI Work Dashboard cards ────────────────── */
+        .dashboard-card {
+            background: var(--card); border-radius: var(--radius);
+            box-shadow: var(--shadow); border-left: 4px solid var(--orange);
+            padding: 16px 20px; margin-bottom: 14px;
+        }
+        .dashboard-head {
+            display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
+        }
+        .dashboard-name { font-size: 16px; font-weight: 700; }
+        .dashboard-title { font-size: 13px; color: var(--muted); }
+        .dashboard-services { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+        .dashboard-svc { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        .dashboard-svc-name { font-weight: 500; }
+        .dashboard-svc-port { font-family: 'SF Mono', Consolas, monospace; font-size: 11px; color: var(--muted); }
+        .badge-xs { padding: 2px 8px; font-size: 10px; }
+        .badge-xs::before { width: 5px; height: 5px; }
     </style>
 </head>
 <body>
@@ -236,7 +254,35 @@
         </div>
     </div>
 
-    <!-- ── Worker Containers ── -->
+    <!-- ── AI Work Dashboard (host mode, containers running) ── -->
+    {#if hostMode && containerProgress.size > 0}
+    <div class="sessions-section">
+        <p class="section-label">AI Work Dashboard</p>
+        {#for entry in containerProgress.entrySet}
+        <div class="dashboard-card">
+            <div class="dashboard-head">
+                <span class="dashboard-name">{entry.key}</span>
+                <span class="dashboard-title">{entry.value.title}</span>
+            </div>
+            <div class="dashboard-services">
+                {#for svc in entry.value.services}
+                <div class="dashboard-svc">
+                    <span class="badge badge-{svc.status} badge-xs">{svc.status}</span>
+                    <span class="dashboard-svc-name">{svc.description}</span>
+                    <span class="dashboard-svc-port">:{svc.port}</span>
+                </div>
+                {/for}
+                {#if entry.value.services.isEmpty}
+                <div class="dashboard-svc" style="color:var(--muted);font-style:italic;">Portal offline or starting...</div>
+                {/if}
+            </div>
+        </div>
+        {/for}
+    </div>
+    {/if}
+
+    <!-- ── Worker Containers (host mode only) ── -->
+    {#if hostMode}
     <div class="sessions-section">
         <p class="section-label">Worker Containers</p>
 
@@ -267,7 +313,10 @@
         {/for}
     </div>
 
-    <!-- ── Launch a Container ── -->
+    {/if}
+
+    <!-- ── Launch a Container (host mode only) ── -->
+    {#if hostMode}
     <p class="section-label">Launch a Container</p>
     <div class="launch-grid">
         <div class="launch-card">
@@ -281,6 +330,7 @@
             <button class="btn btn-primary" onclick="launchContainer()">Launch</button>
         </div>
     </div>
+    {/if}
 
 </main>
 
@@ -317,23 +367,21 @@
         if (pollingServices[name]) return;
         pollingServices[name] = true;
 
-        var interval = setInterval(function() {
-            fetch('/api/management/services/' + encodeURIComponent(name) + '/progress')
-                .then(function(r) { return r.json(); })
-                .then(function(prog) {
-                    renderProgress(name, prog);
-                    if (prog.done) {
-                        clearInterval(interval);
-                        delete pollingServices[name];
-                        // Reload after a short delay to show final status
-                        setTimeout(function() { location.reload(); }, 1500);
-                    }
-                })
-                .catch(function() {
-                    clearInterval(interval);
-                    delete pollingServices[name];
-                });
-        }, 800);
+        var source = new EventSource('/api/management/services/' + encodeURIComponent(name) + '/progress/stream');
+        source.onmessage = function(event) {
+            var prog = JSON.parse(event.data);
+            renderProgress(name, prog);
+            if (prog.done) {
+                source.close();
+                delete pollingServices[name];
+                setTimeout(function() { location.reload(); }, 1500);
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            delete pollingServices[name];
+            setTimeout(function() { location.reload(); }, 2000);
+        };
     }
 
     function renderProgress(name, prog) {

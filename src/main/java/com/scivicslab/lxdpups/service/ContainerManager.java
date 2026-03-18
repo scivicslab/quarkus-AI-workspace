@@ -58,8 +58,9 @@ public class ContainerManager {
             for (var c : containers) {
                 var name = (String) c.get("name");
                 var status = (String) c.get("status");
+                var ip = extractIpv4(c);
                 list.add(new ContainerInfo(name, status, remote != null ? remote : "local",
-                        "", "", List.of()));
+                        ip, "", "", List.of()));
             }
             return list;
         } catch (Exception e) {
@@ -137,5 +138,32 @@ public class ContainerManager {
 
     public boolean serviceStop(String container, String remote, String unit) {
         return exec(container, remote, "systemctl", "stop", unit).success();
+    }
+
+    /**
+     * Extract the first IPv4 address from lxc list JSON state.network.
+     * Path: state -> network -> eth0 -> addresses[] -> {family: "inet", address: "..."}
+     */
+    @SuppressWarnings("unchecked")
+    private String extractIpv4(Map<String, Object> container) {
+        try {
+            var state = (Map<String, Object>) container.get("state");
+            if (state == null) return "";
+            var network = (Map<String, Object>) state.get("network");
+            if (network == null) return "";
+            for (var iface : network.values()) {
+                var ifaceMap = (Map<String, Object>) iface;
+                var addresses = (List<Map<String, Object>>) ifaceMap.get("addresses");
+                if (addresses == null) continue;
+                for (var addr : addresses) {
+                    if ("inet".equals(addr.get("family")) && !"lo".equals(addr.get("scope"))) {
+                        return (String) addr.get("address");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.fine("Could not extract IPv4: " + e.getMessage());
+        }
+        return "";
     }
 }

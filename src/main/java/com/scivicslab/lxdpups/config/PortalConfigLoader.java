@@ -74,6 +74,7 @@ public class PortalConfigLoader {
         if (root.get("portal") instanceof Map<?, ?> portal) {
             if (portal.get("title") instanceof String title) cfg.setTitle(title);
             if (portal.get("port") instanceof Integer port) cfg.setPort(port);
+            if (portal.get("mode") instanceof String mode) cfg.setMode(mode);
         }
 
         // Management services

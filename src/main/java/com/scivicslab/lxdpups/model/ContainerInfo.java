@@ -9,6 +9,7 @@ public record ContainerInfo(
         String name,
         String status,
         String remote,
+        String ip,
         String image,
         String memo,
         List<ContainerService> services
