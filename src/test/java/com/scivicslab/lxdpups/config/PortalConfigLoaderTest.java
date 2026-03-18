@@ -114,4 +114,70 @@ class PortalConfigLoaderTest {
         assertTrue(config.getManagementServices().isEmpty());
         assertTrue(config.getWorkerTemplate().isEmpty());
     }
+
+    @Test
+    void parseManagementServiceWithBinary() {
+        var root = parseYaml("""
+                management:
+                  mcp-gateway:
+                    enabled: true
+                    port: 8888
+                    description: "MCP Gateway"
+                    ui: "http://localhost:8888/"
+                    binary:
+                      repo: scivicslab/quarkus-mcp-gateway
+                      version: v1.0.0
+                      asset: quarkus-mcp-gateway-v1.0.0-linux-x86_64
+                      path: ~/bin/quarkus-mcp-gateway
+                """);
+        var config = loader.parse(root);
+        assertEquals(1, config.getManagementServices().size());
+
+        var svc = config.getManagementServices().get(0);
+        assertEquals("mcp-gateway", svc.getName());
+        assertNotNull(svc.getBinary());
+        assertEquals("scivicslab/quarkus-mcp-gateway", svc.getBinary().getRepo());
+        assertEquals("v1.0.0", svc.getBinary().getVersion());
+        assertEquals("quarkus-mcp-gateway-v1.0.0-linux-x86_64", svc.getBinary().getAsset());
+        assertEquals("~/bin/quarkus-mcp-gateway", svc.getBinary().getPath());
+        assertNull(svc.getBinary().getRuntime());
+        assertNull(svc.getBinary().getArgs());
+    }
+
+    @Test
+    void parseManagementServiceWithJarBinary() {
+        var root = parseYaml("""
+                management:
+                  predict-ja:
+                    enabled: true
+                    port: 8190
+                    description: "predict-ja"
+                    binary:
+                      repo: oogasawa/fcitx5-predict-ja
+                      version: 0.1.0-SNAPSHOT
+                      asset: fcitx5-predict-ja-0.1.0-SNAPSHOT.jar
+                      path: ~/bin/fcitx5-predict-ja.jar
+                      runtime: java
+                      args: "--gateway-url http://localhost:8888 --vllm-url http://192.168.5.15:8000"
+                """);
+        var config = loader.parse(root);
+        var svc = config.getManagementServices().get(0);
+        assertNotNull(svc.getBinary());
+        assertEquals("java", svc.getBinary().getRuntime());
+        assertEquals("--gateway-url http://localhost:8888 --vllm-url http://192.168.5.15:8000", svc.getBinary().getArgs());
+    }
+
+    @Test
+    void parseManagementServiceWithoutBinary() {
+        var root = parseYaml("""
+                management:
+                  predict-en:
+                    enabled: false
+                    port: 8191
+                    description: "predict-en"
+                """);
+        var config = loader.parse(root);
+        var svc = config.getManagementServices().get(0);
+        assertNull(svc.getBinary());
+    }
 }

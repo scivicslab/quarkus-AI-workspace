@@ -127,7 +127,21 @@ public class PortalConfigLoader {
         if (map.get("description") instanceof String desc) svc.setDescription(desc);
         if (map.get("ui") instanceof String ui) svc.setUi(ui);
         if (map.get("enabled") instanceof Boolean enabled) svc.setEnabled(enabled);
+        if (map.get("binary") instanceof Map<?, ?> binMap) {
+            svc.setBinary(parseBinary((Map<String, Object>) binMap));
+        }
         return svc;
+    }
+
+    private PortalConfig.ManagementService.Binary parseBinary(Map<String, Object> map) {
+        var bin = new PortalConfig.ManagementService.Binary();
+        if (map.get("repo") instanceof String repo) bin.setRepo(repo);
+        if (map.get("version") instanceof String version) bin.setVersion(version);
+        if (map.get("asset") instanceof String asset) bin.setAsset(asset);
+        if (map.get("path") instanceof String path) bin.setPath(path);
+        if (map.get("runtime") instanceof String runtime) bin.setRuntime(runtime);
+        if (map.get("args") instanceof String args) bin.setArgs(args);
+        return bin;
     }
 
     @SuppressWarnings("unchecked")

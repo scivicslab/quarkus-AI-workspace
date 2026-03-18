@@ -30,7 +30,7 @@ public class PortalConfig {
     public void setRemotes(List<Remote> remotes) { this.remotes = remotes; }
 
     /**
-     * A service managed on the host via systemctl.
+     * A service managed on the host via direct process management.
      */
     public static class ManagementService {
         private String name;
@@ -39,6 +39,7 @@ public class PortalConfig {
         private String description;
         private String ui;
         private boolean enabled = true;
+        private Binary binary;
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
@@ -57,6 +58,39 @@ public class PortalConfig {
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+
+        public Binary getBinary() { return binary; }
+        public void setBinary(Binary binary) { this.binary = binary; }
+
+        /**
+         * Binary download and execution configuration for a management service.
+         */
+        public static class Binary {
+            private String repo;      // e.g. "scivicslab/quarkus-mcp-gateway"
+            private String version;   // e.g. "v1.0.0"
+            private String asset;     // e.g. "quarkus-mcp-gateway-v1.0.0-linux-x86_64"
+            private String path;      // e.g. "~/bin/quarkus-mcp-gateway"
+            private String runtime;   // null for native, "java" for JAR
+            private String args;      // extra command-line arguments
+
+            public String getRepo() { return repo; }
+            public void setRepo(String repo) { this.repo = repo; }
+
+            public String getVersion() { return version; }
+            public void setVersion(String version) { this.version = version; }
+
+            public String getAsset() { return asset; }
+            public void setAsset(String asset) { this.asset = asset; }
+
+            public String getPath() { return path; }
+            public void setPath(String path) { this.path = path; }
+
+            public String getRuntime() { return runtime; }
+            public void setRuntime(String runtime) { this.runtime = runtime; }
+
+            public String getArgs() { return args; }
+            public void setArgs(String args) { this.args = args; }
+        }
     }
 
     /**

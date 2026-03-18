@@ -1,75 +1,71 @@
 package com.scivicslab.lxdpups.service;
 
-import com.scivicslab.lxdpups.config.PortalConfig;
 import com.scivicslab.lxdpups.config.PortalConfigLoader;
-import com.scivicslab.lxdpups.exec.CommandRunner;
 import com.scivicslab.lxdpups.model.HostService;
-import com.scivicslab.lxdpups.model.ServiceStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Manages host services (MCP Gateway, predict-ja, predict-en) via systemctl.
+ * Manages host services via direct process management.
+ * Delegates to ProcessManager for starting, stopping, and status queries.
  */
 @ApplicationScoped
 public class HostServiceManager {
 
     private static final Logger LOG = Logger.getLogger(HostServiceManager.class.getName());
-    private final CommandRunner runner = new CommandRunner();
 
     @Inject
     PortalConfigLoader configLoader;
 
+    @Inject
+    ProcessManager processManager;
+
     public List<HostService> getAllStatuses() {
-        var services = new ArrayList<HostService>();
-        for (var svc : configLoader.getConfig().getManagementServices()) {
-            if (!svc.isEnabled()) continue;
-            var status = getStatus(svc.getUnit());
-            services.add(new HostService(
-                    svc.getName(), svc.getUnit(), svc.getPort(),
-                    svc.getDescription(), svc.getUi(), status));
-        }
-        return services;
+        return processManager.getAllStatuses(configLoader.getConfig().getManagementServices());
     }
 
-    public ServiceStatus getStatus(String unit) {
-        var result = runner.run(List.of("systemctl", "is-active", unit));
-        return switch (result.stdout().strip()) {
-            case "active" -> ServiceStatus.ACTIVE;
-            case "inactive" -> ServiceStatus.INACTIVE;
-            case "failed" -> ServiceStatus.FAILED;
-            default -> ServiceStatus.UNKNOWN;
-        };
+    /**
+     * Start a management service by name.
+     */
+    public boolean start(String name) {
+        var svc = findService(name);
+        if (svc == null) {
+            LOG.warning("Unknown management service: " + name);
+            return false;
+        }
+        LOG.info("Starting management service: " + name);
+        return processManager.start(svc);
     }
 
-    public boolean start(String unit) {
-        LOG.info("Starting host service: " + unit);
-        var result = runner.run(List.of("systemctl", "start", unit));
-        if (!result.success()) {
-            LOG.warning("Failed to start " + unit + ": " + result.stderr());
-        }
-        return result.success();
+    /**
+     * Stop a management service by name.
+     */
+    public boolean stop(String name) {
+        LOG.info("Stopping management service: " + name);
+        return processManager.stop(name);
     }
 
-    public boolean stop(String unit) {
-        LOG.info("Stopping host service: " + unit);
-        var result = runner.run(List.of("systemctl", "stop", unit));
-        if (!result.success()) {
-            LOG.warning("Failed to stop " + unit + ": " + result.stderr());
+    /**
+     * Restart a management service by name (stop then start).
+     */
+    public boolean restart(String name) {
+        LOG.info("Restarting management service: " + name);
+        var svc = findService(name);
+        if (svc == null) {
+            LOG.warning("Unknown management service: " + name);
+            return false;
         }
-        return result.success();
+        processManager.stop(name);
+        return processManager.start(svc);
     }
 
-    public boolean restart(String unit) {
-        LOG.info("Restarting host service: " + unit);
-        var result = runner.run(List.of("systemctl", "restart", unit));
-        if (!result.success()) {
-            LOG.warning("Failed to restart " + unit + ": " + result.stderr());
-        }
-        return result.success();
+    private com.scivicslab.lxdpups.config.PortalConfig.ManagementService findService(String name) {
+        return configLoader.getConfig().getManagementServices().stream()
+                .filter(s -> name.equals(s.getName()))
+                .findFirst()
+                .orElse(null);
     }
 }

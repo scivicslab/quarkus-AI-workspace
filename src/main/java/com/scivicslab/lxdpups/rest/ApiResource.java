@@ -35,33 +35,33 @@ public class ApiResource {
         return statusPoller.getLatestStatus();
     }
 
-    // ── Management services (host systemctl) ──
+    // ── Management services (direct process management) ──
 
     @POST
-    @Path("/management/services/{unit}/start")
-    public Response startManagementService(@PathParam("unit") String unit) {
-        boolean ok = hostServiceManager.start(unit);
+    @Path("/management/services/{name}/start")
+    public Response startManagementService(@PathParam("name") String name) {
+        boolean ok = hostServiceManager.start(name);
         statusPoller.refresh();
         return ok ? Response.ok(Map.of("status", "started")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to start " + unit)).build();
+                  : Response.serverError().entity(Map.of("error", "Failed to start " + name)).build();
     }
 
     @POST
-    @Path("/management/services/{unit}/stop")
-    public Response stopManagementService(@PathParam("unit") String unit) {
-        boolean ok = hostServiceManager.stop(unit);
+    @Path("/management/services/{name}/stop")
+    public Response stopManagementService(@PathParam("name") String name) {
+        boolean ok = hostServiceManager.stop(name);
         statusPoller.refresh();
         return ok ? Response.ok(Map.of("status", "stopped")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to stop " + unit)).build();
+                  : Response.serverError().entity(Map.of("error", "Failed to stop " + name)).build();
     }
 
     @POST
-    @Path("/management/services/{unit}/restart")
-    public Response restartManagementService(@PathParam("unit") String unit) {
-        boolean ok = hostServiceManager.restart(unit);
+    @Path("/management/services/{name}/restart")
+    public Response restartManagementService(@PathParam("name") String name) {
+        boolean ok = hostServiceManager.restart(name);
         statusPoller.refresh();
         return ok ? Response.ok(Map.of("status", "restarted")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to restart " + unit)).build();
+                  : Response.serverError().entity(Map.of("error", "Failed to restart " + name)).build();
     }
 
     // ── Worker containers (lxc commands) ──
