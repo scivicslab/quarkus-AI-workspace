@@ -148,15 +148,15 @@
         /* -- Buttons ---- */
         .btn {
             display: inline-flex; align-items: center; gap: 7px;
-            padding: 8px 18px; border-radius: 9px;
-            font-size: 13px; font-weight: 600; cursor: pointer;
+            padding: 10px 22px; border-radius: 9px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
             border: none; text-decoration: none; transition: all .15s ease;
         }
         .btn-primary { background: var(--orange); color: white; }
         .btn-primary:hover { background: var(--orange-dark); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-        .btn-open { background: #10B981; color: white; }
-        .btn-open:hover { background: #059669; }
-        .btn-stop { background: white; color: #EF4444; border: 1.5px solid #FCA5A5; }
+        .btn-open { background: #10B981; color: white; font-size: 15px; padding: 11px 26px; }
+        .btn-open:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(16,185,129,.25); }
+        .btn-stop { background: white; color: #EF4444; border: 1.5px solid #FCA5A5; padding: 9px 18px; font-size: 13px; }
         .btn-stop:hover { background: #FEF2F2; }
         .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
 
@@ -226,7 +226,7 @@
             display: flex; align-items: center; gap: 14px;
             background: var(--card); border-radius: var(--radius);
             box-shadow: var(--shadow); border-left: 4px solid var(--orange);
-            padding: 14px 20px; margin-bottom: 10px;
+            padding: 22px 24px; margin-bottom: 14px;
         }
         .svc-icon { font-size: 20px; }
         .svc-name { font-weight: 600; }
