@@ -54,6 +54,6 @@ public class ContainerProgressResource {
             ));
         }
 
-        return new ContainerProgressResponse(config.getTitle(), services);
+        return new ContainerProgressResponse(config.getTitle(), services, true);
     }
 }

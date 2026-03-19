@@ -9,7 +9,7 @@ import java.util.Map;
 public class PortalConfig {
 
     private String title = "LXD-pups Portal";
-    private int port = 8080;
+    private int port = 15080;
     private String mode = "host"; // "host" or "container"
     private List<ManagementService> managementServices = List.of();
     private List<WorkerService> workerTemplate = List.of();
@@ -46,7 +46,7 @@ public class PortalConfig {
         private String name;
         private String description;
         private String icon;
-        private String portRange; // e.g. "8200-8209"
+        private String portRange; // e.g. "15200-15209"
         private ManagementService.Binary binary;
 
         public String getName() { return name; }

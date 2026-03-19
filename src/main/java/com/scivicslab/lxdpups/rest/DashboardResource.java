@@ -1,9 +1,11 @@
 package com.scivicslab.lxdpups.rest;
 
+import com.scivicslab.lxdpups.actor.LxdPupsActorSystem;
 import com.scivicslab.lxdpups.config.PortalConfigLoader;
 import com.scivicslab.lxdpups.service.ContainerPortalPoller;
 import com.scivicslab.lxdpups.service.StatusPoller;
 import com.scivicslab.lxdpups.service.ToolInstanceManager;
+import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
@@ -29,6 +31,10 @@ public class DashboardResource {
     Template dashboard;
 
     @Inject
+    @Location("lxc-manager.html")
+    Template lxcManager;
+
+    @Inject
     StatusPoller statusPoller;
 
     @Inject
@@ -39,6 +45,9 @@ public class DashboardResource {
 
     @Inject
     ToolInstanceManager toolInstanceManager;
+
+    @Inject
+    LxdPupsActorSystem actorSystem;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -54,6 +63,15 @@ public class DashboardResource {
             }
         }
 
+        // Get active launches from actor system
+        var activeLaunches = java.util.List.<com.scivicslab.lxdpups.model.ServiceProgress>of();
+        try {
+            activeLaunches = actorSystem.getSupervisor()
+                    .ask(s -> s.getAllActiveLaunches()).get();
+        } catch (Exception e) {
+            LOG.warning("Failed to get active launches: " + e.getMessage());
+        }
+
         var instance = dashboard
                 .data("title", config.getTitle())
                 .data("hostMode", config.isHostMode())
@@ -62,22 +80,56 @@ public class DashboardResource {
                 .data("containers", status.containers())
                 .data("workerTemplate", config.getWorkerTemplate())
                 .data("containerProgress", containerPortalPoller.getAllProgress())
-                .data("containerIps", containerIps);
+                .data("containerIps", containerIps)
+                .data("activeLaunches", activeLaunches);
 
         // Container mode specific data
         if (config.isContainerMode()) {
             instance = instance
                     .data("tools", config.getTools())
                     .data("toolInstances", toolInstanceManager.getRunningInstances())
-                    .data("storageInfo", getStorageInfo());
+                    .data("storageInfo", getStorageInfo())
+                    .data("myIp", getMyIpAddress());
         } else {
             instance = instance
                     .data("tools", java.util.List.of())
                     .data("toolInstances", java.util.List.of())
-                    .data("storageInfo", "");
+                    .data("storageInfo", "")
+                    .data("myIp", "localhost");
         }
 
         return instance;
+    }
+
+    @GET
+    @Path("/lxc-manager")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance lxcManagerPage() {
+        return lxcManager.instance();
+    }
+
+    /**
+     * Get this container's IP address by checking eth0.
+     * Falls back to hostname resolution.
+     */
+    String getMyIpAddress() {
+        try {
+            var interfaces = java.net.NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                var iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) continue;
+                var addrs = iface.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    var addr = addrs.nextElement();
+                    if (addr instanceof java.net.Inet4Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.fine("Could not get IP address: " + e.getMessage());
+        }
+        return "localhost";
     }
 
     /**

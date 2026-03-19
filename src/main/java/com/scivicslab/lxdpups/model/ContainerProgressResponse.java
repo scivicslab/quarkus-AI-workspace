@@ -8,5 +8,6 @@ import java.util.List;
  */
 public record ContainerProgressResponse(
         String title,
-        List<ServiceProgressSummary> services
+        List<ServiceProgressSummary> services,
+        boolean portalOnline
 ) {}

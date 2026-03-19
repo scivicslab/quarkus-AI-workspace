@@ -12,17 +12,17 @@ class ToolDefinitionTest {
     @Test
     void getPortStartAndEnd() {
         var tool = new PortalConfig.ToolDefinition();
-        tool.setPortRange("8200-8209");
-        assertEquals(8200, tool.getPortStart());
-        assertEquals(8209, tool.getPortEnd());
+        tool.setPortRange("15200-15209");
+        assertEquals(15200, tool.getPortStart());
+        assertEquals(15209, tool.getPortEnd());
     }
 
     @Test
     void getPortStartAndEndSinglePort() {
         var tool = new PortalConfig.ToolDefinition();
-        tool.setPortRange("3000-3000");
-        assertEquals(3000, tool.getPortStart());
-        assertEquals(3000, tool.getPortEnd());
+        tool.setPortRange("15000-15000");
+        assertEquals(15000, tool.getPortStart());
+        assertEquals(15000, tool.getPortEnd());
     }
 
     @Test
@@ -36,9 +36,9 @@ class ToolDefinitionTest {
     @Test
     void getPortStartAndEndLargeRange() {
         var tool = new PortalConfig.ToolDefinition();
-        tool.setPortRange("3000-3009");
-        assertEquals(3000, tool.getPortStart());
-        assertEquals(3009, tool.getPortEnd());
+        tool.setPortRange("15000-15009");
+        assertEquals(15000, tool.getPortStart());
+        assertEquals(15009, tool.getPortEnd());
     }
 
     @Test
@@ -47,12 +47,12 @@ class ToolDefinitionTest {
         tool.setName("test-tool");
         tool.setDescription("Test Tool");
         tool.setIcon("T");
-        tool.setPortRange("9000-9009");
+        tool.setPortRange("19000-19009");
 
         assertEquals("test-tool", tool.getName());
         assertEquals("Test Tool", tool.getDescription());
         assertEquals("T", tool.getIcon());
-        assertEquals("9000-9009", tool.getPortRange());
+        assertEquals("19000-19009", tool.getPortRange());
     }
 
     @Test

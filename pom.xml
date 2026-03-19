@@ -61,6 +61,13 @@
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
 
+        <!-- POJO-actor (lightweight actor model) -->
+        <dependency>
+            <groupId>com.scivicslab</groupId>
+            <artifactId>pojo-actor</artifactId>
+            <version>3.0.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- YAML parsing -->
         <dependency>
             <groupId>org.yaml</groupId>

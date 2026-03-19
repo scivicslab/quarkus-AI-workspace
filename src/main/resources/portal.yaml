@@ -1,13 +1,13 @@
 portal:
-  port: 8080
+  port: 15080
   title: "LXD-pups Dev Environment"
 
 management:
   mcp-gateway:
     enabled: true
-    port: 8888
+    port: 15888
     description: "MCP Gateway"
-    ui: "http://localhost:8888/"
+    ui: "http://localhost:15888/"
     binary:
       repo: scivicslab/quarkus-mcp-gateway
       version: v1.0.0
@@ -16,20 +16,20 @@ management:
 
   predict-ja:
     enabled: true
-    port: 8190
+    port: 15190
     description: "predict-ja"
-    ui: "http://localhost:8190/"
+    ui: "http://localhost:15190/"
     binary:
       repo: oogasawa/fcitx5-predict-ja
       version: v1.0.0
       asset: fcitx5-predict-ja-1.0.0.jar
       path: ~/bin/fcitx5-predict-ja.jar
       runtime: java
-      args: "--gateway-url http://localhost:8888 --gateway-poll 60 --ime-learning false --vllm-url http://192.168.5.15:8000 --vllm-model Qwen3.5-35B-A3B"
+      args: "--port 15190 --gateway-url http://localhost:15888 --gateway-poll 60 --ime-learning false --vllm-url http://192.168.5.15:8000 --vllm-model Qwen3.5-35B-A3B"
 
   predict-en:
     enabled: false
-    port: 8191
+    port: 15191
     description: "predict-en"
 
 worker-template:
@@ -37,20 +37,20 @@ worker-template:
     enabled: true
     singleton: true
     unit: mcp-gateway.service
-    port: 8888
+    port: 15888
     description: "MCP Gateway"
 
   llm-console-claude:
     enabled: true
     singleton: false
     unit: llm-console-claude@.service
-    port-range: 8200-8299
+    port-range: 15200-15299
     instances:
-      - port: 8200
+      - port: 15200
         title: "Claude — Coding"
-      - port: 8201
+      - port: 15201
         title: "Claude — Research"
-      - port: 8202
+      - port: 15202
         title: "Claude — Docs"
     description: "LLM Console — Claude"
 
@@ -58,11 +58,11 @@ worker-template:
     enabled: true
     singleton: false
     unit: workflow-editor@.service
-    port-range: 9300-9399
+    port-range: 15300-15399
     instances:
-      - port: 9300
+      - port: 15300
         title: "Workflow — Analysis"
-      - port: 9301
+      - port: 15301
         title: "Workflow — Deploy"
     description: "Turing Workflow Editor"
 

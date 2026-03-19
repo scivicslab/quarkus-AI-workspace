@@ -146,7 +146,9 @@ public class ProcessManager {
 
         try {
             var pb = new ProcessBuilder(command);
+            pb.directory(new java.io.File(System.getProperty("user.home")));
             pb.environment().put("QUARKUS_HTTP_PORT", String.valueOf(svc.getPort()));
+            pb.environment().put("QUARKUS_HTTP_HOST", "0.0.0.0");
             pb.redirectErrorStream(true);
             pb.inheritIO();
             var process = pb.start();
@@ -201,7 +203,9 @@ public class ProcessManager {
         var command = buildCommand(svc);
         try {
             var pb = new ProcessBuilder(command);
+            pb.directory(new java.io.File(System.getProperty("user.home")));
             pb.environment().put("QUARKUS_HTTP_PORT", String.valueOf(svc.getPort()));
+            pb.environment().put("QUARKUS_HTTP_HOST", "0.0.0.0");
             pb.redirectErrorStream(true);
             pb.inheritIO();
             var process = pb.start();

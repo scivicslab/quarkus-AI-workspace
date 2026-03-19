@@ -56,7 +56,7 @@ for f in "$PORTAL_JAR_DIR"/quarkus/*.jar "$PORTAL_JAR_DIR"/quarkus/*.dat; do
 done
 
 echo "=== Copying container portal.yaml ==="
-lxc file push "$(cd "$(dirname "$0")/.." && pwd)/src/main/resources/portal-container.yaml" \
+lxc file push "$(cd "$(dirname "$0")/.." && pwd)/src/main/resources/container-portal.yaml" \
     "$TEMPLATE_NAME/opt/lxd-pups-portal/portal.yaml"
 
 echo "=== Creating systemd service for portal auto-start ==="
@@ -69,7 +69,7 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/opt/lxd-pups-portal
-ExecStart=/usr/local/bin/java -jar /opt/lxd-pups-portal/quarkus-run.jar
+ExecStart=/usr/local/bin/java -Dquarkus.http.port=15080 -Dportal.config=/opt/lxd-pups-portal/portal.yaml -jar /opt/lxd-pups-portal/quarkus-run.jar
 Restart=on-failure
 RestartSec=5
 Environment=HOME=/home/ubuntu

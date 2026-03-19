@@ -1,36 +1,58 @@
 portal:
-  port: 8080
+  port: 16080
   mode: container
   title: "AI Worker"
 
 management:
   mcp-gateway:
     enabled: true
-    port: 8888
+    port: 16888
     description: "MCP Gateway"
-    ui: "http://localhost:8888/"
+    ui: "http://localhost:16888/"
     binary:
       repo: scivicslab/quarkus-mcp-gateway
       version: v1.0.0
       asset: quarkus-mcp-gateway-v1.0.0-linux-x86_64
       path: ~/bin/quarkus-mcp-gateway
 
-  llm-console-claude:
+  llm-console-local:
     enabled: true
-    port: 8200
-    description: "LLM Console - Claude"
-    ui: "http://localhost:8200/"
+    port: 16100
+    description: "LLM Console (Local)"
+    ui: "http://localhost:16100/"
     binary:
-      repo: scivicslab/quarkus-llm-console-claude
+      repo: scivicslab/quarkus-llm-console
       version: v1.0.0
-      asset: quarkus-llm-console-claude-v1.0.0-linux-x86_64
-      path: ~/bin/quarkus-llm-console-claude
+      asset: quarkus-llm-console-v1.0.0-linux-x86_64
+      path: ~/bin/quarkus-llm-console
+
+  claude-code:
+    enabled: true
+    port: 16120
+    description: "Claude Code"
+    ui: "http://localhost:16120/"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: ""
+
+  codex:
+    enabled: true
+    port: 16140
+    description: "Codex"
+    ui: "http://localhost:16140/"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: ""
 
   workflow-editor:
     enabled: true
-    port: 8300
+    port: 16200
     description: "Turing Workflow Editor"
-    ui: "http://localhost:8300/"
+    ui: "http://localhost:16200/"
     binary:
       repo: scivicslab/Turing-workflow-editor
       version: v1.0.0

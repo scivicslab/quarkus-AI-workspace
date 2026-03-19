@@ -1,5 +1,8 @@
 package com.scivicslab.lxdpups.rest;
 
+import com.scivicslab.lxdpups.actor.LxdPupsActorSystem;
+import com.scivicslab.lxdpups.model.ContainerInfo;
+import com.scivicslab.lxdpups.model.ImageInfo;
 import com.scivicslab.lxdpups.model.PortalStatus;
 import com.scivicslab.lxdpups.model.ServiceProgress;
 import com.scivicslab.lxdpups.service.ContainerManager;
@@ -16,13 +19,17 @@ import org.jboss.resteasy.reactive.RestStreamElementType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * REST API for portal operations.
+ * Container operations go through the actor system (ask/tell).
  */
 @Path("/api")
 @Produces(MediaType.APPLICATION_JSON)
 public class ApiResource {
+
+    private static final Logger LOG = Logger.getLogger(ApiResource.class.getName());
 
     @Inject
     StatusPoller statusPoller;
@@ -32,6 +39,9 @@ public class ApiResource {
 
     @Inject
     ContainerManager containerManager;
+
+    @Inject
+    LxdPupsActorSystem actorSystem;
 
     @Inject
     ProcessManager processManager;
@@ -70,13 +80,11 @@ public class ApiResource {
     public Multi<ServiceProgress> streamProgress(@PathParam("name") String name) {
         var current = processManager.getProgress(name);
         return Multi.createFrom().emitter(emitter -> {
-            // Send current state immediately
             emitter.emit(current);
             if (current.done()) {
                 emitter.complete();
                 return;
             }
-            // Register for future updates
             java.util.function.Consumer<ServiceProgress> listener = progress -> {
                 emitter.emit(progress);
                 if (progress.done()) {
@@ -106,63 +114,142 @@ public class ApiResource {
                   : Response.serverError().entity(Map.of("error", "Failed to restart " + name)).build();
     }
 
-    // ── Worker containers (lxc commands) ──
+    // ── LXC management (all containers + images, via actor ask) ──
+
+    @GET
+    @Path("/lxc/containers")
+    public List<ContainerInfo> listAllContainers(
+            @QueryParam("remote") @DefaultValue("local") String remote) {
+        try {
+            return actorSystem.getSupervisor()
+                    .ask(s -> s.listAllContainers(remote)).get();
+        } catch (Exception e) {
+            LOG.warning("Failed to list containers: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    @GET
+    @Path("/lxc/images")
+    public List<ImageInfo> listImages() {
+        try {
+            return actorSystem.getSupervisor()
+                    .ask(s -> s.listImages()).get();
+        } catch (Exception e) {
+            LOG.warning("Failed to list images: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // ── Worker containers (via actor tell/ask) ──
 
     @POST
     @Path("/containers")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response launchContainer(Map<String, String> body) {
         var name = body.get("name");
-        var template = body.getOrDefault("template", "lxd-pups/base");
+        var template = body.getOrDefault("template", "lxd-pups/ai-tools");
         var remote = body.getOrDefault("remote", "local");
         if (name == null || name.isBlank()) {
             return Response.status(400).entity(Map.of("error", "name is required")).build();
         }
-        boolean ok = containerManager.launch(template, name, remote);
-        statusPoller.refresh();
-        return ok ? Response.ok(Map.of("status", "launched", "name", name)).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to launch " + name)).build();
+
+        // Ask supervisor to launch (returns error message or null)
+        try {
+            var error = actorSystem.getSupervisor()
+                    .ask(s -> s.requestLaunch(
+                            actorSystem.getSupervisor(), template, name, remote))
+                    .get();
+            if (error != null) {
+                return Response.status(409).entity(Map.of("error", error)).build();
+            }
+        } catch (Exception e) {
+            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+        }
+
+        return Response.accepted(Map.of("status", "launching", "name", name)).build();
     }
 
-    @POST
-    @Path("/containers/{name}/start")
-    public Response startContainer(@PathParam("name") String name,
-                                   @QueryParam("remote") @DefaultValue("local") String remote) {
-        boolean ok = containerManager.start(name, remote);
-        statusPoller.refresh();
-        return ok ? Response.ok(Map.of("status", "started")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to start")).build();
+    @GET
+    @Path("/containers/{name}/launch/progress")
+    public ServiceProgress getContainerLaunchProgress(@PathParam("name") String name) {
+        try {
+            return actorSystem.getSupervisor()
+                    .ask(s -> s.getLaunchProgress(name)).get();
+        } catch (Exception e) {
+            return ServiceProgress.idle(name);
+        }
     }
 
+    @GET
+    @Path("/containers/{name}/launch/progress/stream")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    public Multi<ServiceProgress> streamContainerLaunchProgress(@PathParam("name") String name) {
+        return Multi.createFrom().emitter(emitter -> {
+            // Poll supervisor every second for progress updates
+            Thread.ofVirtual().start(() -> {
+                try {
+                    while (true) {
+                        var progress = actorSystem.getSupervisor()
+                                .ask(s -> s.getLaunchProgress(name)).get();
+                        emitter.emit(progress);
+                        if (progress.done()) {
+                            emitter.complete();
+                            return;
+                        }
+                        Thread.sleep(1000);
+                    }
+                } catch (Exception e) {
+                    emitter.complete();
+                }
+            });
+        });
+    }
+
+    @GET
+    @Path("/containers/launching")
+    public List<ServiceProgress> getActiveLaunches() {
+        try {
+            return actorSystem.getSupervisor()
+                    .ask(s -> s.getAllActiveLaunches()).get();
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * Stop = Delete (per lifecycle spec). Stops and removes the container instance.
+     * The template image is not affected.
+     */
     @POST
     @Path("/containers/{name}/stop")
     public Response stopContainer(@PathParam("name") String name,
                                   @QueryParam("remote") @DefaultValue("local") String remote) {
-        boolean ok = containerManager.stop(name, remote);
-        statusPoller.refresh();
-        return ok ? Response.ok(Map.of("status", "stopped")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to stop")).build();
+        try {
+            var ok = actorSystem.getSupervisor()
+                    .ask(s -> s.stopAndDeleteContainer(name, remote)).get();
+            statusPoller.refresh();
+            return ok ? Response.ok(Map.of("status", "deleted")).build()
+                      : Response.serverError().entity(Map.of("error", "Failed to stop/delete")).build();
+        } catch (Exception e) {
+            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+        }
     }
 
     @DELETE
     @Path("/containers/{name}")
     public Response deleteContainer(@PathParam("name") String name,
                                     @QueryParam("remote") @DefaultValue("local") String remote) {
-        boolean ok = containerManager.delete(name, remote);
-        statusPoller.refresh();
-        return ok ? Response.ok(Map.of("status", "deleted")).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to delete")).build();
-    }
-
-    @POST
-    @Path("/containers/{name}/snapshot")
-    @Consumes(MediaType.APPLICATION_JSON)
-    public Response snapshot(@PathParam("name") String name, Map<String, String> body) {
-        var snapName = body.getOrDefault("snapshot", "snap-" + System.currentTimeMillis());
-        var remote = body.getOrDefault("remote", "local");
-        boolean ok = containerManager.snapshot(name, snapName, remote);
-        return ok ? Response.ok(Map.of("status", "snapshot created", "snapshot", snapName)).build()
-                  : Response.serverError().entity(Map.of("error", "Failed to snapshot")).build();
+        try {
+            var ok = actorSystem.getSupervisor()
+                    .ask(s -> s.stopAndDeleteContainer(name, remote)).get();
+            statusPoller.refresh();
+            return ok ? Response.ok(Map.of("status", "deleted")).build()
+                      : Response.serverError().entity(Map.of("error", "Failed to delete")).build();
+        } catch (Exception e) {
+            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+        }
     }
 
     // ── Worker container services (lxc exec -- systemctl) ──

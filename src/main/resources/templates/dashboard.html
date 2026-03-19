@@ -282,7 +282,7 @@
             {#for svc in managementServices}
             <div class="mgmt-row" data-name="{svc.name}" style="flex-wrap:wrap;">
                 {#if svc.uiUrl && svc.status.name == 'ACTIVE'}
-                <a class="mgmt-name mgmt-link" href="{svc.uiUrl}" target="_blank">{svc.name}</a>
+                <a class="mgmt-name mgmt-link" href="http://{myIp}:{svc.port}/" target="_blank">{svc.name}</a>
                 {#else}
                 <span class="mgmt-name">{svc.name}</span>
                 {/if}
@@ -318,7 +318,7 @@
         {#for inst in toolInstances}
         <div class="running-svc-card">
             <span class="svc-icon">{inst.icon}</span>
-            <a class="svc-name mgmt-link" href="http://localhost:{inst.port}/" target="_blank">{inst.description}</a>
+            <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}/" target="_blank">{inst.description}</a>
             <span class="mgmt-port">:{inst.port}</span>
             <span class="badge badge-{inst.status}">{inst.status}</span>
             <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
@@ -382,18 +382,48 @@
     {#if hostMode}
     <div class="sessions-section">
         <p class="section-label">Worker Containers</p>
+        <div id="launching-containers">
+            {#for lp in activeLaunches}
+            <div class="container-card" id="launch-card-{lp.name}" style="border-left-color:#F59E0B;">
+                <div class="container-card-head">
+                    <span class="container-name">{lp.name}</span>
+                    <span class="badge badge-STARTING">Launching</span>
+                    <span id="launch-timer-{lp.name}" style="margin-left:auto;font-family:'SF Mono',Consolas,monospace;font-size:13px;color:var(--muted);"></span>
+                </div>
+                <div class="progress-log visible" id="launch-log-{lp.name}" style="width:100%;">
+                    <div class="log-line"><span class="log-phase">&#x23f3; {lp.phase}</span></div>
+                    {#for msg in lp.messages}
+                    <div class="log-line">{msg}</div>
+                    {/for}
+                </div>
+            </div>
+            {/for}
+        </div>
 
         {#for c in containers}
-        <div class="container-card {#if c.status == 'Stopped'}stopped{/if}">
+        {#if c.status == 'Running'}
+        <div class="container-card">
             <div class="container-card-head">
                 {#if c.ip}
-                <a class="container-name mgmt-link" href="http://{c.ip}:8080/" target="_blank">{c.name}</a>
+                    {#if c.image == 'lxd-pups/jupyter'}
+                    <a class="container-name mgmt-link" href="http://{c.ip}:16900/" target="_blank">{c.name}</a>
+                    <span class="badge badge-ACTIVE badge-xs" style="margin-left:8px;">Jupyter</span>
+                    {#else if c.image == 'lxd-pups/claude'}
+                    <a class="container-name mgmt-link" href="http://{c.ip}:16120/" target="_blank">{c.name}</a>
+                    <span class="badge badge-ACTIVE badge-xs" style="margin-left:8px;">Claude</span>
+                    {#else if c.image == 'lxd-pups/guacamole'}
+                    <a class="container-name mgmt-link" href="http://{c.ip}:16901/" target="_blank">{c.name}</a>
+                    <span class="badge badge-ACTIVE badge-xs" style="margin-left:8px;">Desktop</span>
+                    {#else}
+                    <a class="container-name mgmt-link" href="http://{c.ip}:16080/" target="_blank">{c.name}</a>
+                    <span class="badge badge-ACTIVE badge-xs" style="margin-left:8px;">Portal</span>
+                    {/if}
                 {#else}
                 <span class="container-name">{c.name}</span>
                 {/if}
-                <span class="badge badge-{c.status}">{c.status}</span>
+                <span class="badge badge-Running">Running</span>
             </div>
-            {#if c.status == 'Running' && containerProgress.get(c.name) != null}
+            {#if c.image == 'lxd-pups/ai-tools' && containerProgress.get(c.name) != null && containerProgress.get(c.name).portalOnline}
             <div class="dashboard-services" style="margin:10px 0;">
                 {#for svc in containerProgress.get(c.name).services}
                 <div class="dashboard-svc">
@@ -403,45 +433,65 @@
                 </div>
                 {/for}
             </div>
-            {#else if c.status == 'Running'}
-            <div style="margin:10px 0;color:var(--muted);font-size:13px;font-style:italic;">Container portal starting...</div>
             {/if}
-            <div class="container-meta">
-                <span class="lbl">Remote</span> <span>{c.remote}</span>
-            </div>
             <div class="container-actions">
-                {#if c.status == 'Running'}
-                <button class="btn btn-stop" onclick="containerAction('{c.name}', '{c.remote}', 'stop')">Stop</button>
-                <button class="btn btn-primary" onclick="containerAction('{c.name}', '{c.remote}', 'snapshot')">Snapshot</button>
-                {#else}
-                <button class="btn btn-primary" onclick="containerAction('{c.name}', '{c.remote}', 'start')">Start</button>
-                <button class="btn btn-stop" onclick="containerDelete('{c.name}', '{c.remote}')">Delete</button>
-                {/if}
+                <button class="btn btn-stop" onclick="containerStop('{c.name}', '{c.remote}')">Stop</button>
             </div>
         </div>
-        {#else}
+        {/if}
+        {/for}
+        {#if containers.isEmpty}
         <div class="empty">
             <div class="icon">&#x1f4e6;</div>
             <p>No worker containers yet. Launch one below.</p>
         </div>
-        {/for}
+        {/if}
     </div>
 
     {/if}
 
     <!-- -- Launch a Container (host mode only) -- -->
     {#if hostMode}
-    <p class="section-label">Launch a Container</p>
+    <p class="section-label">Container Images</p>
     <div class="launch-grid">
         <div class="launch-card">
-            <div class="tool-name">New Environment</div>
-            <select id="launch-template" class="launch-input">
-                <option value="lxd-pups/base">lxd-pups/base</option>
-                <option value="lxd-pups/bioinfo">lxd-pups/bioinfo</option>
-                <option value="lxd-pups/webdev">lxd-pups/webdev</option>
-            </select>
-            <input id="launch-name" type="text" class="launch-input" placeholder="Container name...">
-            <button class="btn btn-primary" onclick="launchContainer()">Launch</button>
+            <div class="tool-icon" style="font-size:32px;margin-bottom:8px;">&#x1F916;</div>
+            <div class="tool-name">AI Tools</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">LLM Console, Workflow Editor, MCP Gateway</p>
+            <input type="text" class="launch-input" id="launch-name-ai" placeholder="Container name...">
+            <button class="btn btn-primary" onclick="launchContainer('lxd-pups/ai-tools', 'launch-name-ai')">Launch</button>
+        </div>
+        <div class="launch-card">
+            <div class="tool-icon" style="font-size:32px;margin-bottom:8px;">&#x1F916;</div>
+            <div class="tool-name">Claude Code</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Claude Code CLI via LLM Console</p>
+            <input type="text" class="launch-input" id="launch-name-claude" placeholder="Container name...">
+            <button class="btn btn-primary" onclick="launchContainer('lxd-pups/claude', 'launch-name-claude')">Launch</button>
+        </div>
+        <div class="launch-card">
+            <div class="tool-icon" style="font-size:32px;margin-bottom:8px;">&#x1F4CA;</div>
+            <div class="tool-name">Jupyter Lab</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Jupyter Lab, R, Python, Julia</p>
+            <input type="text" class="launch-input" id="launch-name-jupyter" placeholder="Container name...">
+            <button class="btn btn-primary" onclick="launchContainer('lxd-pups/jupyter', 'launch-name-jupyter')">Launch</button>
+        </div>
+        <div class="launch-card">
+            <div class="tool-icon" style="font-size:32px;margin-bottom:8px;">&#x1F5A5;&#xFE0F;</div>
+            <div class="tool-name">Remote Desktop</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">MATE desktop, Firefox, LibreOffice, Guacamole</p>
+            <input type="text" class="launch-input" id="launch-name-guacamole" placeholder="Container name...">
+            <button class="btn btn-primary" onclick="launchContainer('lxd-pups/guacamole', 'launch-name-guacamole')">Launch</button>
+        </div>
+    </div>
+
+    <!-- -- LXC Manager card -- -->
+    <p class="section-label" style="margin-top:28px;">Administration</p>
+    <div class="launch-grid">
+        <div class="launch-card" style="cursor:pointer;" onclick="window.location.href='/lxc-manager'">
+            <div class="tool-icon" style="font-size:32px;margin-bottom:8px;">&#x1F4E6;</div>
+            <div class="tool-name">LXC Manager</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Container images, all containers, start/stop/delete</p>
+            <span class="btn btn-primary" style="width:100%;justify-content:center;">Open</span>
         </div>
     </div>
     {/if}
@@ -538,34 +588,106 @@
         return d.innerHTML;
     }
 
-    function containerAction(name, remote, action) {
-        var url = '/api/containers/' + encodeURIComponent(name) + '/' + action + '?remote=' + encodeURIComponent(remote);
-        if (action === 'snapshot') {
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ remote: remote })
-            }).then(function() { location.reload(); });
-        } else {
-            fetch(url, { method: 'POST' }).then(function() { location.reload(); });
-        }
-    }
-
-    function containerDelete(name, remote) {
-        if (!confirm('Delete container "' + name + '"? This cannot be undone.')) return;
-        fetch('/api/containers/' + encodeURIComponent(name) + '?remote=' + encodeURIComponent(remote), { method: 'DELETE' })
+    function containerStop(name, remote) {
+        if (!confirm('Stop and delete container "' + name + '"?\nThe template image is not affected — you can re-launch anytime.')) return;
+        fetch('/api/containers/' + encodeURIComponent(name) + '/stop?remote=' + encodeURIComponent(remote), { method: 'POST' })
             .then(function() { location.reload(); });
     }
 
-    function launchContainer() {
-        var template = document.getElementById('launch-template').value;
-        var name = document.getElementById('launch-name').value.trim();
+    function formatElapsed(ms) {
+        var s = Math.floor(ms / 1000);
+        var m = Math.floor(s / 60);
+        s = s % 60;
+        if (m > 0) return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+        return s + 's';
+    }
+
+    function launchContainer(template, nameInputId) {
+        var nameInput = document.getElementById(nameInputId);
+        var name = nameInput.value.trim();
         if (!name) { alert('Please enter a container name.'); return; }
+
+        // Reset input for next use
+        nameInput.value = '';
+
+        // Create a new card in Worker Containers section
+        var container = document.getElementById('launching-containers');
+        var card = document.createElement('div');
+        card.className = 'container-card';
+        card.style.borderLeftColor = '#F59E0B';
+        var logId = 'launch-log-' + name;
+        var timerId = 'launch-timer-' + name;
+        card.innerHTML = '<div class="container-card-head">'
+            + '<span class="container-name">' + escHtml(name) + '</span>'
+            + '<span class="badge badge-STARTING">Launching</span>'
+            + '<span id="' + timerId + '" style="margin-left:auto;font-family:\'SF Mono\',Consolas,monospace;font-size:13px;color:var(--muted);">0s</span>'
+            + '</div>'
+            + '<div class="container-meta"><span class="lbl">Template</span><span>' + escHtml(template) + '</span></div>'
+            + '<div class="progress-log visible" id="' + logId + '" style="width:100%;">'
+            + '<div class="log-line"><span class="log-phase">\u23f3 starting</span></div></div>';
+        container.appendChild(card);
+
+        pollingServices['launch-' + name] = true;
+
+        // Start elapsed timer
+        var startTime = Date.now();
+        var timerInterval = setInterval(function() {
+            var el = document.getElementById(timerId);
+            if (el) el.textContent = formatElapsed(Date.now() - startTime);
+        }, 1000);
+
+        // Send async launch request, THEN start SSE
         fetch('/api/containers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ template: template, name: name, remote: 'local' })
-        }).then(function() { location.reload(); });
+        }).then(function() {
+            var logEl = document.getElementById(logId);
+            var source = new EventSource('/api/containers/' + encodeURIComponent(name) + '/launch/progress/stream');
+            source.onmessage = function(event) {
+                var prog = JSON.parse(event.data);
+                renderLaunchProgress(logEl, card, prog, timerId);
+                if (prog.done) {
+                    source.close();
+                    clearInterval(timerInterval);
+                    delete pollingServices['launch-' + name];
+                    setTimeout(function() { location.reload(); }, 1500);
+                }
+            };
+            source.onerror = function() {
+                source.close();
+                clearInterval(timerInterval);
+                delete pollingServices['launch-' + name];
+                setTimeout(function() { location.reload(); }, 2000);
+            };
+        });
+    }
+
+    function renderLaunchProgress(logEl, card, prog, timerId) {
+        var phaseIcons = { starting: '\u23f3', launching: '\ud83d\ude80', configuring: '\u2699\ufe0f', restarting: '\ud83d\udd04', waiting: '\ud83d\udd0d', running: '\u2705' };
+        var icon = phaseIcons[prog.phase] || '\u2699\ufe0f';
+        var html = '<div class="log-line"><span class="log-phase">' + icon + ' ' + escHtml(prog.phase) + '</span></div>';
+        for (var i = 0; i < prog.messages.length; i++) {
+            html += '<div class="log-line">' + escHtml(prog.messages[i]) + '</div>';
+        }
+        if (prog.done) {
+            var resultIcon = prog.success ? '\u2705' : '\u274c';
+            html += '<div class="log-line" style="color:' + (prog.success ? '#10B981' : '#EF4444') + ';">'
+                  + resultIcon + ' ' + (prog.success ? 'Done.' : 'Failed.') + '</div>';
+            // Update card badge
+            var badge = card.querySelector('.badge');
+            if (badge) {
+                badge.className = prog.success ? 'badge badge-Running' : 'badge badge-FAILED';
+                badge.textContent = prog.success ? 'Running' : 'Failed';
+            }
+            if (prog.success) card.style.borderLeftColor = '#F97316';
+            else card.style.borderLeftColor = '#EF4444';
+            // Show final elapsed time
+            var timerEl = document.getElementById(timerId);
+            if (timerEl) timerEl.style.color = prog.success ? '#10B981' : '#EF4444';
+        }
+        logEl.innerHTML = html;
+        logEl.scrollTop = logEl.scrollHeight;
     }
 
     // ---- Container mode functions ----
@@ -593,6 +715,39 @@
         var row = el.closest('.mgmt-row');
         if (row) pollProgress(row.dataset.name);
     });
+
+    // Resume SSE for active container launches rendered server-side
+    {#for lp in activeLaunches}
+    (function() {
+        var name = '{lp.name}';
+        var logEl = document.getElementById('launch-log-' + name);
+        var card = document.getElementById('launch-card-' + name);
+        var timerId = 'launch-timer-' + name;
+        pollingServices['launch-' + name] = true;
+        var startTime = Date.now();
+        var timerInterval = setInterval(function() {
+            var el = document.getElementById(timerId);
+            if (el) el.textContent = formatElapsed(Date.now() - startTime);
+        }, 1000);
+        var source = new EventSource('/api/containers/' + encodeURIComponent(name) + '/launch/progress/stream');
+        source.onmessage = function(event) {
+            var prog = JSON.parse(event.data);
+            renderLaunchProgress(logEl, card, prog, timerId);
+            if (prog.done) {
+                source.close();
+                clearInterval(timerInterval);
+                delete pollingServices['launch-' + name];
+                setTimeout(function() { location.reload(); }, 1500);
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            clearInterval(timerInterval);
+            delete pollingServices['launch-' + name];
+            setTimeout(function() { location.reload(); }, 2000);
+        };
+    })();
+    {/for}
 </script>
 
 </body>

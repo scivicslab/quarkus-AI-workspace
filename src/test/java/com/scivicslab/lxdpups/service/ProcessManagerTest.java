@@ -47,11 +47,11 @@ class ProcessManagerTest {
     @Test
     void buildCommandWithArgs() {
         var svc = createService("test-svc", "~/bin/test-app.jar", "java",
-                "--port 8080 --host localhost");
+                "--port 15080 --host localhost");
         var command = pm.buildCommand(svc);
         var home = System.getProperty("user.home");
         assertEquals(List.of("java", "-jar", home + "/bin/test-app.jar",
-                "--port", "8080", "--host", "localhost"), command);
+                "--port", "15080", "--host", "localhost"), command);
     }
 
     @Test
@@ -64,7 +64,7 @@ class ProcessManagerTest {
         var enabled = new PortalConfig.ManagementService();
         enabled.setName("svc-a");
         enabled.setEnabled(true);
-        enabled.setPort(8080);
+        enabled.setPort(15080);
         enabled.setDescription("A");
 
         var disabled = new PortalConfig.ManagementService();
@@ -86,7 +86,7 @@ class ProcessManagerTest {
 
         var svc = new PortalConfig.ManagementService();
         svc.setName(name);
-        svc.setPort(8080);
+        svc.setPort(15080);
         svc.setBinary(binary);
         return svc;
     }

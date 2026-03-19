@@ -35,13 +35,13 @@ class PortalConfigLoaderTest {
                   mcp-gateway:
                     enabled: true
                     unit: mcp-gateway.service
-                    port: 8888
+                    port: 15888
                     description: "MCP Gateway"
-                    ui: "http://localhost:8888/"
+                    ui: "http://localhost:15888/"
                   predict-ja:
                     enabled: false
                     unit: predict-ja.service
-                    port: 8190
+                    port: 15190
                     description: "predict-ja"
                 """);
         var config = loader.parse(root);
@@ -50,9 +50,9 @@ class PortalConfigLoaderTest {
         var gateway = config.getManagementServices().stream()
                 .filter(s -> "mcp-gateway".equals(s.getName())).findFirst().orElseThrow();
         assertEquals("mcp-gateway.service", gateway.getUnit());
-        assertEquals(8888, gateway.getPort());
+        assertEquals(15888, gateway.getPort());
         assertTrue(gateway.isEnabled());
-        assertEquals("http://localhost:8888/", gateway.getUi());
+        assertEquals("http://localhost:15888/", gateway.getUi());
 
         var predictJa = config.getManagementServices().stream()
                 .filter(s -> "predict-ja".equals(s.getName())).findFirst().orElseThrow();
@@ -67,11 +67,11 @@ class PortalConfigLoaderTest {
                     enabled: true
                     singleton: false
                     unit: llm-console-claude@.service
-                    port-range: 8200-8299
+                    port-range: 15200-15299
                     instances:
-                      - port: 8200
+                      - port: 15200
                         title: "Coding"
-                      - port: 8201
+                      - port: 15201
                         title: "Research"
                     description: "Claude"
                 """);
@@ -81,9 +81,9 @@ class PortalConfigLoaderTest {
         var claude = config.getWorkerTemplate().get(0);
         assertEquals("llm-console-claude", claude.getName());
         assertFalse(claude.isSingleton());
-        assertEquals("8200-8299", claude.getPortRange());
+        assertEquals("15200-15299", claude.getPortRange());
         assertEquals(2, claude.getInstances().size());
-        assertEquals(8200, claude.getInstances().get(0).getPort());
+        assertEquals(15200, claude.getInstances().get(0).getPort());
         assertEquals("Coding", claude.getInstances().get(0).getTitle());
     }
 
@@ -110,7 +110,7 @@ class PortalConfigLoaderTest {
     void parseEmptyYaml() {
         var config = loader.parse(Map.of());
         assertEquals("LXD-pups Portal", config.getTitle());
-        assertEquals(8080, config.getPort());
+        assertEquals(15080, config.getPort());
         assertTrue(config.getManagementServices().isEmpty());
         assertTrue(config.getWorkerTemplate().isEmpty());
     }
@@ -121,9 +121,9 @@ class PortalConfigLoaderTest {
                 management:
                   mcp-gateway:
                     enabled: true
-                    port: 8888
+                    port: 15888
                     description: "MCP Gateway"
-                    ui: "http://localhost:8888/"
+                    ui: "http://localhost:15888/"
                     binary:
                       repo: scivicslab/quarkus-mcp-gateway
                       version: v1.0.0
@@ -150,7 +150,7 @@ class PortalConfigLoaderTest {
                 management:
                   predict-ja:
                     enabled: true
-                    port: 8190
+                    port: 15190
                     description: "predict-ja"
                     binary:
                       repo: oogasawa/fcitx5-predict-ja
@@ -158,13 +158,13 @@ class PortalConfigLoaderTest {
                       asset: fcitx5-predict-ja-0.1.0-SNAPSHOT.jar
                       path: ~/bin/fcitx5-predict-ja.jar
                       runtime: java
-                      args: "--gateway-url http://localhost:8888 --vllm-url http://192.168.5.15:8000"
+                      args: "--gateway-url http://localhost:15888 --vllm-url http://192.168.5.15:8000"
                 """);
         var config = loader.parse(root);
         var svc = config.getManagementServices().get(0);
         assertNotNull(svc.getBinary());
         assertEquals("java", svc.getBinary().getRuntime());
-        assertEquals("--gateway-url http://localhost:8888 --vllm-url http://192.168.5.15:8000", svc.getBinary().getArgs());
+        assertEquals("--gateway-url http://localhost:15888 --vllm-url http://192.168.5.15:8000", svc.getBinary().getArgs());
     }
 
     @Test
@@ -173,7 +173,7 @@ class PortalConfigLoaderTest {
                 management:
                   predict-en:
                     enabled: false
-                    port: 8191
+                    port: 15191
                     description: "predict-en"
                 """);
         var config = loader.parse(root);
@@ -188,7 +188,7 @@ class PortalConfigLoaderTest {
                   llm-console-claude:
                     description: "LLM Console"
                     icon: "X"
-                    port-range: "8200-8209"
+                    port-range: "15200-15209"
                     binary:
                       repo: scivicslab/quarkus-llm-console-claude
                       version: v1.0.0
@@ -197,7 +197,7 @@ class PortalConfigLoaderTest {
                   docusaurus:
                     description: "Docusaurus"
                     icon: "D"
-                    port-range: "3000-3009"
+                    port-range: "15000-15009"
                     binary:
                       repo: ""
                       runtime: "npx"
@@ -210,9 +210,9 @@ class PortalConfigLoaderTest {
                 .filter(t -> "llm-console-claude".equals(t.getName())).findFirst().orElseThrow();
         assertEquals("LLM Console", claude.getDescription());
         assertEquals("X", claude.getIcon());
-        assertEquals("8200-8209", claude.getPortRange());
-        assertEquals(8200, claude.getPortStart());
-        assertEquals(8209, claude.getPortEnd());
+        assertEquals("15200-15209", claude.getPortRange());
+        assertEquals(15200, claude.getPortStart());
+        assertEquals(15209, claude.getPortEnd());
         assertNotNull(claude.getBinary());
         assertEquals("scivicslab/quarkus-llm-console-claude", claude.getBinary().getRepo());
 
@@ -227,19 +227,19 @@ class PortalConfigLoaderTest {
     void parseContainerModePortal() {
         var root = parseYaml("""
                 portal:
-                  port: 8080
+                  port: 15080
                   mode: container
                   title: "AI Worker"
                 management:
                   mcp-gateway:
                     enabled: true
-                    port: 8888
+                    port: 15888
                     description: "MCP Gateway"
                 tools:
                   workflow-editor:
                     description: "Workflow Editor"
                     icon: "W"
-                    port-range: "8300-8309"
+                    port-range: "15300-15309"
                 """);
         var config = loader.parse(root);
         assertTrue(config.isContainerMode());

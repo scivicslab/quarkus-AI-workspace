@@ -2,13 +2,14 @@ package com.scivicslab.lxdpups.service;
 
 import com.scivicslab.lxdpups.config.PortalConfigLoader;
 import com.scivicslab.lxdpups.model.ContainerProgressResponse;
-import com.scivicslab.lxdpups.model.ServiceProgressSummary;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,7 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
- * Polls running LXC containers' portal /api/progress endpoints.
+ * Polls running LXC containers to determine service availability.
+ *
+ * Health-check strategy depends on image type (see docs/container-lifecycle.md):
+ *   - lxd-pups/ai-tools:  GET http://{ip}:16080/api/progress  (child portal)
+ *   - lxd-pups/jupyter:   TCP connect to {ip}:16900            (Jupyter Lab)
+ *   - lxd-pups/guacamole: TCP connect to {ip}:16901            (Guacamole Tomcat)
+ *
  * Only active in host mode.
  */
 @ApplicationScoped
@@ -58,25 +65,54 @@ public class ContainerPortalPoller {
             if (!"Running".equals(c.status())) continue;
             if (c.ip() == null || c.ip().isEmpty()) continue;
 
-            var url = "http://" + c.ip() + ":8080/api/progress";
-            try {
-                var request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .timeout(Duration.ofSeconds(3))
-                        .GET()
-                        .build();
-                var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() == 200) {
-                    var progress = mapper.readValue(response.body(), ContainerProgressResponse.class);
-                    cache.put(c.name(), progress);
-                }
-            } catch (Exception e) {
-                // Portal not reachable — show offline status
-                cache.put(c.name(), new ContainerProgressResponse(
-                        c.name() + " (portal offline)",
-                        List.of()
-                ));
+            var image = c.image();
+            if ("lxd-pups/jupyter".equals(image)) {
+                pollTcp(c.name(), c.ip(), 16900, "Jupyter");
+            } else if ("lxd-pups/claude".equals(image)) {
+                pollTcp(c.name(), c.ip(), 16120, "Claude");
+            } else if ("lxd-pups/guacamole".equals(image)) {
+                pollTcp(c.name(), c.ip(), 16901, "Desktop");
+            } else {
+                pollPortalApi(c.name(), c.ip());
             }
+        }
+    }
+
+    /**
+     * TCP health check for single-service containers (jupyter, guacamole).
+     */
+    private void pollTcp(String name, String ip, int port, String label) {
+        boolean reachable = false;
+        try (var socket = new Socket()) {
+            socket.connect(new InetSocketAddress(ip, port), 3000);
+            reachable = true;
+        } catch (Exception e) {
+            // not reachable
+        }
+        cache.put(name, new ContainerProgressResponse(name, List.of(), reachable));
+    }
+
+    /**
+     * HTTP health check for ai-tools containers (child portal with service list).
+     */
+    private void pollPortalApi(String name, String ip) {
+        var url = "http://" + ip + ":16080/api/progress";
+        try {
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                var progress = mapper.readValue(response.body(), ContainerProgressResponse.class);
+                cache.put(name, new ContainerProgressResponse(
+                        progress.title(), progress.services(), true));
+            } else {
+                cache.put(name, new ContainerProgressResponse(name, List.of(), false));
+            }
+        } catch (Exception e) {
+            cache.put(name, new ContainerProgressResponse(name, List.of(), false));
         }
     }
 
