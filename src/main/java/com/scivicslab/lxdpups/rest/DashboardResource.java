@@ -138,7 +138,7 @@ public class DashboardResource {
      */
     String getStorageInfo() {
         try {
-            var pb = new ProcessBuilder("df", "-h", "/home/ubuntu/works");
+            var pb = new ProcessBuilder("df", "-h", System.getProperty("user.home"));
             pb.redirectErrorStream(true);
             var process = pb.start();
             boolean finished = process.waitFor(3, TimeUnit.SECONDS);

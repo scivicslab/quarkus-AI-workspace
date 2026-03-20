@@ -68,6 +68,13 @@ public class ContainerManager {
     }
 
     /**
+     * Get the current host username.
+     */
+    public String getHostUser() {
+        return System.getProperty("user.name");
+    }
+
+    /**
      * Builds a qualified name like "remote:container" or just "container" for local.
      */
     public static String qualify(String remote, String container) {

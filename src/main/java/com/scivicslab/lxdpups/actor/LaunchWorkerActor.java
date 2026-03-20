@@ -91,13 +91,15 @@ public class LaunchWorkerActor {
                     List.of("lxc", "config", "set", qName, "user.lxd-pups-image", template),
                     LXC_TIMEOUT);
 
+            var hostUser = System.getProperty("user.name");
             var hostHome = System.getProperty("user.home");
             var hostUid = containerManager.getHostUid();
-            progress.addMessage("Binding " + hostHome + " -> /home/ubuntu (uid " + hostUid + " -> 1000)");
+            var containerHome = "/home/" + hostUser;
+            progress.addMessage("Mapping host user '" + hostUser + "' (uid " + hostUid + ") -> container uid 1000");
             containerManager.execCommand(List.of("lxc", "config", "set", qName, "raw.idmap",
                     "both " + hostUid + " 1000"), LXC_TIMEOUT);
             containerManager.execCommand(List.of("lxc", "config", "device", "add", qName, "home",
-                    "disk", "source=" + hostHome, "path=/home/ubuntu"), LXC_TIMEOUT);
+                    "disk", "source=" + hostHome, "path=" + containerHome), LXC_TIMEOUT);
 
             // Bind-mount Claude CLI if available on host
             var claudePath = hostHome + "/.local/share/claude";
@@ -111,6 +113,48 @@ public class LaunchWorkerActor {
             progress.addMessage("Restarting container to apply UID mapping ...");
             containerManager.execCommand(
                     List.of("lxc", "restart", qName), LXC_TIMEOUT);
+
+            // Rename default 'ubuntu' user to match host user
+            progress.addMessage("Renaming container user 'ubuntu' -> '" + hostUser + "' ...");
+            runChecked(qName, "usermod -l", "usermod", "-l", hostUser, "ubuntu");
+            runChecked(qName, "groupmod -n", "groupmod", "-n", hostUser, "ubuntu");
+            runChecked(qName, "usermod -d -m", "usermod", "-d", containerHome, "-m", hostUser);
+            runChecked(qName, "usermod -c", "usermod", "-c", hostUser, hostUser);
+
+            // Prevent cloud-init from recreating the 'ubuntu' user
+            runChecked(qName, "cloud-init override",
+                    "bash", "-c", "echo 'system_info: { default_user: { name: " + hostUser + " } }'"
+                            + " > /etc/cloud/cloud.cfg.d/99-rename-user.cfg");
+
+            // Rewrite systemd service to use renamed user
+            progress.addMessage("Updating portal service for user '" + hostUser + "' ...");
+            var serviceUnit = "[Unit]\n"
+                    + "Description=LXD-pups Container Portal\n"
+                    + "After=network.target\n\n"
+                    + "[Service]\n"
+                    + "Type=simple\n"
+                    + "User=" + hostUser + "\n"
+                    + "WorkingDirectory=/opt/lxd-pups-portal\n"
+                    + "Environment=HOME=" + containerHome + "\n"
+                    + "ExecStart=/usr/local/bin/java -Dquarkus.http.port=16080 -jar /opt/lxd-pups-portal/quarkus-run.jar\n"
+                    + "Restart=on-failure\n"
+                    + "RestartSec=5\n\n"
+                    + "[Install]\n"
+                    + "WantedBy=multi-user.target\n";
+            runChecked(qName, "write service unit",
+                    "bash", "-c", "cat > /etc/systemd/system/lxd-pups-portal.service << 'UNIT'\n"
+                            + serviceUnit + "UNIT");
+            runChecked(qName, "daemon-reload", "systemctl", "daemon-reload");
+            runChecked(qName, "restart portal", "systemctl", "restart", "lxd-pups-portal");
+
+            // Verify final state
+            var verifyUser = containerManager.runCommand(
+                    List.of("lxc", "exec", qName, "--", "id", hostUser));
+            progress.addMessage("Verify user: " + verifyUser.stdout().strip());
+            var verifyService = containerManager.runCommand(
+                    List.of("lxc", "exec", qName, "--", "systemctl", "show", "lxd-pups-portal",
+                            "--property=User,MainPID,ActiveState"));
+            progress.addMessage("Verify service: " + verifyService.stdout().strip());
 
             // Wait for service to respond
             progress.setPhase("waiting");
@@ -219,6 +263,22 @@ public class LaunchWorkerActor {
     private void cleanup(String name, String remote) {
         progress.addMessage("Cleaning up failed container ...");
         containerManager.forceDelete(name, remote);
+    }
+
+    /**
+     * Run a command inside the container via lxc exec, logging success/failure to progress.
+     */
+    private void runChecked(String qName, String label, String... cmd) {
+        var command = new java.util.ArrayList<>(List.of("lxc", "exec", qName, "--"));
+        command.addAll(List.of(cmd));
+        var result = containerManager.runCommand(command, LXC_TIMEOUT);
+        if (result.success()) {
+            progress.addMessage("  [OK] " + label);
+        } else {
+            progress.addMessage("  [FAIL] " + label + " (exit " + result.exitCode() + "): "
+                    + result.stderr().strip());
+            LOG.warning(label + " failed (exit " + result.exitCode() + "): " + result.stderr());
+        }
     }
 
     private void failAndNotify(String name) {
