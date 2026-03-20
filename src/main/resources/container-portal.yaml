@@ -32,8 +32,8 @@ tools:
     port-range: "16120-16139"
     binary:
       repo: scivicslab/quarkus-llm-console-claude
-      version: v1.0.0
-      asset: quarkus-llm-console-claude-v1.0.0-linux-x86_64
+      version: v1.1.0
+      asset: quarkus-llm-console-claude-v1.1.0-linux-x86_64
       path: ~/bin/quarkus-llm-console-claude
 
   codex:
@@ -42,8 +42,8 @@ tools:
     port-range: "16140-16159"
     binary:
       repo: scivicslab/quarkus-llm-console-codex
-      version: v1.0.0
-      asset: quarkus-llm-console-codex-v1.0.0-linux-x86_64
+      version: v1.1.0
+      asset: quarkus-llm-console-codex-v1.1.0-linux-x86_64
       path: ~/bin/quarkus-llm-console-codex
 
   workflow-editor:
