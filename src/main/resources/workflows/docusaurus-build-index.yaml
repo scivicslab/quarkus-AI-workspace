@@ -1,0 +1,96 @@
+name: docusaurus-build-index
+description: "Build all Docusaurus projects and index with OpenSearch"
+steps:
+  # Step 0 -> 1: Build all Docusaurus projects under ~/works/
+  - states: ["0", "1"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Scanning for Docusaurus projects ==="
+          WORKS=$HOME/works
+          PUBLIC=$HOME/public_html
+          mkdir -p "$PUBLIC"
+          BUILT=0
+          FAILED=0
+          for dir in "$WORKS"/doc_*; do
+            [ -d "$dir" ] || continue
+            ls "$dir"/docusaurus.config.* >/dev/null 2>&1 || continue
+            PROJECT=$(basename "$dir")
+            echo "--- Building $PROJECT ---"
+            cd "$dir"
+            if [ ! -d node_modules ]; then
+              echo "  Installing dependencies..."
+              yarn install --frozen-lockfile 2>&1 || yarn install 2>&1
+            fi
+            if yarn build 2>&1; then
+              mkdir -p "$PUBLIC/$PROJECT"
+              rm -rf "$PUBLIC/$PROJECT"/*
+              cp -r build/* "$PUBLIC/$PROJECT/" 2>/dev/null || cp -r build/en/* "$PUBLIC/$PROJECT/" 2>/dev/null
+              echo "  Copied to $PUBLIC/$PROJECT/"
+              BUILT=$((BUILT + 1))
+            else
+              echo "  BUILD FAILED for $PROJECT (skipping)"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+          echo "=== Build complete: $BUILT succeeded, $FAILED failed ==="
+
+  # Step 1 -> 2: Fix sitemap URLs to point to localhost
+  - states: ["1", "2"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Fixing sitemap URLs ==="
+          PUBLIC=$HOME/public_html
+          FIXED=0
+          for dir in "$PUBLIC"/doc_*; do
+            [ -d "$dir" ] || continue
+            PROJECT=$(basename "$dir")
+            SITEMAP="$dir/sitemap.xml"
+            [ -f "$SITEMAP" ] || continue
+            sed -i "s|http://[^/]*/~[^/]*/[^/]*/|http://localhost/~devteam/$PROJECT/|g" "$SITEMAP"
+            echo "  Fixed: $PROJECT/sitemap.xml"
+            FIXED=$((FIXED + 1))
+          done
+          echo "=== Fixed $FIXED sitemaps ==="
+
+  # Step 2 -> 3: Generate conf file and run sau3 index
+  - states: ["2", "3"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Generating sau3 configuration ==="
+          PUBLIC=$HOME/public_html
+          CONF=/tmp/docusaurus_all.conf
+          cat > "$CONF" << 'HEADER'
+          [opensearch]
+          url=http://localhost:9200
+
+          [index]
+          docusaurus_ja
+
+          [sitemap urls]
+          HEADER
+          # Strip leading whitespace from heredoc
+          sed -i 's/^          //' "$CONF"
+          for dir in "$PUBLIC"/doc_*; do
+            [ -d "$dir" ] || continue
+            PROJECT=$(basename "$dir")
+            [ -f "$dir/sitemap.xml" ] || continue
+            echo "http://localhost/~devteam/$PROJECT/sitemap.xml" >> "$CONF"
+          done
+          echo "--- Configuration ---"
+          cat "$CONF"
+          echo "=== Running sau3 index ==="
+          java -jar $HOME/bin/scivics-utility-sau3.jar sau index -c "$CONF" 2>&1
+          echo "=== Indexing complete ==="
+
+  # Step 3 -> end: Done
+  - states: ["3", "end"]
+    actions:
+      - actor: log
+        method: info
+        arguments: "Docusaurus build and index workflow completed successfully"

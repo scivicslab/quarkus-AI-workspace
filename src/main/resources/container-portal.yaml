@@ -71,3 +71,26 @@ tools:
       path: ""
       runtime: "yarn"
       args: "start --port {port} --host 0.0.0.0"
+
+  doc-build-index:
+    description: "Doc Build & Index"
+    icon: "\uD83D\uDCDA"
+    port-range: "16320-16329"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: "~/bin/turing-workflow-editor"
+      args: "-Dworkflow.autoload=/opt/lxd-pups-portal/workflows/docusaurus-build-index.yaml -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
+
+  doc-search:
+    description: "Doc Search"
+    icon: "\uD83D\uDD0D"
+    port-range: "16330-16339"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: "~/bin/quarkus-docusearch/quarkus-app/quarkus-run.jar"
+      runtime: "java"
+      args: "-Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0 -jar"

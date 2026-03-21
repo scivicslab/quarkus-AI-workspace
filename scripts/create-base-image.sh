@@ -51,6 +51,42 @@ lxc exec "$TEMPLATE_NAME" -- bash -c '
     yarn --version
 '
 
+echo "=== Installing Apache httpd (for mod_userdir) ==="
+lxc exec "$TEMPLATE_NAME" -- apt-get install -y -qq apache2
+lxc exec "$TEMPLATE_NAME" -- a2enmod userdir
+lxc exec "$TEMPLATE_NAME" -- systemctl enable apache2
+
+echo "=== Installing OpenSearch ==="
+lxc exec "$TEMPLATE_NAME" -- bash -c '
+    curl -fsSL https://artifacts.opensearch.org/publickeys/opensearch.pgp | gpg --dearmor -o /usr/share/keyrings/opensearch-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring.gpg] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" > /etc/apt/sources.list.d/opensearch-2.x.list
+    apt-get update -qq
+    export OPENSEARCH_INITIAL_ADMIN_PASSWORD="Admin123!"
+    apt-get install -y -qq opensearch || true
+    dpkg --configure -a 2>/dev/null || true
+
+    # Configure for local-only single-node dev use
+    cat >> /etc/opensearch/opensearch.yml << OSEOF
+plugins.security.disabled: true
+discovery.type: single-node
+network.host: 127.0.0.1
+http.port: 9200
+OSEOF
+
+    # Set JVM heap to 2GB
+    sed -i "s/-Xms1g/-Xms2g/" /etc/opensearch/jvm.options
+    sed -i "s/-Xmx1g/-Xmx2g/" /etc/opensearch/jvm.options
+
+    # Fix permissions
+    chown -R opensearch:opensearch /var/log/opensearch /var/lib/opensearch /etc/opensearch
+
+    # Install kuromoji (Japanese tokenizer)
+    /usr/share/opensearch/bin/opensearch-plugin install analysis-kuromoji
+
+    systemctl daemon-reload
+    systemctl enable opensearch
+'
+
 echo "=== Creating build directory ==="
 lxc exec "$TEMPLATE_NAME" -- mkdir -p /var/tmp/lxd-pups-build
 lxc exec "$TEMPLATE_NAME" -- chown ubuntu:ubuntu /var/tmp/lxd-pups-build
@@ -79,6 +115,15 @@ done
 echo "=== Copying container portal.yaml ==="
 lxc file push "$(cd "$(dirname "$0")/.." && pwd)/src/main/resources/container-portal.yaml" \
     "$TEMPLATE_NAME/opt/lxd-pups-portal/portal.yaml"
+
+echo "=== Copying workflow files ==="
+lxc exec "$TEMPLATE_NAME" -- mkdir -p /opt/lxd-pups-portal/workflows
+WORKFLOWS_DIR="$(cd "$(dirname "$0")/.." && pwd)/src/main/resources/workflows"
+if [ -d "$WORKFLOWS_DIR" ]; then
+    for f in "$WORKFLOWS_DIR"/*.yaml "$WORKFLOWS_DIR"/*.conf; do
+        [ -f "$f" ] && lxc file push "$f" "$TEMPLATE_NAME/opt/lxd-pups-portal/workflows/"
+    done
+fi
 
 echo "=== Creating systemd service for portal auto-start ==="
 lxc exec "$TEMPLATE_NAME" -- bash -c 'cat > /etc/systemd/system/lxd-pups-portal.service << EOF

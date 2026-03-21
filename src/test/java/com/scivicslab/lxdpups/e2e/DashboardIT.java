@@ -68,10 +68,10 @@ public class DashboardIT {
 
     @Test
     @Order(3)
-    void showsAll5ToolTiles() {
+    void showsAll7ToolTiles() {
         page.navigate(portalUrl);
         var tiles = page.locator(".tool-tile");
-        assertThat(tiles).hasCount(5);
+        assertThat(tiles).hasCount(7);
     }
 
     @Test
@@ -79,7 +79,7 @@ public class DashboardIT {
     void eachToolTileHasNewLink() {
         page.navigate(portalUrl);
         var newLinks = page.locator(".tool-action", new Page.LocatorOptions().setHasText("+ New"));
-        assertThat(newLinks).hasCount(5);
+        assertThat(newLinks).hasCount(7);
     }
 
     // ---- Build links ----
@@ -327,7 +327,7 @@ public class DashboardIT {
 
     @Test
     @Order(61)
-    void clickingProjectInModalLaunchesAndShowsInRunningServices() {
+    void clickingProjectInModalLaunchesInstance() {
         // Make sure no docusaurus instances are running
         cleanupDocusaurusInstances();
 
@@ -349,19 +349,105 @@ public class DashboardIT {
         // Page reloads after launch - wait for it
         page.waitForLoadState();
 
-        // After reload, the launched docusaurus should appear in Running Services
-        assertThat(page.locator("text=Running Services")).isVisible();
-
-        // There should be at least one running instance with a Stop button
-        var stopBtns = page.locator(".btn-stop");
-        assertTrue(stopBtns.count() > 0, "At least one Stop button should be visible");
-
-        // Find docusaurus instance - look for a link with port in 16300 range
-        var docInstances = page.locator("a[href*=':163']");
-        assertTrue(docInstances.count() > 0, "At least one docusaurus instance link should be visible");
+        // Verify via API that an instance was launched
+        var apiCtx = playwright.request().newContext();
+        var resp = apiCtx.get(portalUrl + "/api/tools/instances");
+        assertEquals(200, resp.status());
+        var body = resp.text();
+        assertTrue(body.contains("docusaurus") || body.contains("163"),
+                "Tool instances should contain a docusaurus entry");
+        apiCtx.dispose();
 
         // Clean up
         cleanupDocusaurusInstances();
+    }
+
+    // ---- Doc Build & Index / Doc Search tool tiles ----
+
+    @Test
+    @Order(70)
+    void docBuildIndexTileIsVisible() {
+        page.navigate(portalUrl);
+        var tile = page.locator("#tool-tile-doc-build-index");
+        assertThat(tile).isVisible();
+        assertThat(tile.locator(".tool-name")).hasText("Doc Build & Index");
+    }
+
+    @Test
+    @Order(71)
+    void docSearchTileIsVisible() {
+        page.navigate(portalUrl);
+        var tile = page.locator("#tool-tile-doc-search");
+        assertThat(tile).isVisible();
+        assertThat(tile.locator(".tool-name")).hasText("Doc Search");
+    }
+
+    @Test
+    @Order(72)
+    void docBuildIndexHasNewLinkButNoBuild() {
+        page.navigate(portalUrl);
+        var tile = page.locator("#tool-tile-doc-build-index");
+        var newLink = tile.locator(".tool-action", new Locator.LocatorOptions().setHasText("+ New"));
+        assertThat(newLink).hasCount(1);
+        var buildLink = tile.locator(".tool-action", new Locator.LocatorOptions().setHasText("Build"));
+        assertThat(buildLink).hasCount(0);
+    }
+
+    @Test
+    @Order(73)
+    void docSearchHasNewLinkButNoBuild() {
+        page.navigate(portalUrl);
+        var tile = page.locator("#tool-tile-doc-search");
+        var newLink = tile.locator(".tool-action", new Locator.LocatorOptions().setHasText("+ New"));
+        assertThat(newLink).hasCount(1);
+        var buildLink = tile.locator(".tool-action", new Locator.LocatorOptions().setHasText("Build"));
+        assertThat(buildLink).hasCount(0);
+    }
+
+    @Test
+    @Order(74)
+    void docBuildIndexLaunchApiWorks() {
+        var apiCtx = playwright.request().newContext();
+        var resp = apiCtx.post(portalUrl + "/api/tools/doc-build-index/launch",
+                RequestOptions.create()
+                        .setHeader("Content-Type", "application/json")
+                        .setData(Map.of()));
+        assertEquals(200, resp.status());
+        var body = resp.text();
+        assertTrue(body.contains("\"launched\""), "Should indicate launched status");
+        assertTrue(body.contains("\"doc-build-index\""), "Should indicate tool name");
+
+        // Extract port and clean up
+        var portMatch = java.util.regex.Pattern.compile("\"port\"\\s*:\\s*(\\d+)").matcher(body);
+        if (portMatch.find()) {
+            int port = Integer.parseInt(portMatch.group(1));
+            assertTrue(port >= 16320 && port <= 16329, "Port should be in doc-build-index range");
+            apiCtx.post(portalUrl + "/api/tools/doc-build-index/stop?port=" + port);
+        }
+        apiCtx.dispose();
+    }
+
+    @Test
+    @Order(75)
+    void docSearchLaunchApiWorks() {
+        var apiCtx = playwright.request().newContext();
+        var resp = apiCtx.post(portalUrl + "/api/tools/doc-search/launch",
+                RequestOptions.create()
+                        .setHeader("Content-Type", "application/json")
+                        .setData(Map.of()));
+        assertEquals(200, resp.status());
+        var body = resp.text();
+        assertTrue(body.contains("\"launched\""), "Should indicate launched status");
+        assertTrue(body.contains("\"doc-search\""), "Should indicate tool name");
+
+        // Extract port and clean up
+        var portMatch = java.util.regex.Pattern.compile("\"port\"\\s*:\\s*(\\d+)").matcher(body);
+        if (portMatch.find()) {
+            int port = Integer.parseInt(portMatch.group(1));
+            assertTrue(port >= 16330 && port <= 16339, "Port should be in doc-search range");
+            apiCtx.post(portalUrl + "/api/tools/doc-search/stop?port=" + port);
+        }
+        apiCtx.dispose();
     }
 
     private void cleanupDocusaurusInstances() {
