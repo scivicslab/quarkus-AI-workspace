@@ -1,5 +1,9 @@
 name: docusaurus-build-index
 description: "Build all Docusaurus projects and index with OpenSearch"
+tags:
+  - docusaurus
+  - build
+  - opensearch
 steps:
   # Step 0 -> 1: Scan for Docusaurus projects, write queue file
   - states: ["0", "1"]

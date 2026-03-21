@@ -1,0 +1,52 @@
+name: docusaurus-reindex
+description: "Fix sitemaps and re-index all doc sites with OpenSearch (no rebuild)"
+tags:
+  - docusaurus
+  - opensearch
+  - index
+steps:
+  - states: ["0", "1"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Fixing sitemap URLs ==="
+          PUBLIC=$HOME/public_html
+          FIXED=0
+          for dir in "$PUBLIC"/doc_*; do
+            [ -d "$dir" ] || continue
+            PROJECT=$(basename "$dir")
+            SITEMAP="$dir/sitemap.xml"
+            [ -f "$SITEMAP" ] || continue
+            sed -i "s|http://[^/]*/~[^/]*/[^/]*/|http://localhost/~devteam/$PROJECT/|g" "$SITEMAP"
+            echo "  Fixed: $PROJECT/sitemap.xml"
+            FIXED=$((FIXED + 1))
+          done
+          echo "=== Fixed $FIXED sitemaps ==="
+
+  - states: ["1", "2"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Generating sau3 configuration ==="
+          PUBLIC=$HOME/public_html
+          CONF=/tmp/docusaurus_all.conf
+          printf '[opensearch]\nurl=http://localhost:9200\n\n[index]\ndocusaurus_ja\n\n[sitemap urls]\n' > "$CONF"
+          for dir in "$PUBLIC"/doc_*; do
+            [ -d "$dir" ] || continue
+            PROJECT=$(basename "$dir")
+            [ -f "$dir/sitemap.xml" ] || continue
+            echo "http://localhost/~devteam/$PROJECT/sitemap.xml" >> "$CONF"
+          done
+          echo "--- Configuration ---"
+          cat "$CONF"
+          echo "=== Running sau3 index ==="
+          java -jar $HOME/bin/scivics-utility-sau3.jar sau index -c "$CONF" 2>&1
+          echo "=== Indexing complete ==="
+
+  - states: ["2", "end"]
+    actions:
+      - actor: log
+        method: info
+        arguments: "Re-indexing complete"

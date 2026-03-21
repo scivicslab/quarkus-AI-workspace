@@ -288,7 +288,11 @@ public class ApiResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response launchTool(@PathParam("name") String name, Map<String, String> body) {
         var workDir = (body != null) ? body.get("workDir") : null;
-        int port = toolInstanceManager.launchTool(name, workDir);
+        var extraParams = new java.util.HashMap<String, String>();
+        if (body != null && body.containsKey("workflow")) {
+            extraParams.put("workflow", body.get("workflow"));
+        }
+        int port = toolInstanceManager.launchTool(name, workDir, extraParams);
         if (port < 0) {
             return Response.serverError()
                     .entity(Map.of("error", "Failed to launch tool: " + name))

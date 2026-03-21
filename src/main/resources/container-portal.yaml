@@ -101,3 +101,28 @@ tools:
       path: "/home/devteam/bin/quarkus-docusearch/quarkus-app/quarkus-run.jar"
       runtime: "java"
       args: "-Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
+
+  workflow-search:
+    description: "Workflow Search"
+    icon: "\uD83D\uDD0E"
+    port-range: "16340-16349"
+    ui-path: "/wfsearch/search"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: "/home/devteam/bin/quarkus-workflow-search/quarkus-app/quarkus-run.jar"
+      runtime: "java"
+      args: "-Dportal.url=http://localhost:16080 -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
+
+  workflows:
+    description: "Workflow Editor"
+    icon: "\uD83D\uDD27"
+    port-range: "16350-16369"
+    binary:
+      repo: ""
+      version: ""
+      asset: ""
+      path: "/home/devteam/bin/quarkus-workflow-editor/quarkus-app/quarkus-run.jar"
+      runtime: "java"
+      args: "-Dworkflow.autoload={workflow} -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"

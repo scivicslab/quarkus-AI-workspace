@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -48,6 +49,14 @@ public class ToolInstanceManager {
      * Used by runtime-based tools (e.g. Docusaurus) where the user selects the project directory.
      */
     public int launchTool(String toolName, String workDir) {
+        return launchTool(toolName, workDir, Map.of());
+    }
+
+    /**
+     * Launch a tool with optional working directory and extra placeholder parameters.
+     * Extra params replace {key} placeholders in the tool's args (e.g. {workflow}).
+     */
+    public int launchTool(String toolName, String workDir, Map<String, String> extraParams) {
         var tool = findTool(toolName);
         if (tool == null) {
             LOG.warning("Unknown tool: " + toolName);
@@ -61,7 +70,7 @@ public class ToolInstanceManager {
         }
 
         // Create a ManagementService from the tool definition to reuse ProcessManager
-        var svc = toManagementService(tool, port);
+        var svc = toManagementService(tool, port, extraParams);
         // Override work-dir if specified (e.g. user selected a Docusaurus project)
         if (workDir != null && !workDir.isEmpty() && svc.getBinary() != null) {
             svc.getBinary().setWorkDir(workDir);
@@ -142,6 +151,15 @@ public class ToolInstanceManager {
      * Convert a ToolDefinition to a ManagementService so ProcessManager can manage it.
      */
     private PortalConfig.ManagementService toManagementService(PortalConfig.ToolDefinition tool, int port) {
+        return toManagementService(tool, port, Map.of());
+    }
+
+    /**
+     * Convert a ToolDefinition to a ManagementService, replacing placeholders in args.
+     * Built-in placeholder: {port}. Extra placeholders from extraParams (e.g. {workflow}).
+     */
+    private PortalConfig.ManagementService toManagementService(PortalConfig.ToolDefinition tool, int port,
+                                                                Map<String, String> extraParams) {
         var svc = new PortalConfig.ManagementService();
         svc.setName(tool.getName() + "-" + port);
         svc.setPort(port);
@@ -157,9 +175,13 @@ public class ToolInstanceManager {
             bin.setPath(srcBin.getPath());
             bin.setRuntime(srcBin.getRuntime());
             bin.setWorkDir(srcBin.getWorkDir());
-            // Replace {port} placeholder in args
+            // Replace {port} and extra placeholders in args
             if (srcBin.getArgs() != null) {
-                bin.setArgs(srcBin.getArgs().replace("{port}", String.valueOf(port)));
+                String args = srcBin.getArgs().replace("{port}", String.valueOf(port));
+                for (var entry : extraParams.entrySet()) {
+                    args = args.replace("{" + entry.getKey() + "}", entry.getValue());
+                }
+                bin.setArgs(args);
             }
             svc.setBinary(bin);
         }

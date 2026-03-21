@@ -69,10 +69,10 @@ public class DashboardIT {
 
     @Test
     @Order(3)
-    void showsAll8ToolTiles() {
+    void showsAll10ToolTiles() {
         page.navigate(portalUrl);
         var tiles = page.locator(".tool-tile");
-        assertThat(tiles).hasCount(8);
+        assertThat(tiles).hasCount(10);
     }
 
     @Test
@@ -80,7 +80,7 @@ public class DashboardIT {
     void eachToolTileHasNewLink() {
         page.navigate(portalUrl);
         var newLinks = page.locator(".tool-action", new Page.LocatorOptions().setHasText("+ New"));
-        assertThat(newLinks).hasCount(7);
+        assertThat(newLinks).hasCount(9);
     }
 
     // ---- Build links ----
