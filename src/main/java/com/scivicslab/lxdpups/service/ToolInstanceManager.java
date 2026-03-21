@@ -30,7 +30,7 @@ public class ToolInstanceManager {
      * A running tool instance.
      */
     public record ToolInstance(String toolName, String description, String icon, int port,
-                               ServiceStatus status, String processName) {}
+                               ServiceStatus status, String processName, String uiPath) {}
 
     // Tracks which ports are allocated per tool: toolName -> set of ports
     private final ConcurrentHashMap<String, List<Integer>> allocatedPorts = new ConcurrentHashMap<>();
@@ -106,7 +106,7 @@ public class ToolInstanceManager {
                     }
                     result.add(new ToolInstance(
                             tool.getName(), tool.getDescription(), tool.getIcon(),
-                            port, status, processName));
+                            port, status, processName, tool.getUiPath()));
                 }
             }
         }

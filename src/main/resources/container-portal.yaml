@@ -72,6 +72,11 @@ tools:
       runtime: "yarn"
       args: "start --port {port} --host 0.0.0.0"
 
+  doc-site:
+    description: "Doc Site"
+    icon: "\uD83C\uDF10"
+    static-url: "/~devteam/"
+
   doc-build-index:
     description: "Doc Build & Index"
     icon: "\uD83D\uDCDA"
@@ -80,17 +85,19 @@ tools:
       repo: ""
       version: ""
       asset: ""
-      path: "~/bin/turing-workflow-editor"
+      path: "/home/devteam/bin/quarkus-workflow-editor/quarkus-app/quarkus-run.jar"
+      runtime: "java"
       args: "-Dworkflow.autoload=/opt/lxd-pups-portal/workflows/docusaurus-build-index.yaml -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
 
   doc-search:
     description: "Doc Search"
     icon: "\uD83D\uDD0D"
     port-range: "16330-16339"
+    ui-path: "/docusearch/search"
     binary:
       repo: ""
       version: ""
       asset: ""
-      path: "~/bin/quarkus-docusearch/quarkus-app/quarkus-run.jar"
+      path: "/home/devteam/bin/quarkus-docusearch/quarkus-app/quarkus-run.jar"
       runtime: "java"
-      args: "-Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0 -jar"
+      args: "-Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"

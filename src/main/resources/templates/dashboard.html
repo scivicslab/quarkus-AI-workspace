@@ -318,7 +318,7 @@
         {#for inst in toolInstances}
         <div class="running-svc-card">
             <span class="svc-icon">{inst.icon}</span>
-            <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}/" target="_blank">{inst.description}</a>
+            <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}{inst.uiPath ?: '/'}" target="_blank">{inst.description}</a>
             <span class="mgmt-port">:{inst.port}</span>
             <span class="badge badge-{inst.status}">{inst.status}</span>
             <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
@@ -336,10 +336,14 @@
             <div class="tool-icon">{tool.icon}</div>
             <div class="tool-name">{tool.description}</div>
             <div style="display:flex;gap:12px;justify-content:center;align-items:center;">
+                {#if tool.staticUrl}
+                <a class="tool-action" href="http://{myIp}{tool.staticUrl}" target="_blank" style="cursor:pointer;text-decoration:none;">Open</a>
+                {#else}
                 <span class="tool-action" onclick="launchTool('{tool.name}')" style="cursor:pointer;">+ New</span>
                 {#if tool.binary}
                 {#if tool.binary.buildDir}
                 <span class="tool-action" onclick="event.stopPropagation(); buildTool('{tool.name}')" style="cursor:pointer;color:var(--muted);">Build</span>
+                {/if}
                 {/if}
                 {/if}
             </div>

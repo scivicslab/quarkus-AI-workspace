@@ -122,10 +122,12 @@ public class ProcessManager {
             return;
         }
 
-        // Download binary if not present (skip for runtime-only tools like Docusaurus)
+        // Download binary if not present (skip for runtime-only tools like Docusaurus
+        // and pre-deployed JARs with no GitHub repo)
         var resolvedPath = resolvePath(binary.getPath());
         boolean hasPath = resolvedPath != null && !resolvedPath.isEmpty();
-        if (hasPath && !Files.exists(Path.of(resolvedPath))) {
+        boolean hasRepo = binary.getRepo() != null && !binary.getRepo().isEmpty();
+        if (hasPath && !Files.exists(Path.of(resolvedPath)) && hasRepo) {
             tracker.setPhase("downloading");
             tracker.addMessage("Downloading from " + binary.getRepo() + " " + binary.getVersion() + " ...");
             try {
@@ -136,6 +138,10 @@ public class ProcessManager {
                 return;
             }
             tracker.addMessage("Download complete.");
+        } else if (hasPath && !Files.exists(Path.of(resolvedPath))) {
+            tracker.addMessage("Binary not found at " + resolvedPath + " (no repo configured for download)");
+            tracker.complete(false);
+            return;
         } else if (hasPath) {
             tracker.addMessage("Binary already exists at " + resolvedPath);
         }
@@ -200,10 +206,16 @@ public class ProcessManager {
         if (binary == null) return false;
 
         var resolvedPath = resolvePath(binary.getPath());
-        if (!Files.exists(Path.of(resolvedPath))) {
-            try {
-                downloadBinary(binary, null);
-            } catch (Exception e) {
+        boolean hasRepo = binary.getRepo() != null && !binary.getRepo().isEmpty();
+        if (resolvedPath != null && !resolvedPath.isEmpty() && !Files.exists(Path.of(resolvedPath))) {
+            if (hasRepo) {
+                try {
+                    downloadBinary(binary, null);
+                } catch (Exception e) {
+                    return false;
+                }
+            } else {
+                LOG.warning("Binary not found at " + resolvedPath + " (no repo configured)");
                 return false;
             }
         }
@@ -509,10 +521,22 @@ public class ProcessManager {
             // Native binary
             command.add(resolvedPath);
         } else if ("java".equals(binary.getRuntime())) {
-            // Java JAR
+            // Java JAR — put -D flags before -jar so they are JVM system properties
             command.add("java");
+            var postJarArgs = new ArrayList<String>();
+            if (binary.getArgs() != null && !binary.getArgs().isBlank()) {
+                for (var arg : binary.getArgs().split("\\s+")) {
+                    if (arg.startsWith("-D") || arg.startsWith("-X") || arg.startsWith("-javaagent")) {
+                        command.add(arg);
+                    } else {
+                        postJarArgs.add(arg);
+                    }
+                }
+            }
             command.add("-jar");
             command.add(resolvedPath);
+            command.addAll(postJarArgs);
+            return command;
         } else {
             // Generic runtime (e.g. npx, yarn) — resolve full path via NVM if needed
             command.add(resolveRuntime(binary.getRuntime()));

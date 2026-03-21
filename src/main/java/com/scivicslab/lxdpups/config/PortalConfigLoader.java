@@ -166,6 +166,8 @@ public class PortalConfigLoader {
         if (map.get("description") instanceof String desc) tool.setDescription(desc);
         if (map.get("icon") instanceof String icon) tool.setIcon(icon);
         if (map.get("port-range") instanceof String range) tool.setPortRange(range);
+        if (map.get("ui-path") instanceof String uiPath) tool.setUiPath(uiPath);
+        if (map.get("static-url") instanceof String staticUrl) tool.setStaticUrl(staticUrl);
         if (map.get("binary") instanceof Map<?, ?> binMap) {
             tool.setBinary(parseBinary((Map<String, Object>) binMap));
         }

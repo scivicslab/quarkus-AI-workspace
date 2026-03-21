@@ -53,6 +53,9 @@ public class ApiResource {
     @Inject
     BuildManager buildManager;
 
+    @Inject
+    com.scivicslab.lxdpups.config.PortalConfigLoader configLoader;
+
     // ── Status ──
 
     @GET

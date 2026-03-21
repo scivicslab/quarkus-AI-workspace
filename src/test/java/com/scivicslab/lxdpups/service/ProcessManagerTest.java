@@ -55,6 +55,33 @@ class ProcessManagerTest {
     }
 
     @Test
+    void buildCommandJavaJarWithSystemProperties() {
+        var svc = createService("test-svc", "~/bin/test-app.jar", "java",
+                "-Dworkflow.autoload=/path/to/file.yaml -Dquarkus.http.port=16320 -Dquarkus.http.host=0.0.0.0");
+        var command = pm.buildCommand(svc);
+        var home = System.getProperty("user.home");
+        // -D flags must come BEFORE -jar to be JVM system properties
+        assertEquals(List.of("java",
+                "-Dworkflow.autoload=/path/to/file.yaml",
+                "-Dquarkus.http.port=16320",
+                "-Dquarkus.http.host=0.0.0.0",
+                "-jar", home + "/bin/test-app.jar"), command);
+    }
+
+    @Test
+    void buildCommandJavaJarWithMixedArgs() {
+        var svc = createService("test-svc", "~/bin/test-app.jar", "java",
+                "-Dquarkus.http.port=16320 --verbose");
+        var command = pm.buildCommand(svc);
+        var home = System.getProperty("user.home");
+        // -D before -jar, other args after -jar
+        assertEquals(List.of("java",
+                "-Dquarkus.http.port=16320",
+                "-jar", home + "/bin/test-app.jar",
+                "--verbose"), command);
+    }
+
+    @Test
     void getStatusUnknownService() {
         assertEquals(ServiceStatus.INACTIVE, pm.getStatus("nonexistent", 0));
     }

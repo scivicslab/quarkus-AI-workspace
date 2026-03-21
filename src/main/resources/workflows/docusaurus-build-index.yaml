@@ -1,43 +1,89 @@
 name: docusaurus-build-index
 description: "Build all Docusaurus projects and index with OpenSearch"
 steps:
-  # Step 0 -> 1: Build all Docusaurus projects under ~/works/
+  # Step 0 -> 1: Scan for Docusaurus projects, write queue file
   - states: ["0", "1"]
     actions:
       - actor: shell
         method: exec
         arguments: |
-          echo "=== Scanning for Docusaurus projects ==="
-          WORKS=$HOME/works
-          PUBLIC=$HOME/public_html
-          mkdir -p "$PUBLIC"
-          BUILT=0
-          FAILED=0
-          for dir in "$WORKS"/doc_*; do
+          QUEUE=/tmp/docbuild_queue
+          rm -f "$QUEUE"
+          for dir in "$HOME/works"/doc_*; do
             [ -d "$dir" ] || continue
             ls "$dir"/docusaurus.config.* >/dev/null 2>&1 || continue
-            PROJECT=$(basename "$dir")
-            echo "--- Building $PROJECT ---"
-            cd "$dir"
-            if [ ! -d node_modules ]; then
-              echo "  Installing dependencies..."
-              yarn install --frozen-lockfile 2>&1 || yarn install 2>&1
-            fi
-            if yarn build 2>&1; then
-              mkdir -p "$PUBLIC/$PROJECT"
-              rm -rf "$PUBLIC/$PROJECT"/*
-              cp -r build/* "$PUBLIC/$PROJECT/" 2>/dev/null || cp -r build/en/* "$PUBLIC/$PROJECT/" 2>/dev/null
-              echo "  Copied to $PUBLIC/$PROJECT/"
-              BUILT=$((BUILT + 1))
-            else
-              echo "  BUILD FAILED for $PROJECT (skipping)"
-              FAILED=$((FAILED + 1))
-            fi
+            basename "$dir" >> "$QUEUE"
           done
-          echo "=== Build complete: $BUILT succeeded, $FAILED failed ==="
+          COUNT=$(wc -l < "$QUEUE")
+          echo "Found $COUNT Docusaurus projects to build"
+          cat "$QUEUE"
 
-  # Step 1 -> 2: Fix sitemap URLs to point to localhost
+  # Step 1 -> 2: Pop next project from queue and build it
   - states: ["1", "2"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          QUEUE=/tmp/docbuild_queue
+          PROJECT=$(head -1 "$QUEUE")
+          if [ -z "$PROJECT" ]; then
+            echo "Queue is empty"
+            exit 1
+          fi
+          echo "--- Building $PROJECT ---"
+          cd "$HOME/works/$PROJECT"
+          # Fix baseUrl to /~devteam/<PROJECT>/ before build
+          CONF=$(ls docusaurus.config.js docusaurus.config.ts 2>/dev/null | head -1)
+          if [ -n "$CONF" ]; then
+            cp "$CONF" "$CONF.bak.wf"
+            TARGET_BASE="/~devteam/$PROJECT/"
+            sed -i "s|^\([[:space:]]*\)baseUrl:.*|\\1baseUrl: '$TARGET_BASE',|" "$CONF"
+            echo "  baseUrl set to $TARGET_BASE"
+          fi
+          if [ ! -d node_modules ]; then
+            echo "  Installing dependencies..."
+            yarn install --frozen-lockfile 2>&1 || yarn install 2>&1
+          fi
+          yarn build 2>&1
+          BUILD_OK=$?
+          # Restore original config
+          if [ -n "$CONF" ] && [ -f "$CONF.bak.wf" ]; then
+            mv "$CONF.bak.wf" "$CONF"
+            echo "  Restored original $CONF"
+          fi
+          if [ $BUILD_OK -eq 0 ]; then
+            mkdir -p "$HOME/public_html/$PROJECT"
+            rm -rf "$HOME/public_html/$PROJECT"/*
+            cp -r build/* "$HOME/public_html/$PROJECT/" 2>/dev/null || cp -r build/en/* "$HOME/public_html/$PROJECT/" 2>/dev/null
+            echo "  Copied to ~/public_html/$PROJECT/"
+          else
+            echo "  BUILD FAILED for $PROJECT (skipping)"
+          fi
+          tail -n +2 "$QUEUE" > "$QUEUE.tmp" && mv "$QUEUE.tmp" "$QUEUE"
+          REMAINING=$(wc -l < "$QUEUE")
+          echo "  Remaining: $REMAINING projects"
+
+  # Step 2 -> 1: Loop back if queue is not empty
+  - states: ["2", "1"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          QUEUE=/tmp/docbuild_queue
+          [ -s "$QUEUE" ] && echo "Next: $(head -1 $QUEUE)" || exit 1
+
+  # Step 2 -> 3: Queue empty, generate index.html
+  - states: ["2", "3"]
+    actions:
+      - actor: shell
+        method: exec
+        arguments: |
+          echo "=== Generating index.html ==="
+          python3 /opt/lxd-pups-portal/scripts/gen_doc_index.py
+          echo "Done"
+
+  # Step 3 -> 4: Fix sitemap URLs
+  - states: ["3", "4"]
     actions:
       - actor: shell
         method: exec
@@ -56,8 +102,8 @@ steps:
           done
           echo "=== Fixed $FIXED sitemaps ==="
 
-  # Step 2 -> 3: Generate conf file and run sau3 index
-  - states: ["2", "3"]
+  # Step 4 -> 5: Run sau3 index
+  - states: ["4", "5"]
     actions:
       - actor: shell
         method: exec
@@ -65,17 +111,7 @@ steps:
           echo "=== Generating sau3 configuration ==="
           PUBLIC=$HOME/public_html
           CONF=/tmp/docusaurus_all.conf
-          cat > "$CONF" << 'HEADER'
-          [opensearch]
-          url=http://localhost:9200
-
-          [index]
-          docusaurus_ja
-
-          [sitemap urls]
-          HEADER
-          # Strip leading whitespace from heredoc
-          sed -i 's/^          //' "$CONF"
+          printf '[opensearch]\nurl=http://localhost:9200\n\n[index]\ndocusaurus_ja\n\n[sitemap urls]\n' > "$CONF"
           for dir in "$PUBLIC"/doc_*; do
             [ -d "$dir" ] || continue
             PROJECT=$(basename "$dir")
@@ -88,8 +124,8 @@ steps:
           java -jar $HOME/bin/scivics-utility-sau3.jar sau index -c "$CONF" 2>&1
           echo "=== Indexing complete ==="
 
-  # Step 3 -> end: Done
-  - states: ["3", "end"]
+  # Step 5 -> end: Done
+  - states: ["5", "end"]
     actions:
       - actor: log
         method: info

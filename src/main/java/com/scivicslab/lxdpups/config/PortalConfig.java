@@ -47,6 +47,8 @@ public class PortalConfig {
         private String description;
         private String icon;
         private String portRange; // e.g. "15200-15209"
+        private String uiPath;   // e.g. "/docusearch/search" — appended to instance URL
+        private String staticUrl; // e.g. "/~devteam/" — direct link, no process launch
         private ManagementService.Binary binary;
 
         public String getName() { return name; }
@@ -60,6 +62,12 @@ public class PortalConfig {
 
         public String getPortRange() { return portRange; }
         public void setPortRange(String portRange) { this.portRange = portRange; }
+
+        public String getUiPath() { return uiPath; }
+        public void setUiPath(String uiPath) { this.uiPath = uiPath; }
+
+        public String getStaticUrl() { return staticUrl; }
+        public void setStaticUrl(String staticUrl) { this.staticUrl = staticUrl; }
 
         public ManagementService.Binary getBinary() { return binary; }
         public void setBinary(ManagementService.Binary binary) { this.binary = binary; }
