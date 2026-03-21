@@ -122,9 +122,10 @@ public class ProcessManager {
             return;
         }
 
-        // Download binary if not present
+        // Download binary if not present (skip for runtime-only tools like Docusaurus)
         var resolvedPath = resolvePath(binary.getPath());
-        if (!Files.exists(Path.of(resolvedPath))) {
+        boolean hasPath = resolvedPath != null && !resolvedPath.isEmpty();
+        if (hasPath && !Files.exists(Path.of(resolvedPath))) {
             tracker.setPhase("downloading");
             tracker.addMessage("Downloading from " + binary.getRepo() + " " + binary.getVersion() + " ...");
             try {
@@ -135,7 +136,7 @@ public class ProcessManager {
                 return;
             }
             tracker.addMessage("Download complete.");
-        } else {
+        } else if (hasPath) {
             tracker.addMessage("Binary already exists at " + resolvedPath);
         }
 
@@ -146,9 +147,16 @@ public class ProcessManager {
 
         try {
             var pb = new ProcessBuilder(command);
-            pb.directory(new java.io.File(System.getProperty("user.home")));
+            // Use work-dir if specified, otherwise default to user home
+            var workDir = (binary.getWorkDir() != null && !binary.getWorkDir().isEmpty())
+                    ? resolvePath(binary.getWorkDir())
+                    : System.getProperty("user.home");
+            pb.directory(new java.io.File(workDir));
+            tracker.addMessage("Working directory: " + workDir);
             pb.environment().put("QUARKUS_HTTP_PORT", String.valueOf(svc.getPort()));
             pb.environment().put("QUARKUS_HTTP_HOST", "0.0.0.0");
+            // Add NVM node/yarn/npx to PATH if available
+            appendNvmToPath(pb);
             pb.redirectErrorStream(true);
             pb.inheritIO();
             var process = pb.start();
@@ -203,9 +211,13 @@ public class ProcessManager {
         var command = buildCommand(svc);
         try {
             var pb = new ProcessBuilder(command);
-            pb.directory(new java.io.File(System.getProperty("user.home")));
+            var syncWorkDir = (binary.getWorkDir() != null && !binary.getWorkDir().isEmpty())
+                    ? resolvePath(binary.getWorkDir())
+                    : System.getProperty("user.home");
+            pb.directory(new java.io.File(syncWorkDir));
             pb.environment().put("QUARKUS_HTTP_PORT", String.valueOf(svc.getPort()));
             pb.environment().put("QUARKUS_HTTP_HOST", "0.0.0.0");
+            appendNvmToPath(pb);
             pb.redirectErrorStream(true);
             pb.inheritIO();
             var process = pb.start();
@@ -502,9 +514,12 @@ public class ProcessManager {
             command.add("-jar");
             command.add(resolvedPath);
         } else {
-            // Generic runtime
-            command.add(binary.getRuntime());
-            command.add(resolvedPath);
+            // Generic runtime (e.g. npx, yarn) — resolve full path via NVM if needed
+            command.add(resolveRuntime(binary.getRuntime()));
+            // Only include path if non-empty (runtime-only tools like Docusaurus have no path)
+            if (resolvedPath != null && !resolvedPath.isEmpty()) {
+                command.add(resolvedPath);
+            }
         }
 
         // Append extra arguments if specified
@@ -515,6 +530,69 @@ public class ProcessManager {
         }
 
         return command;
+    }
+
+    /**
+     * Resolve a runtime command (e.g. "yarn", "npx") to its full path.
+     * Checks NVM bin directory first, then falls back to the bare command name.
+     */
+    static String resolveRuntime(String runtime) {
+        if (runtime == null) return null;
+        // Already an absolute path
+        if (runtime.startsWith("/")) return runtime;
+        // Check NVM
+        var nvmBin = findNvmBinDir();
+        if (nvmBin != null) {
+            var candidate = nvmBin.resolve(runtime);
+            if (Files.isExecutable(candidate)) {
+                return candidate.toString();
+            }
+        }
+        // Fallback: bare command (relies on system PATH)
+        return runtime;
+    }
+
+    /**
+     * Find the NVM bin directory for the latest installed Node version.
+     */
+    private static Path findNvmBinDir() {
+        var home = System.getProperty("user.home");
+        var nvmDir = Path.of(home, ".nvm", "versions", "node");
+        if (!Files.isDirectory(nvmDir)) return null;
+        try (var versions = Files.list(nvmDir)) {
+            return versions.filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .sorted(java.util.Collections.reverseOrder())
+                    .findFirst()
+                    .map(v -> nvmDir.resolve(v).resolve("bin"))
+                    .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Append NVM node bin directory to PATH if ~/.nvm exists.
+     * This allows ProcessBuilder to find node, yarn, npx without sourcing nvm.sh.
+     */
+    private void appendNvmToPath(ProcessBuilder pb) {
+        var home = System.getProperty("user.home");
+        var nvmDir = Path.of(home, ".nvm", "versions", "node");
+        if (!Files.isDirectory(nvmDir)) return;
+        try (var versions = Files.list(nvmDir)) {
+            // Pick the latest version directory
+            var latest = versions.filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .sorted(java.util.Collections.reverseOrder())
+                    .findFirst();
+            if (latest.isPresent()) {
+                var binDir = nvmDir.resolve(latest.get()).resolve("bin").toString();
+                var currentPath = pb.environment().getOrDefault("PATH", "/usr/bin:/bin");
+                pb.environment().put("PATH", binDir + ":" + currentPath);
+            }
+        } catch (Exception e) {
+            // ignore — NVM not available
+        }
     }
 
     /**

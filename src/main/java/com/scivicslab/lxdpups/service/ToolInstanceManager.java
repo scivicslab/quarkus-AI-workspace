@@ -40,6 +40,14 @@ public class ToolInstanceManager {
      * Returns the port number used, or -1 if no port was available or the tool was not found.
      */
     public int launchTool(String toolName) {
+        return launchTool(toolName, null);
+    }
+
+    /**
+     * Launch a new instance of a tool with an optional working directory override.
+     * Used by runtime-based tools (e.g. Docusaurus) where the user selects the project directory.
+     */
+    public int launchTool(String toolName, String workDir) {
         var tool = findTool(toolName);
         if (tool == null) {
             LOG.warning("Unknown tool: " + toolName);
@@ -54,10 +62,14 @@ public class ToolInstanceManager {
 
         // Create a ManagementService from the tool definition to reuse ProcessManager
         var svc = toManagementService(tool, port);
+        // Override work-dir if specified (e.g. user selected a Docusaurus project)
+        if (workDir != null && !workDir.isEmpty() && svc.getBinary() != null) {
+            svc.getBinary().setWorkDir(workDir);
+        }
         var instanceName = toolName + "-" + port;
         processManager.startAsync(svc);
         allocatedPorts.computeIfAbsent(toolName, k -> new ArrayList<>()).add(port);
-        LOG.info("Launched tool " + toolName + " on port " + port);
+        LOG.info("Launched tool " + toolName + " on port " + port + (workDir != null ? " workDir=" + workDir : ""));
         return port;
     }
 
@@ -144,6 +156,7 @@ public class ToolInstanceManager {
             bin.setAsset(srcBin.getAsset());
             bin.setPath(srcBin.getPath());
             bin.setRuntime(srcBin.getRuntime());
+            bin.setWorkDir(srcBin.getWorkDir());
             // Replace {port} placeholder in args
             if (srcBin.getArgs() != null) {
                 bin.setArgs(srcBin.getArgs().replace("{port}", String.valueOf(port)));

@@ -25,6 +25,7 @@ tools:
       version: v1.1.0
       asset: quarkus-llm-console-v1.1.0-linux-x86_64
       path: ~/bin/quarkus-llm-console
+      build-dir: quarkus-llm-console
 
   claude-code:
     description: "Claude Code"
@@ -35,6 +36,7 @@ tools:
       version: v1.1.0
       asset: quarkus-llm-console-claude-v1.1.0-linux-x86_64
       path: ~/bin/quarkus-llm-console-claude
+      build-dir: quarkus-llm-console-claude
 
   codex:
     description: "Codex"
@@ -45,6 +47,7 @@ tools:
       version: v1.1.0
       asset: quarkus-llm-console-codex-v1.1.0-linux-x86_64
       path: ~/bin/quarkus-llm-console-codex
+      build-dir: quarkus-llm-console-codex
 
   workflow-editor:
     description: "Workflow Editor"
@@ -55,6 +58,7 @@ tools:
       version: v1.0.0
       asset: turing-workflow-editor-v1.0.0-linux-x86_64
       path: ~/bin/turing-workflow-editor
+      build-dir: Turing-workflow-editor
 
   docusaurus:
     description: "Docusaurus"
@@ -65,5 +69,5 @@ tools:
       version: ""
       asset: ""
       path: ""
-      runtime: "npx"
-      args: "docusaurus start --port {port} --host 0.0.0.0"
+      runtime: "yarn"
+      args: "start --port {port} --host 0.0.0.0"

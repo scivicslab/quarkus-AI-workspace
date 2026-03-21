@@ -332,10 +332,18 @@
     <p class="section-label">Available Tools</p>
     <div class="tool-grid">
         {#for tool in tools}
-        <div class="tool-tile" onclick="launchTool('{tool.name}')">
+        <div class="tool-tile" id="tool-tile-{tool.name}">
             <div class="tool-icon">{tool.icon}</div>
             <div class="tool-name">{tool.description}</div>
-            <div class="tool-action">+ New</div>
+            <div style="display:flex;gap:12px;justify-content:center;align-items:center;">
+                <span class="tool-action" onclick="launchTool('{tool.name}')" style="cursor:pointer;">+ New</span>
+                {#if tool.binary}
+                {#if tool.binary.buildDir}
+                <span class="tool-action" onclick="event.stopPropagation(); buildTool('{tool.name}')" style="cursor:pointer;color:var(--muted);">Build</span>
+                {/if}
+                {/if}
+            </div>
+            <div class="progress-log" id="build-log-{tool.name}" style="width:100%;text-align:left;margin-top:8px;"></div>
         </div>
         {/for}
     </div>
@@ -687,7 +695,51 @@
     // ---- Container mode functions ----
 
     function launchTool(name) {
-        fetch('/api/tools/' + encodeURIComponent(name) + '/launch', { method: 'POST' })
+        if (name === 'docusaurus') {
+            showDocusaurusPicker();
+            return;
+        }
+        fetch('/api/tools/' + encodeURIComponent(name) + '/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+            .then(function(r) { return r.json(); })
+            .then(function() { location.reload(); });
+    }
+
+    function showDocusaurusPicker() {
+        fetch('/api/tools/docusaurus/projects')
+            .then(function(r) { return r.json(); })
+            .then(function(projects) {
+                if (projects.length === 0) {
+                    alert('No Docusaurus projects found under ~/works/');
+                    return;
+                }
+                var html = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;" id="docusaurus-modal" onclick="if(event.target===this)this.remove()">'
+                    + '<div style="background:white;border-radius:14px;padding:24px;max-width:500px;width:90%;max-height:70vh;overflow-y:auto;">'
+                    + '<div style="font-weight:700;font-size:16px;margin-bottom:16px;">Select Docusaurus Project</div>';
+                for (var i = 0; i < projects.length; i++) {
+                    var p = projects[i];
+                    html += '<div style="padding:10px 14px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s;" '
+                        + 'onmouseover="this.style.background=\'#FFF7ED\'" onmouseout="this.style.background=\'white\'" '
+                        + 'onclick="launchDocusaurus(\'' + escHtml(p.path) + '\');document.getElementById(\'docusaurus-modal\').remove();">'
+                        + '<div style="font-weight:600;">' + escHtml(p.name) + '</div>'
+                        + '<div style="font-size:12px;color:#64748B;">' + escHtml(p.path) + '</div>'
+                        + '</div>';
+                }
+                html += '<div style="text-align:right;margin-top:12px;"><button onclick="document.getElementById(\'docusaurus-modal\').remove()" style="padding:6px 16px;border:1px solid #E2E8F0;border-radius:6px;background:white;cursor:pointer;">Cancel</button></div>'
+                    + '</div></div>';
+                document.body.insertAdjacentHTML('beforeend', html);
+            });
+    }
+
+    function launchDocusaurus(workDir) {
+        fetch('/api/tools/docusaurus/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workDir: workDir })
+        })
             .then(function(r) { return r.json(); })
             .then(function() { location.reload(); });
     }
@@ -695,6 +747,73 @@
     function stopTool(name, port) {
         fetch('/api/tools/' + encodeURIComponent(name) + '/stop?port=' + port, { method: 'POST' })
             .then(function() { location.reload(); });
+    }
+
+    function buildTool(name) {
+        if (!confirm('Build "' + name + '" from latest source?\nThis may take several minutes.')) return;
+
+        var logEl = document.getElementById('build-log-' + name);
+        if (logEl) {
+            logEl.classList.add('visible');
+            logEl.innerHTML = '<div class="log-line"><span class="log-phase">\u23f3 queued</span></div>';
+        }
+
+        fetch('/api/tools/' + encodeURIComponent(name) + '/build', { method: 'POST' })
+            .then(function(r) {
+                if (r.status === 409) {
+                    if (logEl) logEl.innerHTML = '<div class="log-line" style="color:#F59E0B;">Build already in progress.</div>';
+                    return;
+                }
+                if (!r.ok) {
+                    r.json().then(function(d) {
+                        if (logEl) logEl.innerHTML = '<div class="log-line" style="color:#EF4444;">Error: ' + escHtml(d.error || 'Unknown error') + '</div>';
+                    });
+                    return;
+                }
+                // Start SSE for build progress
+                var source = new EventSource('/api/tools/' + encodeURIComponent(name) + '/build/progress/stream');
+                source.onmessage = function(event) {
+                    var prog = JSON.parse(event.data);
+                    renderBuildProgress(name, prog);
+                    if (prog.done) {
+                        source.close();
+                        if (prog.success) {
+                            setTimeout(function() { location.reload(); }, 2000);
+                        }
+                    }
+                };
+                source.onerror = function() {
+                    source.close();
+                };
+            });
+    }
+
+    function renderBuildProgress(name, prog) {
+        var logEl = document.getElementById('build-log-' + name);
+        if (!logEl) return;
+        logEl.classList.add('visible');
+
+        var phaseIcons = { queued: '\u23f3', cloning: '\ud83d\udce5', building: '\ud83d\udd28', installing: '\ud83d\udce6', done: '\u2705' };
+        var icon = phaseIcons[prog.phase] || '\u2699\ufe0f';
+        var html = '<div class="log-line"><span class="log-phase">' + icon + ' ' + escHtml(prog.phase) + '</span></div>';
+
+        // Show only last 20 messages to keep it readable
+        var msgs = prog.messages;
+        var start = Math.max(0, msgs.length - 20);
+        if (start > 0) {
+            html += '<div class="log-line" style="color:#64748B;">... (' + start + ' earlier lines)</div>';
+        }
+        for (var i = start; i < msgs.length; i++) {
+            html += '<div class="log-line">' + escHtml(msgs[i]) + '</div>';
+        }
+
+        if (prog.done) {
+            var resultIcon = prog.success ? '\u2705' : '\u274c';
+            html += '<div class="log-line" style="color:' + (prog.success ? '#10B981' : '#EF4444') + ';">'
+                  + resultIcon + ' ' + (prog.success ? 'Build complete!' : 'Build failed.') + '</div>';
+        }
+        logEl.innerHTML = html;
+        logEl.scrollTop = logEl.scrollHeight;
     }
 
     // Auto-refresh every 10 seconds (but not while polling progress)

@@ -1,6 +1,9 @@
 target/
+target.old*/
 .idea/
 *.iml
 .settings/
 .project
 .classpath
+node_modules/
+test-results/

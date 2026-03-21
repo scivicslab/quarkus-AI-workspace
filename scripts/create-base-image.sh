@@ -20,19 +20,40 @@ lxc exec "$TEMPLATE_NAME" -- apt-get update -qq
 lxc exec "$TEMPLATE_NAME" -- apt-get install -y -qq \
     curl git jq zip unzip fontconfig ca-certificates
 
-echo "=== Installing SDKMAN + GraalVM 25 ==="
+echo "=== Installing native build prerequisites ==="
+lxc exec "$TEMPLATE_NAME" -- apt-get install -y -qq \
+    build-essential zlib1g-dev
+
+echo "=== Installing SDKMAN + GraalVM 25 + Maven ==="
 lxc exec "$TEMPLATE_NAME" -- bash -c '
     export SDKMAN_DIR="/opt/sdkman"
     curl -s "https://get.sdkman.io" | bash
     source /opt/sdkman/bin/sdkman-init.sh
     sdk install java 25-graalce
-    # Create symlink for system-wide java
+    sdk install maven
+    # Create symlinks for system-wide access
     ln -sf /opt/sdkman/candidates/java/current/bin/java /usr/local/bin/java
     ln -sf /opt/sdkman/candidates/java/current/bin/javac /usr/local/bin/javac
+    ln -sf /opt/sdkman/candidates/java/current/bin/native-image /usr/local/bin/native-image
+    ln -sf /opt/sdkman/candidates/maven/current/bin/mvn /usr/local/bin/mvn
 '
 
-echo "=== Verifying Java ==="
+echo "=== Verifying Java and Maven ==="
 lxc exec "$TEMPLATE_NAME" -- /usr/local/bin/java -version
+lxc exec "$TEMPLATE_NAME" -- /usr/local/bin/mvn --version
+
+echo "=== Installing Node.js (LTS) and yarn ==="
+lxc exec "$TEMPLATE_NAME" -- bash -c '
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y -qq nodejs
+    npm install -g yarn
+    node --version
+    yarn --version
+'
+
+echo "=== Creating build directory ==="
+lxc exec "$TEMPLATE_NAME" -- mkdir -p /var/tmp/lxd-pups-build
+lxc exec "$TEMPLATE_NAME" -- chown ubuntu:ubuntu /var/tmp/lxd-pups-build
 
 echo "=== Creating portal directory structure ==="
 lxc exec "$TEMPLATE_NAME" -- mkdir -p /opt/lxd-pups-portal/lib/boot /opt/lxd-pups-portal/lib/main /opt/lxd-pups-portal/app /opt/lxd-pups-portal/quarkus

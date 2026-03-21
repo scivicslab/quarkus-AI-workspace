@@ -124,6 +124,8 @@ public class PortalConfig {
             private String path;      // e.g. "~/bin/quarkus-mcp-gateway"
             private String runtime;   // null for native, "java" for JAR
             private String args;      // extra command-line arguments
+            private String buildDir;  // source dir name for build-from-source (e.g. "quarkus-llm-console")
+            private String workDir;   // working directory for runtime-based tools (e.g. "~/works/doc_SCIVICS003")
 
             public String getRepo() { return repo; }
             public void setRepo(String repo) { this.repo = repo; }
@@ -142,6 +144,12 @@ public class PortalConfig {
 
             public String getArgs() { return args; }
             public void setArgs(String args) { this.args = args; }
+
+            public String getBuildDir() { return buildDir; }
+            public void setBuildDir(String buildDir) { this.buildDir = buildDir; }
+
+            public String getWorkDir() { return workDir; }
+            public void setWorkDir(String workDir) { this.workDir = workDir; }
         }
     }
 

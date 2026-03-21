@@ -9,6 +9,7 @@ import com.scivicslab.lxdpups.service.ContainerManager;
 import com.scivicslab.lxdpups.service.HostServiceManager;
 import com.scivicslab.lxdpups.service.ProcessManager;
 import com.scivicslab.lxdpups.service.StatusPoller;
+import com.scivicslab.lxdpups.service.BuildManager;
 import com.scivicslab.lxdpups.service.ToolInstanceManager;
 import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
@@ -48,6 +49,9 @@ public class ApiResource {
 
     @Inject
     ToolInstanceManager toolInstanceManager;
+
+    @Inject
+    BuildManager buildManager;
 
     // ── Status ──
 
@@ -278,14 +282,49 @@ public class ApiResource {
 
     @POST
     @Path("/tools/{name}/launch")
-    public Response launchTool(@PathParam("name") String name) {
-        int port = toolInstanceManager.launchTool(name);
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response launchTool(@PathParam("name") String name, Map<String, String> body) {
+        var workDir = (body != null) ? body.get("workDir") : null;
+        int port = toolInstanceManager.launchTool(name, workDir);
         if (port < 0) {
             return Response.serverError()
                     .entity(Map.of("error", "Failed to launch tool: " + name))
                     .build();
         }
         return Response.ok(Map.of("status", "launched", "tool", name, "port", port)).build();
+    }
+
+    /**
+     * List Docusaurus projects found under ~/works/.
+     * Scans for directories containing docusaurus.config.* files.
+     */
+    @GET
+    @Path("/tools/docusaurus/projects")
+    public List<Map<String, String>> listDocusaurusProjects() {
+        var home = System.getProperty("user.home");
+        var worksDir = java.nio.file.Path.of(home, "works");
+        var projects = new java.util.ArrayList<Map<String, String>>();
+        if (!java.nio.file.Files.isDirectory(worksDir)) return projects;
+        try (var dirs = java.nio.file.Files.list(worksDir)) {
+            dirs.filter(java.nio.file.Files::isDirectory)
+                .sorted()
+                .forEach(dir -> {
+                    try (var files = java.nio.file.Files.list(dir)) {
+                        boolean hasConfig = files.anyMatch(f ->
+                                f.getFileName().toString().startsWith("docusaurus.config."));
+                        if (hasConfig) {
+                            projects.add(Map.of(
+                                    "name", dir.getFileName().toString(),
+                                    "path", dir.toString()));
+                        }
+                    } catch (Exception e) {
+                        // skip unreadable directories
+                    }
+                });
+        } catch (Exception e) {
+            LOG.warning("Failed to scan for Docusaurus projects: " + e.getMessage());
+        }
+        return projects;
     }
 
     @POST
@@ -301,5 +340,58 @@ public class ApiResource {
     @Path("/tools/instances")
     public List<ToolInstanceManager.ToolInstance> getToolInstances() {
         return toolInstanceManager.getRunningInstances();
+    }
+
+    // ── Tool builds (build from source) ──
+
+    @POST
+    @Path("/tools/{name}/build")
+    public Response buildTool(@PathParam("name") String name) {
+        if (!buildManager.isBuildable(name)) {
+            return Response.status(400)
+                    .entity(Map.of("error", "Tool '" + name + "' does not support building from source"))
+                    .build();
+        }
+        if (buildManager.isBuilding(name)) {
+            return Response.status(409)
+                    .entity(Map.of("error", "Build already in progress for " + name))
+                    .build();
+        }
+        boolean started = buildManager.startBuild(name);
+        if (!started) {
+            return Response.serverError()
+                    .entity(Map.of("error", "Failed to start build for " + name))
+                    .build();
+        }
+        return Response.accepted(Map.of("status", "building", "tool", name)).build();
+    }
+
+    @GET
+    @Path("/tools/{name}/build/progress")
+    public ServiceProgress getBuildProgress(@PathParam("name") String name) {
+        return buildManager.getProgress(name);
+    }
+
+    @GET
+    @Path("/tools/{name}/build/progress/stream")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    public Multi<ServiceProgress> streamBuildProgress(@PathParam("name") String name) {
+        var current = buildManager.getProgress(name);
+        return Multi.createFrom().emitter(emitter -> {
+            emitter.emit(current);
+            if (current.done()) {
+                emitter.complete();
+                return;
+            }
+            java.util.function.Consumer<ServiceProgress> listener = progress -> {
+                emitter.emit(progress);
+                if (progress.done()) {
+                    emitter.complete();
+                }
+            };
+            buildManager.addProgressListener(name, listener);
+            emitter.onTermination(() -> buildManager.removeProgressListener(name, listener));
+        });
     }
 }
