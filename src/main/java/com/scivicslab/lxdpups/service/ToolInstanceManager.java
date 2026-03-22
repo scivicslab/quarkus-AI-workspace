@@ -31,10 +31,14 @@ public class ToolInstanceManager {
      * A running tool instance.
      */
     public record ToolInstance(String toolName, String description, String icon, int port,
-                               ServiceStatus status, String processName, String uiPath) {}
+                               ServiceStatus status, String processName, String uiPath,
+                               String memo) {}
 
     // Tracks which ports are allocated per tool: toolName -> set of ports
     private final ConcurrentHashMap<String, List<Integer>> allocatedPorts = new ConcurrentHashMap<>();
+
+    // Memo per tool instance: "toolName-port" -> memo text
+    private final ConcurrentHashMap<String, String> memos = new ConcurrentHashMap<>();
 
     /**
      * Launch a new instance of a tool, finding the next available port in the range.
@@ -93,8 +97,21 @@ public class ToolInstanceManager {
         if (ports != null) {
             ports.remove(Integer.valueOf(port));
         }
+        memos.remove(instanceName);
         LOG.info("Stopped tool " + toolName + " on port " + port);
         return ok;
+    }
+
+    /**
+     * Update the memo for a running tool instance.
+     */
+    public void updateMemo(String toolName, int port, String memo) {
+        var key = toolName + "-" + port;
+        if (memo == null || memo.isBlank()) {
+            memos.remove(key);
+        } else {
+            memos.put(key, memo.strip());
+        }
     }
 
     /**
@@ -113,9 +130,11 @@ public class ToolInstanceManager {
                     if (status == ServiceStatus.ACTIVE) {
                         processName = processManager.getProcessNameOnPort(port);
                     }
+                    var key = tool.getName() + "-" + port;
                     result.add(new ToolInstance(
                             tool.getName(), tool.getDescription(), tool.getIcon(),
-                            port, status, processName, tool.getUiPath()));
+                            port, status, processName, tool.getUiPath(),
+                            memos.getOrDefault(key, "")));
                 }
             }
         }

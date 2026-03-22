@@ -223,13 +223,21 @@
 
         /* -- Container mode: Running service cards ---- */
         .running-svc-card {
-            display: flex; align-items: center; gap: 14px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
             background: var(--card); border-radius: var(--radius);
             box-shadow: var(--shadow); border-left: 4px solid var(--orange);
             padding: 22px 24px; margin-bottom: 14px;
         }
         .svc-icon { font-size: 20px; }
         .svc-name { font-weight: 600; }
+        .memo-input {
+            width: 100%; padding: 4px 8px; border-radius: 6px;
+            border: 1.5px solid var(--border); font-size: 13px;
+            color: var(--text); background: var(--bg); outline: none;
+            transition: border-color .15s ease;
+        }
+        .memo-input:focus { border-color: var(--orange); }
+        .memo-input::placeholder { color: #94A3B8; }
 
         /* -- Container mode: Tool tile grid ---- */
         .tool-grid {
@@ -317,11 +325,15 @@
         <p class="section-label">Running Services</p>
         {#for inst in toolInstances}
         <div class="running-svc-card">
-            <span class="svc-icon">{inst.icon}</span>
-            <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}{inst.uiPath ?: '/'}" target="_blank">{inst.description}</a>
-            <span class="mgmt-port">:{inst.port}</span>
-            <span class="badge badge-{inst.status}">{inst.status}</span>
-            <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
+            <div style="display:flex;align-items:center;gap:14px;width:100%;">
+                <span class="svc-icon">{inst.icon}</span>
+                <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}{inst.uiPath ?: '/'}" target="_blank">{inst.description}</a>
+                <span class="mgmt-port">:{inst.port}</span>
+                <span class="badge badge-{inst.status}">{inst.status}</span>
+                <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
+            </div>
+            <input type="text" value="{inst.memo}" placeholder="Add memo..."
+                   class="memo-input" data-tool-name="{inst.toolName}" data-port="{inst.port}">
         </div>
         {#else}
         <div style="padding:12px;color:var(--muted);font-size:14px;">No running services. Launch a tool below.</div>
@@ -739,12 +751,22 @@
     }
 
     function launchDocusaurus(workDir) {
+        var projectName = workDir.split('/').pop() || workDir;
         fetch('/api/tools/docusaurus/launch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workDir: workDir })
         })
             .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.port) {
+                    return fetch('/api/tools/docusaurus/memo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ port: String(data.port), memo: projectName })
+                    });
+                }
+            })
             .then(function() { location.reload(); });
     }
 
@@ -865,6 +887,20 @@
         };
     })();
     {/for}
+
+    // Memo save on blur
+    document.querySelectorAll('.memo-input').forEach(function(input) {
+        var original = input.value;
+        input.addEventListener('blur', function() {
+            if (input.value === original) return;
+            original = input.value;
+            fetch('/api/tools/' + encodeURIComponent(input.dataset.toolName) + '/memo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port: input.dataset.port, memo: input.value })
+            });
+        });
+    });
 </script>
 
 </body>

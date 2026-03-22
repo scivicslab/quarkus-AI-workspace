@@ -335,6 +335,16 @@ public class ApiResource {
     }
 
     @POST
+    @Path("/tools/{name}/memo")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response updateToolMemo(@PathParam("name") String name, Map<String, String> body) {
+        int port = Integer.parseInt(body.getOrDefault("port", "0"));
+        String memo = body.getOrDefault("memo", "");
+        toolInstanceManager.updateMemo(name, port, memo);
+        return Response.ok(Map.of("status", "updated")).build();
+    }
+
+    @POST
     @Path("/tools/{name}/stop")
     public Response stopTool(@PathParam("name") String name,
                              @QueryParam("port") int port) {
