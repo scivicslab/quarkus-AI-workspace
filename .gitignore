@@ -7,3 +7,9 @@ target.old*/
 .classpath
 node_modules/
 test-results/
+
+# Generated artifacts and backups
+docs/
+search-index/
+static-html/
+workflows.old/
