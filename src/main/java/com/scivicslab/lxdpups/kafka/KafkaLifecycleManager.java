@@ -53,7 +53,7 @@ public class KafkaLifecycleManager {
     @ConfigProperty(name = "kafka.bootstrap.servers", defaultValue = "localhost:9092")
     String bootstrapServers;
 
-    @ConfigProperty(name = "lxd.pups.kafka.auto-start", defaultValue = "true")
+    @ConfigProperty(name = "lxd.pups.kafka.auto-start", defaultValue = "false")
     boolean autoStart;
 
     private volatile Process kafkaProcess = null;
