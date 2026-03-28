@@ -68,6 +68,12 @@
             <version>3.0.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- Kafka messaging (container command bus) -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-messaging-kafka</artifactId>
+        </dependency>
+
         <!-- YAML parsing -->
         <dependency>
             <groupId>org.yaml</groupId>

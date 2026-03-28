@@ -11,6 +11,7 @@ public class PortalConfig {
     private String title = "LXD-pups Portal";
     private int port = 15080;
     private String mode = "host"; // "host" or "container"
+    private String parentUrl = ""; // URL of the parent (host) portal, used in container mode
     private List<ManagementService> managementServices = List.of();
     private List<WorkerService> workerTemplate = List.of();
     private List<Remote> remotes = List.of();
@@ -26,6 +27,9 @@ public class PortalConfig {
     public void setMode(String mode) { this.mode = mode; }
     public boolean isContainerMode() { return "container".equals(mode); }
     public boolean isHostMode() { return !"container".equals(mode); }
+
+    public String getParentUrl() { return parentUrl; }
+    public void setParentUrl(String parentUrl) { this.parentUrl = parentUrl; }
 
     public List<ManagementService> getManagementServices() { return managementServices; }
     public void setManagementServices(List<ManagementService> managementServices) { this.managementServices = managementServices; }

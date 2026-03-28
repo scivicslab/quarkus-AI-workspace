@@ -132,6 +132,7 @@ portal:
   port: 8080
   mode: container
   title: "Desktop Worker"
+  parentUrl: "http://HOST_IP:16900/"
 
 management:
   mcp-gateway:

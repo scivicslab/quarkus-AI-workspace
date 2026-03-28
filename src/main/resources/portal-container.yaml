@@ -2,6 +2,7 @@ portal:
   port: 16080
   mode: container
   title: "AI Worker"
+  parentUrl: "http://HOST_IP:16900/"
 
 management:
   mcp-gateway:

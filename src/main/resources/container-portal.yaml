@@ -2,6 +2,7 @@ portal:
   port: 16080
   mode: container
   title: "AI Worker"
+  parentUrl: "http://HOST_IP:16900/"
 
 management:
   mcp-gateway:
@@ -60,69 +61,15 @@ tools:
       path: ~/bin/turing-workflow-editor
       build-dir: Turing-workflow-editor
 
-  docusaurus:
-    description: "Docusaurus"
-    icon: "\uD83D\uDCDD"
+  yadoc:
+    description: "Yadoc Documentation Server"
+    icon: "\uD83D\uDCD6"
     port-range: "16300-16319"
     binary:
       repo: ""
       version: ""
       asset: ""
-      path: ""
-      runtime: "yarn"
-      args: "start --port {port} --host 0.0.0.0"
-
-  doc-site:
-    description: "Doc Site"
-    icon: "\uD83C\uDF10"
-    static-url: "/~devteam/"
-
-  doc-build-index:
-    description: "Doc Build & Index"
-    icon: "\uD83D\uDCDA"
-    port-range: "16320-16329"
-    binary:
-      repo: ""
-      version: ""
-      asset: ""
-      path: "/home/devteam/bin/quarkus-workflow-editor/quarkus-app/quarkus-run.jar"
+      path: "/opt/yadoc/yadoc.jar"
       runtime: "java"
-      args: "-Dworkflow.autoload=/opt/lxd-pups-portal/workflows/docusaurus-build-index.yaml -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
+      args: "--portal-mode --serve --port {port} ~/works"
 
-  doc-search:
-    description: "Doc Search"
-    icon: "\uD83D\uDD0D"
-    port-range: "16330-16339"
-    ui-path: "/docusearch/search"
-    binary:
-      repo: ""
-      version: ""
-      asset: ""
-      path: "/home/devteam/bin/quarkus-docusearch/quarkus-app/quarkus-run.jar"
-      runtime: "java"
-      args: "-Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
-
-  workflow-search:
-    description: "Workflow Search"
-    icon: "\uD83D\uDD0E"
-    port-range: "16340-16349"
-    ui-path: "/wfsearch/search"
-    binary:
-      repo: ""
-      version: ""
-      asset: ""
-      path: "/home/devteam/bin/quarkus-workflow-search/quarkus-app/quarkus-run.jar"
-      runtime: "java"
-      args: "-Dportal.url=http://localhost:16080 -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"
-
-  workflows:
-    description: "Workflow Editor"
-    icon: "\uD83D\uDD27"
-    port-range: "16350-16369"
-    binary:
-      repo: ""
-      version: ""
-      asset: ""
-      path: "/home/devteam/bin/quarkus-workflow-editor/quarkus-app/quarkus-run.jar"
-      runtime: "java"
-      args: "-Dworkflow.autoload={workflow} -Dquarkus.http.port={port} -Dquarkus.http.host=0.0.0.0"

@@ -76,6 +76,7 @@ public class DashboardResource {
                 .data("title", config.getTitle())
                 .data("hostMode", config.isHostMode())
                 .data("containerMode", config.isContainerMode())
+                .data("parentUrl", config.getParentUrl())
                 .data("managementServices", status.managementServices())
                 .data("containers", status.containers())
                 .data("workerTemplate", config.getWorkerTemplate())

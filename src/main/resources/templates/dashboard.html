@@ -274,6 +274,9 @@
         <span class="brand-sep"></span>
         <span class="brand-tag">{#if containerMode}{title}{#else}My Own OpenClaw and LangGraph{/if}</span>
     </a>
+    {#if containerMode && parentUrl != ''}
+    <a href="{parentUrl}" style="color:white; font-size:14px; text-decoration:none; display:flex; align-items:center; gap:6px; opacity:.85; transition:opacity .2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.85'">&#x2190; Host Portal</a>
+    {/if}
 </header>
 
 <main>

@@ -135,6 +135,34 @@ public class ContainerSupervisorActor {
         return activeLaunches.containsKey(name);
     }
 
+    // ── Service operations (start/stop systemd units inside containers) ──
+
+    /**
+     * Start a systemd unit inside a container.
+     * Called via tell() from ContainerCommandConsumer — does not block the caller.
+     */
+    public void serviceStart(String container, String remote, String unit) {
+        boolean ok = containerManager.serviceStart(container, remote, unit);
+        if (ok) {
+            LOG.info("Started service " + unit + " in container " + container);
+        } else {
+            LOG.warning("Failed to start service " + unit + " in container " + container);
+        }
+    }
+
+    /**
+     * Stop a systemd unit inside a container.
+     * Called via tell() from ContainerCommandConsumer — does not block the caller.
+     */
+    public void serviceStop(String container, String remote, String unit) {
+        boolean ok = containerManager.serviceStop(container, remote, unit);
+        if (ok) {
+            LOG.info("Stopped service " + unit + " in container " + container);
+        } else {
+            LOG.warning("Failed to stop service " + unit + " in container " + container);
+        }
+    }
+
     // ── Container operations (delegate to ContainerManager directly) ──
 
     public List<ContainerInfo> listWorkerContainers(String remote) {
