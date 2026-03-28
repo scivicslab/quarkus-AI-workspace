@@ -51,23 +51,61 @@ public class ProcessWorkerActor {
             var resolvedPath = ProcessManager.resolvePath(binary.getPath());
             boolean hasPath = resolvedPath != null && !resolvedPath.isEmpty();
             boolean hasRepo = binary.getRepo() != null && !binary.getRepo().isEmpty();
-            if (hasPath && !Files.exists(Path.of(resolvedPath)) && hasRepo) {
-                progress.setPhase("downloading");
-                progress.addMessage("Downloading from " + binary.getRepo() + " " + binary.getVersion() + " ...");
-                try {
-                    ProcessManager.downloadBinary(binary, progress);
-                } catch (Exception e) {
-                    progress.addMessage("Download failed: " + e.getMessage());
+            boolean hasUrl  = binary.getUrl()  != null && !binary.getUrl().isBlank();
+            if (hasPath && !Files.exists(Path.of(resolvedPath))) {
+                if (hasUrl) {
+                    // Direct URL download + tarball extraction (e.g. Apache Kafka)
+                    progress.setPhase("downloading");
+                    progress.addMessage("Downloading from " + binary.getUrl() + " ...");
+                    try {
+                        ProcessManager.downloadAndExtract(binary, progress);
+                    } catch (Exception e) {
+                        progress.addMessage("Download failed: " + e.getMessage());
+                        progress.complete(false);
+                        supervisor.tell(s -> s.onStartComplete(name, false, null, List.of()));
+                        return;
+                    }
+                    // Run post-install command if specified (e.g. Kafka KRaft storage setup)
+                    var postCmd = binary.getPostInstallCmd();
+                    if (postCmd != null && !postCmd.isBlank()) {
+                        progress.setPhase("installing");
+                        progress.addMessage("Running post-install: " + postCmd);
+                        try {
+                            var pb = new ProcessBuilder("bash", "-c",
+                                    postCmd.replace("~", System.getProperty("user.home")));
+                            pb.redirectErrorStream(true);
+                            var proc = pb.start();
+                            var out = new String(proc.getInputStream().readAllBytes());
+                            int exit = proc.waitFor();
+                            if (!out.isBlank()) progress.addMessage(out.strip());
+                            if (exit != 0) throw new RuntimeException("post-install exited with code " + exit);
+                        } catch (Exception e) {
+                            progress.addMessage("Post-install failed: " + e.getMessage());
+                            progress.complete(false);
+                            supervisor.tell(s -> s.onStartComplete(name, false, null, List.of()));
+                            return;
+                        }
+                    }
+                    progress.addMessage("Installation complete.");
+                } else if (hasRepo) {
+                    // GitHub Release download
+                    progress.setPhase("downloading");
+                    progress.addMessage("Downloading from " + binary.getRepo() + " " + binary.getVersion() + " ...");
+                    try {
+                        ProcessManager.downloadBinary(binary, progress);
+                    } catch (Exception e) {
+                        progress.addMessage("Download failed: " + e.getMessage());
+                        progress.complete(false);
+                        supervisor.tell(s -> s.onStartComplete(name, false, null, List.of()));
+                        return;
+                    }
+                    progress.addMessage("Download complete.");
+                } else {
+                    progress.addMessage("Binary not found at " + resolvedPath + " (no download source configured)");
                     progress.complete(false);
                     supervisor.tell(s -> s.onStartComplete(name, false, null, List.of()));
                     return;
                 }
-                progress.addMessage("Download complete.");
-            } else if (hasPath && !Files.exists(Path.of(resolvedPath))) {
-                progress.addMessage("Binary not found at " + resolvedPath + " (no repo configured for download)");
-                progress.complete(false);
-                supervisor.tell(s -> s.onStartComplete(name, false, null, List.of()));
-                return;
             } else if (hasPath) {
                 progress.addMessage("Binary already exists at " + resolvedPath);
             }
@@ -86,9 +124,17 @@ public class ProcessWorkerActor {
             progress.addMessage("Working directory: " + workDir);
             pb.environment().put("QUARKUS_HTTP_PORT", String.valueOf(svc.getPort()));
             pb.environment().put("QUARKUS_HTTP_HOST", "0.0.0.0");
+            // Pass JAVA_HOME so scripts like kafka-server-start.sh can find the JVM
+            var javaHome = System.getProperty("java.home");
+            if (javaHome != null) {
+                pb.environment().put("JAVA_HOME", javaHome);
+                var currentPath = pb.environment().getOrDefault("PATH", "/usr/bin:/bin");
+                pb.environment().put("PATH", javaHome + "/bin:" + currentPath);
+            }
             ProcessManager.appendNvmToPath(pb);
+            var logFile = new java.io.File(System.getProperty("user.home") + "/.lxd-pups/" + name + ".log");
             pb.redirectErrorStream(true);
-            pb.inheritIO();
+            pb.redirectOutput(logFile);
             launchedProcess = pb.start();
             this.process = launchedProcess;
 

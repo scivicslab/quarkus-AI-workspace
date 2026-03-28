@@ -9,6 +9,9 @@ management:
     description: "Apache Kafka (command bus)"
     binary:
       path: ~/kafka/bin/kafka-server-start.sh
+      url: https://downloads.apache.org/kafka/4.0.2/kafka_2.13-4.0.2.tgz
+      install-dir: ~/kafka
+      post-install-cmd: bash ~/.lxd-pups/kafka-data/kafka-setup.sh
       args: ~/.lxd-pups/kafka-data/server.properties
 
   mcp-gateway:

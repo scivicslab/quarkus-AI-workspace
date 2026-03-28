@@ -157,6 +157,9 @@ public class PortalConfigLoader {
         if (map.get("args") instanceof String args) bin.setArgs(args);
         if (map.get("build-dir") instanceof String buildDir) bin.setBuildDir(buildDir);
         if (map.get("work-dir") instanceof String workDir) bin.setWorkDir(workDir);
+        if (map.get("url") instanceof String url) bin.setUrl(url);
+        if (map.get("install-dir") instanceof String installDir) bin.setInstallDir(installDir);
+        if (map.get("post-install-cmd") instanceof String postInstallCmd) bin.setPostInstallCmd(postInstallCmd);
         return bin;
     }
 

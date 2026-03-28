@@ -130,14 +130,17 @@ public class PortalConfig {
          * Binary download and execution configuration for a management service.
          */
         public static class Binary {
-            private String repo;      // e.g. "scivicslab/quarkus-mcp-gateway"
-            private String version;   // e.g. "v1.0.0"
-            private String asset;     // e.g. "quarkus-mcp-gateway-v1.0.0-linux-x86_64"
-            private String path;      // e.g. "~/bin/quarkus-mcp-gateway"
-            private String runtime;   // null for native, "java" for JAR
-            private String args;      // extra command-line arguments
-            private String buildDir;  // source dir name for build-from-source (e.g. "quarkus-llm-console")
-            private String workDir;   // working directory for runtime-based tools (e.g. "~/works/doc_SCIVICS003")
+            private String repo;           // e.g. "scivicslab/quarkus-mcp-gateway"
+            private String version;        // e.g. "v1.0.0"
+            private String asset;          // e.g. "quarkus-mcp-gateway-v1.0.0-linux-x86_64"
+            private String path;           // e.g. "~/bin/quarkus-mcp-gateway"
+            private String url;            // direct download URL for non-GitHub archives (e.g. Apache Kafka)
+            private String installDir;     // directory to extract tarball into (e.g. "~/kafka")
+            private String postInstallCmd; // shell command to run after installation (e.g. KRaft setup)
+            private String runtime;        // null for native, "java" for JAR
+            private String args;           // extra command-line arguments
+            private String buildDir;       // source dir name for build-from-source (e.g. "quarkus-llm-console")
+            private String workDir;        // working directory for runtime-based tools (e.g. "~/works/doc_SCIVICS003")
 
             public String getRepo() { return repo; }
             public void setRepo(String repo) { this.repo = repo; }
@@ -150,6 +153,15 @@ public class PortalConfig {
 
             public String getPath() { return path; }
             public void setPath(String path) { this.path = path; }
+
+            public String getUrl() { return url; }
+            public void setUrl(String url) { this.url = url; }
+
+            public String getInstallDir() { return installDir; }
+            public void setInstallDir(String installDir) { this.installDir = installDir; }
+
+            public String getPostInstallCmd() { return postInstallCmd; }
+            public void setPostInstallCmd(String postInstallCmd) { this.postInstallCmd = postInstallCmd; }
 
             public String getRuntime() { return runtime; }
             public void setRuntime(String runtime) { this.runtime = runtime; }

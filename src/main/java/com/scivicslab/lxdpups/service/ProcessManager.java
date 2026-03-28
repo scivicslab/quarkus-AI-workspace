@@ -123,10 +123,11 @@ public class ProcessManager {
             var postJarArgs = new ArrayList<String>();
             if (binary.getArgs() != null && !binary.getArgs().isBlank()) {
                 for (var arg : binary.getArgs().split("\\s+")) {
+                    var resolved = resolvePath(arg);
                     if (arg.startsWith("-D") || arg.startsWith("-X") || arg.startsWith("-javaagent")) {
-                        command.add(arg);
+                        command.add(resolved);
                     } else {
-                        postJarArgs.add(arg);
+                        postJarArgs.add(resolved);
                     }
                 }
             }
@@ -143,10 +144,10 @@ public class ProcessManager {
             }
         }
 
-        // Append extra arguments if specified
+        // Append extra arguments if specified (expand ~ in path-like args)
         if (binary.getArgs() != null && !binary.getArgs().isBlank()) {
             for (var arg : binary.getArgs().split("\\s+")) {
-                command.add(arg);
+                command.add(resolvePath(arg));
             }
         }
 
@@ -279,5 +280,60 @@ public class ProcessManager {
             Path.of(resolvedPath).toFile().setExecutable(true);
             if (tracker != null) tracker.addMessage("Set executable permission.");
         }
+    }
+
+    /**
+     * Download a tarball from a direct URL and extract it to installDir.
+     * Uses curl + tar --strip-components=1 (assumes single top-level dir in archive).
+     * Called by ProcessWorkerActor when binary.url is set instead of binary.repo.
+     */
+    public static void downloadAndExtract(PortalConfig.ManagementService.Binary binary,
+                                          ProcessProgress tracker) throws Exception {
+        var url        = binary.getUrl();
+        var installDir = resolvePath(binary.getInstallDir());
+        var archiveName = url.substring(url.lastIndexOf('/') + 1);
+        var tmpFile = System.getProperty("java.io.tmpdir") + "/" + archiveName;
+
+        if (tracker != null) {
+            tracker.addMessage("URL: " + url);
+            tracker.addMessage("Installing to: " + installDir);
+        }
+
+        // Download archive
+        LOG.info("Downloading " + url + " to " + tmpFile);
+        var dlPb = new ProcessBuilder("curl", "-fL", "-o", tmpFile, "--progress-bar", url);
+        dlPb.redirectErrorStream(true);
+        var dlProcess = dlPb.start();
+
+        Thread.ofVirtual().name("curl-progress-" + archiveName).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(dlProcess.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    var trimmed = line.trim();
+                    if (!trimmed.isEmpty() && tracker != null) tracker.updateDownloadLine(trimmed);
+                }
+            } catch (Exception e) { /* ignore */ }
+        });
+
+        boolean dlDone = dlProcess.waitFor(600, java.util.concurrent.TimeUnit.SECONDS);
+        if (!dlDone) { dlProcess.destroyForcibly(); throw new RuntimeException("Download timed out"); }
+        if (dlProcess.exitValue() != 0) throw new RuntimeException("curl exited with code " + dlProcess.exitValue());
+
+        var sizeMB = String.format("%.1f MB", Files.size(Path.of(tmpFile)) / (1024.0 * 1024.0));
+        if (tracker != null) tracker.addMessage("Downloaded " + sizeMB + ", extracting...");
+
+        // Extract
+        Files.createDirectories(Path.of(installDir));
+        var tarPb = new ProcessBuilder("tar", "-xzf", tmpFile, "-C", installDir, "--strip-components=1");
+        tarPb.redirectErrorStream(true);
+        var tarProcess = tarPb.start();
+        var tarOutput = new String(tarProcess.getInputStream().readAllBytes());
+        int tarExit = tarProcess.waitFor();
+        Files.deleteIfExists(Path.of(tmpFile));
+        if (tarExit != 0) throw new RuntimeException("tar failed (exit=" + tarExit + "): " + tarOutput);
+
+        if (tracker != null) tracker.addMessage("Extracted to " + installDir);
+        LOG.info("Extracted " + archiveName + " to " + installDir);
     }
 }
