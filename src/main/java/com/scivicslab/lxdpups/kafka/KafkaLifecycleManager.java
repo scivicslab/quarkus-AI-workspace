@@ -59,24 +59,29 @@ public class KafkaLifecycleManager {
     private volatile Process kafkaProcess = null;
 
     void onStart(@Observes StartupEvent ev) {
-        if (!autoStart) {
-            LOG.info("Kafka auto-start disabled (lxd.pups.kafka.auto-start=false)");
-            return;
-        }
-
-        if (isKafkaReachable()) {
-            LOG.info("Kafka already running at " + bootstrapServers + ", skipping auto-start");
-            return;
-        }
-
+        // Always prepare KRaft config and format storage if ~/kafka/ is present.
+        // Actual process startup is handled by the management service UI (Start button).
         var kafkaHome = findKafkaHome();
         if (kafkaHome == null) {
-            LOG.warning("Kafka not found. Install Kafka to ~/kafka/ or set lxd.pups.kafka.home. " +
-                        "Kafka auto-start skipped.");
+            LOG.info("Kafka not found (~/kafka/ etc.) — skipping setup. " +
+                     "Download Kafka to ~/kafka/ to enable the command bus.");
             return;
         }
 
-        LOG.info("Starting Kafka from " + kafkaHome);
+        try {
+            ensureKraftStorage(kafkaHome);
+        } catch (Exception e) {
+            LOG.warning("Kafka KRaft setup failed: " + e.getMessage());
+        }
+
+        if (!autoStart) return;
+
+        if (isKafkaReachable()) {
+            LOG.info("Kafka already running at " + bootstrapServers);
+            return;
+        }
+
+        LOG.info("Auto-starting Kafka from " + kafkaHome);
         startKafka(kafkaHome);
     }
 
@@ -123,30 +128,39 @@ public class KafkaLifecycleManager {
         return null;
     }
 
-    private void startKafka(String kafkaHome) {
+    /**
+     * Ensure KRaft config and storage are ready.
+     * Called on startup so the management UI Start button can immediately launch Kafka.
+     */
+    private void ensureKraftStorage(String kafkaHome) throws Exception {
         var dataDir = Path.of(KRAFT_DATA_DIR);
         var configFile = dataDir.resolve("server.properties");
         var metaFile = dataDir.resolve("meta.properties");
 
+        Files.createDirectories(dataDir);
+
+        if (!Files.exists(configFile)) {
+            writeKraftConfig(configFile, dataDir.toString());
+            LOG.info("Wrote KRaft config to " + configFile);
+        }
+
+        if (!Files.exists(metaFile)) {
+            formatKraftStorage(kafkaHome, configFile.toString());
+            LOG.info("KRaft storage formatted at " + dataDir);
+        }
+
+        LOG.info("Kafka KRaft storage ready at " + dataDir);
+    }
+
+    private void startKafka(String kafkaHome) {
+        var configFile = Path.of(KRAFT_DATA_DIR, "server.properties");
         try {
-            Files.createDirectories(dataDir);
-
-            if (!Files.exists(configFile)) {
-                writeKraftConfig(configFile, dataDir.toString());
-            }
-
-            // Format storage on first run (meta.properties absent means not formatted)
-            if (!Files.exists(metaFile)) {
-                formatKraftStorage(kafkaHome, configFile.toString());
-            }
-
             var startScript = kafkaHome + "/bin/kafka-server-start.sh";
             kafkaProcess = new ProcessBuilder(startScript, configFile.toString())
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
 
-            // Wait briefly to confirm startup
             Thread.sleep(3000);
             if (!kafkaProcess.isAlive()) {
                 LOG.severe("Kafka process exited immediately after start");

@@ -8,8 +8,8 @@ management:
     port: 9092
     description: "Apache Kafka (command bus)"
     binary:
-      path: /opt/kafka/bin/kafka-server-start.sh
-      args: /opt/kafka/config/kraft/server.properties
+      path: ~/kafka/bin/kafka-server-start.sh
+      args: ~/.lxd-pups/kafka-data/server.properties
 
   mcp-gateway:
     enabled: true
