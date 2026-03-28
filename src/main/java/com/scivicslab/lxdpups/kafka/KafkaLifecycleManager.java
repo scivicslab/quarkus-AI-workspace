@@ -47,8 +47,8 @@ public class KafkaLifecycleManager {
     private static final String KRAFT_DATA_DIR =
             System.getProperty("user.home") + "/.lxd-pups/kafka-data";
 
-    @ConfigProperty(name = "lxd.pups.kafka.home", defaultValue = "")
-    String kafkaHomeConfig;
+    @ConfigProperty(name = "lxd.pups.kafka.home")
+    java.util.Optional<String> kafkaHomeConfig;
 
     @ConfigProperty(name = "kafka.bootstrap.servers", defaultValue = "localhost:9092")
     String bootstrapServers;
@@ -109,10 +109,11 @@ public class KafkaLifecycleManager {
     }
 
     private String findKafkaHome() {
-        if (!kafkaHomeConfig.isBlank()) {
-            var p = Path.of(kafkaHomeConfig);
-            if (Files.isDirectory(p)) return kafkaHomeConfig;
-            LOG.warning("Configured lxd.pups.kafka.home not found: " + kafkaHomeConfig);
+        var configured = kafkaHomeConfig.orElse("").trim();
+        if (!configured.isBlank()) {
+            var p = Path.of(configured);
+            if (Files.isDirectory(p)) return configured;
+            LOG.warning("Configured lxd.pups.kafka.home not found: " + configured);
         }
         for (var candidate : KAFKA_SEARCH_PATHS) {
             if (Files.isDirectory(Path.of(candidate))) {
