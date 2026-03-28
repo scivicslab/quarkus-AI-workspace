@@ -1,9 +1,9 @@
 package com.scivicslab.lxdpups.actor;
 
+import com.scivicslab.lxdpups.config.PortalConfigLoader;
 import com.scivicslab.lxdpups.service.BuildManager;
 import com.scivicslab.lxdpups.service.ContainerManager;
 import com.scivicslab.lxdpups.service.StatusPoller;
-import com.scivicslab.lxdpups.service.ToolInstanceManager;
 import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.core.ActorSystem;
 import jakarta.annotation.PostConstruct;
@@ -21,7 +21,12 @@ import java.util.logging.Logger;
  *   ActorSystem("lxd-pups")
  *     ├─ ContainerSupervisorActor("supervisor")
  *     │    └─ LaunchWorkerActor("launch-{name}") ... (children, created on demand)
- *     └─ ToolSupervisorActor("tool-supervisor")
+ *     ├─ ToolSupervisorActor("tool-supervisor")
+ *     ├─ ProcessSupervisorActor("process-supervisor")
+ *     │    └─ ProcessWorkerActor("process-{name}") ... (children, created on demand)
+ *     ├─ BuildSupervisorActor("build-supervisor")
+ *     │    └─ BuildWorkerActor("build-{name}") ... (children, created on demand)
+ *     └─ StatusActor("status")
  * </pre>
  * </p>
  */
@@ -37,14 +42,17 @@ public class LxdPupsActorSystem {
     StatusPoller statusPoller;
 
     @Inject
-    ToolInstanceManager toolInstanceManager;
+    BuildManager buildManager;
 
     @Inject
-    BuildManager buildManager;
+    PortalConfigLoader configLoader;
 
     private ActorSystem actorSystem;
     private ActorRef<ContainerSupervisorActor> supervisor;
     private ActorRef<ToolSupervisorActor> toolSupervisor;
+    private ActorRef<ProcessSupervisorActor> processSupervisor;
+    private ActorRef<BuildSupervisorActor> buildSupervisor;
+    private ActorRef<StatusActor> statusActor;
 
     @PostConstruct
     void init() {
@@ -54,10 +62,16 @@ public class LxdPupsActorSystem {
         supervisorActor.setOnLaunchDone(() -> statusPoller.refresh());
         supervisor = actorSystem.actorOf("supervisor", supervisorActor);
 
-        var toolSupervisorActor = new ToolSupervisorActor(toolInstanceManager, buildManager);
+        processSupervisor = actorSystem.actorOf("process-supervisor", new ProcessSupervisorActor());
+
+        buildSupervisor = actorSystem.actorOf("build-supervisor", new BuildSupervisorActor(configLoader));
+
+        statusActor = actorSystem.actorOf("status", new StatusActor());
+
+        var toolSupervisorActor = new ToolSupervisorActor(configLoader, processSupervisor, buildManager);
         toolSupervisor = actorSystem.actorOf("tool-supervisor", toolSupervisorActor);
 
-        LOG.info("LxdPupsActorSystem initialized: supervisor and tool-supervisor ready");
+        LOG.info("LxdPupsActorSystem initialized: all actors ready");
     }
 
     @PreDestroy
@@ -70,8 +84,6 @@ public class LxdPupsActorSystem {
 
     /**
      * Get the container supervisor actor ref.
-     * Use tell() for fire-and-forget operations (launch, stop, service-start/stop).
-     * Use ask() for queries that need a response (status, list).
      */
     public ActorRef<ContainerSupervisorActor> getSupervisor() {
         return supervisor;
@@ -79,9 +91,29 @@ public class LxdPupsActorSystem {
 
     /**
      * Get the tool supervisor actor ref.
-     * Use tell() for all tool operations (launch, stop, build).
      */
     public ActorRef<ToolSupervisorActor> getToolSupervisor() {
         return toolSupervisor;
+    }
+
+    /**
+     * Get the process supervisor actor ref.
+     */
+    public ActorRef<ProcessSupervisorActor> getProcessSupervisor() {
+        return processSupervisor;
+    }
+
+    /**
+     * Get the build supervisor actor ref.
+     */
+    public ActorRef<BuildSupervisorActor> getBuildSupervisor() {
+        return buildSupervisor;
+    }
+
+    /**
+     * Get the status actor ref.
+     */
+    public ActorRef<StatusActor> getStatusActor() {
+        return statusActor;
     }
 }

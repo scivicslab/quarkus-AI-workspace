@@ -95,7 +95,7 @@ public class ContainerCommandConsumer {
 
     private void routeToolLaunch(ContainerCommand cmd) {
         actorSystem.getToolSupervisor()
-                   .tell(t -> t.launchTool(cmd.name(), cmd.workDir()));
+                   .tell(t -> t.launchTool(cmd.name(), cmd.workDir(), java.util.Map.of()));
     }
 
     private void routeToolStop(ContainerCommand cmd) {

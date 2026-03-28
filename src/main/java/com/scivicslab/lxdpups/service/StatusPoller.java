@@ -1,25 +1,27 @@
 package com.scivicslab.lxdpups.service;
 
+import com.scivicslab.lxdpups.actor.LxdPupsActorSystem;
 import com.scivicslab.lxdpups.config.PortalConfigLoader;
 import com.scivicslab.lxdpups.model.ContainerInfo;
-import com.scivicslab.lxdpups.model.HostService;
 import com.scivicslab.lxdpups.model.PortalStatus;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 /**
  * Periodically polls all services and containers for status updates.
+ * Status is stored in StatusActor instead of AtomicReference.
  */
 @ApplicationScoped
 public class StatusPoller {
 
     private static final Logger LOG = Logger.getLogger(StatusPoller.class.getName());
+
+    @Inject
+    LxdPupsActorSystem actorSystem;
 
     @Inject
     HostServiceManager hostServiceManager;
@@ -30,15 +32,11 @@ public class StatusPoller {
     @Inject
     PortalConfigLoader configLoader;
 
-    private final AtomicReference<PortalStatus> latestStatus = new AtomicReference<>(
-            new PortalStatus(List.of(), List.of()));
-
     @Scheduled(every = "10s")
     void poll() {
         try {
             var mgmtServices = hostServiceManager.getAllStatuses();
 
-            // List containers from all configured remotes
             var containers = new ArrayList<ContainerInfo>();
             var remotes = configLoader.getConfig().getRemotes();
             if (remotes.isEmpty()) {
@@ -49,14 +47,15 @@ public class StatusPoller {
                 }
             }
 
-            latestStatus.set(new PortalStatus(mgmtServices, containers));
+            var status = new PortalStatus(mgmtServices, containers);
+            actorSystem.getStatusActor().tell(a -> a.setStatus(status));
         } catch (Exception e) {
             LOG.warning("Status poll failed: " + e.getMessage());
         }
     }
 
     public PortalStatus getLatestStatus() {
-        return latestStatus.get();
+        return actorSystem.getStatusActor().ask(a -> a.getStatus()).join();
     }
 
     /**

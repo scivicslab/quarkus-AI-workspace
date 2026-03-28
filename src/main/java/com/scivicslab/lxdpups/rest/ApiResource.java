@@ -85,21 +85,23 @@ public class ApiResource {
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     public Multi<ServiceProgress> streamProgress(@PathParam("name") String name) {
-        var current = processManager.getProgress(name);
         return Multi.createFrom().emitter(emitter -> {
-            emitter.emit(current);
-            if (current.done()) {
-                emitter.complete();
-                return;
-            }
-            java.util.function.Consumer<ServiceProgress> listener = progress -> {
-                emitter.emit(progress);
-                if (progress.done()) {
+            Thread.ofVirtual().name("stream-svc-" + name).start(() -> {
+                try {
+                    while (true) {
+                        var progress = processManager.getProgress(name);
+                        emitter.emit(progress);
+                        if (progress.done()) break;
+                        Thread.sleep(1000);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    // ignore
+                } finally {
                     emitter.complete();
                 }
-            };
-            processManager.addProgressListener(name, listener);
-            emitter.onTermination(() -> processManager.removeProgressListener(name, listener));
+            });
         });
     }
 
@@ -394,21 +396,23 @@ public class ApiResource {
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     public Multi<ServiceProgress> streamBuildProgress(@PathParam("name") String name) {
-        var current = buildManager.getProgress(name);
         return Multi.createFrom().emitter(emitter -> {
-            emitter.emit(current);
-            if (current.done()) {
-                emitter.complete();
-                return;
-            }
-            java.util.function.Consumer<ServiceProgress> listener = progress -> {
-                emitter.emit(progress);
-                if (progress.done()) {
+            Thread.ofVirtual().name("stream-build-" + name).start(() -> {
+                try {
+                    while (true) {
+                        var progress = buildManager.getProgress(name);
+                        emitter.emit(progress);
+                        if (progress.done()) break;
+                        Thread.sleep(1000);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    // ignore
+                } finally {
                     emitter.complete();
                 }
-            };
-            buildManager.addProgressListener(name, listener);
-            emitter.onTermination(() -> buildManager.removeProgressListener(name, listener));
+            });
         });
     }
 }
