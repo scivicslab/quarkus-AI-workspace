@@ -5,7 +5,6 @@ import com.scivicslab.serviceportal.model.*;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,24 +86,38 @@ public class DockerBackend implements ServiceBackend {
 
     @Override
     public DashboardModel getDashboardModel() {
-        // Mock data for now - should be populated from actual services
-        List<HostService> managementServices = new ArrayList<>();
-        List<ToolInstance> toolInstances = new ArrayList<>();
-        List<ToolDefinition> tools = new ArrayList<>();
+        List<ToolInstance> toolInstances = supervisors.values().stream()
+            .map(supervisor -> {
+                ServiceStatus s = supervisor.getStatus();
+                ServiceStatusEnum statusEnum = switch (s.status()) {
+                    case RUNNING   -> ServiceStatusEnum.ACTIVE;
+                    case STOPPED,
+                         STOPPING  -> ServiceStatusEnum.INACTIVE;
+                    case STARTING  -> ServiceStatusEnum.STARTING;
+                    case ERROR     -> ServiceStatusEnum.FAILED;
+                };
+                return new ToolInstance(s.id(), s.port(), s.name(), "", statusEnum, "/", "");
+            })
+            .toList();
 
-        // TODO: Populate with actual service data from supervisors
+        List<ToolDefinition> tools = supervisors.values().stream()
+            .map(supervisor -> {
+                ServicePortalConfig.ToolDefinition cfg = supervisor.getConfig();
+                return new ToolDefinition(cfg.name(), cfg.name(), "", cfg.jar(), cfg.port(), null, cfg.autoStart());
+            })
+            .toList();
 
         return new DashboardModel(
-            true,                       // containerMode
-            false,                      // hostMode
-            "localhost",                // myIp
-            managementServices,         // managementServices
-            toolInstances,              // toolInstances
-            tools,                      // tools
-            List.of(),                  // containers
-            new HashMap<>(),            // containerProgress
-            List.of(),                  // hostTools
-            ""                          // storageInfo
+            true,        // containerMode
+            false,       // hostMode
+            "localhost", // myIp
+            List.of(),   // managementServices
+            toolInstances,
+            tools,
+            List.of(),   // containers
+            new HashMap<>(), // containerProgress
+            List.of(),   // hostTools
+            ""           // storageInfo
         );
     }
 }

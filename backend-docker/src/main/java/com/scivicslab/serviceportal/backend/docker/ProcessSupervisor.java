@@ -27,6 +27,10 @@ public class ProcessSupervisor {
         this.config = config;
     }
 
+    public ServicePortalConfig.ToolDefinition getConfig() {
+        return config;
+    }
+
     public synchronized void start() {
         if (process != null && process.isAlive()) {
             logger.info(config.name() + " is already running");
