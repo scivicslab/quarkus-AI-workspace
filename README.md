@@ -1,114 +1,245 @@
-# LXD-pups Portal
+# quarkus-service-portal
 
-**LXD-pups** = **LXD** **P**er-**U**ser **P**od **S**ervice — My Own OpenClaw and LangGraph
+Unified service management portal with pluggable backends for Docker containers and LXD hosts.
 
-Personal AI development platform that integrates LLM Console, Turing Workflow Editor, MCP Gateway, and predict-ja into a unified local environment managed through a single dashboard.
+## Overview
+
+`lxd-pups-portal` と `toolkit-launcher` はどちらも「YAML 設定を読み、サービスを起動・監視し、Web ダッシュボードで管理する」という同じアーキテクチャを持ちながら、別々に実装されていた。このプロジェクトはその共通部分を統合し、環境ごとの違いをプラグイン（バックエンド）として切り出したものである。
+
+`quarkus-chat-ui` が LLM プロバイダをプラグイン化しているのと同じパターンで設計されている。
 
 ## Architecture
 
 ```
-Portal (:8080)  ← you are here
-  │
-  ├─ Host services (direct systemctl)
-  │   ├─ MCP Gateway    (:8888)  — Gateway of Gateways
-  │   ├─ predict-ja     (:8190)  — Japanese prediction
-  │   └─ predict-en     (:8191)  — English prediction (future)
-  │
-  ├─ Worker LXC "bioinfo" (lxc exec)
-  │   ├─ MCP Gateway    (:8888)
-  │   ├─ LLM Console    (:8200, :8201, ...)
-  │   └─ Workflow Editor (:9300, :9301, ...)
-  │
-  └─ Worker LXC "web-dev" (lxc exec)
-      ├─ MCP Gateway    (:8888)
-      ├─ LLM Console    (:8200, :8201, ...)
-      └─ Workflow Editor (:9300, :9301, ...)
+quarkus-service-portal/
+├── service-portal-core/      # 共通コア
+│   ├── ServiceBackend SPI    # バックエンド抽象インターフェース
+│   ├── REST API              # /api/* エンドポイント
+│   ├── Dashboard UI          # Qute テンプレート（lxd-pups オレンジテーマ）
+│   └── データモデル           # HostService, ToolInstance, Container...
+│
+├── backend-docker/           # Docker コンテナモード
+│   ├── ProcessSupervisor     # Java プロセス管理
+│   └── tools.yaml 対応       # ツール起動設定
+│
+└── backend-lxd/              # LXD ホストモード
+    ├── LXC コンテナ管理       # lxc start/stop/exec
+    ├── systemd サービス管理   # systemctl start/stop
+    └── portal.yaml 対応      # ホスト設定
 ```
 
-Each worker LXC has its own isolated `localhost` — all containers use the same port numbers without conflict.
+### Backend Selection
 
-## Prerequisites
+起動時に環境を自動検出する。`/.dockerenv` が存在すれば `backend-docker`、`lxc` コマンドが使えれば `backend-lxd` を選択する。
 
-- Java 21
-- LXD (`sudo snap install lxd && lxd init --minimal`)
-- User in `lxd` group (`sudo usermod -aG lxd $USER`)
+```bash
+# 自動検出
+java -jar service-portal-core/target/quarkus-app/quarkus-run.jar
+
+# 明示的指定
+java -jar ... -Dbackend=docker
+java -jar ... -Dbackend=lxd
+```
+
+## Dashboard UI
+
+lxd-pups のオレンジテーマを踏襲した Web ダッシュボード。バックエンドによって表示セクションが切り替わる。
+
+### Container Mode (`backend-docker`)
+
+Docker コンテナ内で動作する AI ツールキット向け:
+
+```
+┌─────────────────────────────────┐
+│  Management Services            │  常時起動の管理サービス（mcp-gateway 等）
+│  ・mcp-gateway  :8888  ACTIVE   │  Start / Stop ボタン
+│  ・predict-ja   :8190  ACTIVE   │
+├─────────────────────────────────┤
+│  Running Services               │  実行中のツールインスタンス
+│  🗨️ Quarkus Chat UI  :8200      │  Stop ボタン、メモ入力
+├─────────────────────────────────┤
+│  Available Tools                │  起動可能なツール（グリッド表示）
+│  [🗨️ Chat UI]  [📊 Editor]      │  + New / Open ボタン
+└─────────────────────────────────┘
+```
+
+### Host Mode (`backend-lxd`)
+
+LXD ホスト上で複数ワーカーコンテナを管理する向け:
+
+```
+┌─────────────────────────────────┐
+│  Management Services            │  ホストサービス（systemd unit）
+│  ・mcp-gateway  :8888  ACTIVE   │  Start / Stop ボタン
+├─────────────────────────────────┤
+│  Worker Containers              │  LXC ワーカーコンテナ一覧
+│  [bioinfo  Running]             │  コンテナ内サービス一覧
+│  [web-dev  Stopped]             │  Start / Stop ボタン
+├─────────────────────────────────┤
+│  Tools                          │  ホストツール（外部リンク）
+│  [📚 Docs]  [🔧 Monitor]        │
+├─────────────────────────────────┤
+│  Administration                 │  LXC Manager リンク
+└─────────────────────────────────┘
+```
+
+## Module Structure
+
+### service-portal-core
+
+バックエンドに依存しない共通コード。
+
+```
+service-portal-core/
+├── src/main/java/com/scivicslab/serviceportal/
+│   ├── spi/
+│   │   ├── ServiceBackend.java     # バックエンド SPI インターフェース
+│   │   └── ServiceException.java
+│   ├── model/
+│   │   ├── DashboardModel.java     # ダッシュボード全体モデル
+│   │   ├── HostService.java        # 管理サービス
+│   │   ├── ToolInstance.java       # 実行中ツールインスタンス
+│   │   ├── ToolDefinition.java     # 利用可能ツール定義
+│   │   ├── Container.java          # LXC コンテナ
+│   │   ├── HostTool.java           # ホストツール
+│   │   └── ServiceStatusEnum.java  # ACTIVE / INACTIVE / STARTING / FAILED / UNKNOWN
+│   ├── rest/
+│   │   ├── DashboardResource.java  # GET /
+│   │   └── ServiceResource.java    # GET/POST /api/*
+│   └── config/
+│       ├── ServicePortalConfig.java
+│       ├── ServicePortalConfigLoader.java
+│       ├── BackendLoader.java
+│       └── BackendProducer.java
+└── src/main/resources/
+    └── templates/
+        └── dashboard.html          # Qute テンプレート
+```
+
+### backend-docker
+
+Docker コンテナ内での Java プロセス管理。Java SPI (`ServiceLoader`) で登録される。
+
+- `DockerBackend` — `ServiceBackend` 実装
+- `ProcessSupervisor` — `java -jar` プロセスの起動・監視・ログ収集
+
+### backend-lxd
+
+LXD ホスト上での LXC コンテナおよび systemd サービス管理。
+
+- `LxdBackend` — `ServiceBackend` 実装
+- `CommandRunner` — `lxc` / `systemctl` コマンドの実行
+- POJO-actor ベースのアクターシステム（`ContainerSupervisorActor` 等）
+
+## ServiceBackend SPI
+
+バックエンドは Java SPI として登録する。
+
+```java
+public interface ServiceBackend {
+    void initialize(ServicePortalConfig config);
+    void startService(String serviceId) throws ServiceException;
+    void stopService(String serviceId) throws ServiceException;
+    List<ServiceStatus> getServiceStatuses();
+    List<String> getServiceLogs(String serviceId, int lines);
+    String getBackendType();   // "docker" or "lxd"
+    DashboardModel getDashboardModel();
+}
+```
+
+SPI 登録ファイル: `META-INF/services/com.scivicslab.serviceportal.spi.ServiceBackend`
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Dashboard UI (HTML) |
+| `GET` | `/api/status` | ダッシュボード全体のステータス (JSON) |
+| `POST` | `/api/mgmt/{name}/start` | 管理サービスを起動 |
+| `POST` | `/api/mgmt/{name}/stop` | 管理サービスを停止 |
+| `GET` | `/api/mgmt/{name}/progress` | 起動進捗を取得 |
+| `POST` | `/api/tool/{name}/launch` | ツールを新規起動 |
+| `POST` | `/api/tool/{name}/{port}/stop` | ツールインスタンスを停止 |
+| `POST` | `/api/tool/{name}/{port}/memo` | ツールインスタンスのメモを更新 |
+| `POST` | `/api/container/{name}/start` | コンテナを起動 |
+| `POST` | `/api/container/{name}/stop` | コンテナを停止 |
+| `POST` | `/api/container/{name}/snapshot` | コンテナのスナップショット作成 |
+
+## Configuration
+
+`service-portal.yaml` で設定:
+
+```yaml
+backend: auto   # auto | docker | lxd
+
+# backend-docker 用
+docker:
+  tools:
+    - name: quarkus-chat-ui
+      jar: /opt/tools/quarkus-chat-ui.jar
+      port: 8200
+      icon: "🗨️"
+      autoStart: false
+    - name: mcp-gateway
+      jar: /opt/tools/mcp-gateway.jar
+      port: 8888
+      autoStart: true
+
+# backend-lxd 用
+lxd:
+  management:
+    - name: mcp-gateway
+      unit: mcp-gateway.service
+      port: 8888
+  containers:
+    - name: bioinfo
+      template: worker
+```
 
 ## Build
 
 ```bash
-rm -rf target && mvn install
+mvn install
 ```
 
-## Run
+ユニットテストのみ:
 
 ```bash
-java -jar target/quarkus-app/quarkus-run.jar
+mvn test
 ```
 
-Open `http://localhost:8080` in your browser.
+インテグレーションテスト（k8s/LXD 環境必要）:
 
-## Configuration
-
-Edit `portal.yaml` in the working directory (falls back to classpath default):
-
-```yaml
-portal:
-  title: "LXD-pups Dev Environment"
-
-management:
-  mcp-gateway:
-    enabled: true
-    unit: mcp-gateway.service
-    port: 8888
-  predict-ja:
-    enabled: true
-    unit: predict-ja.service
-    port: 8190
-
-worker-template:
-  llm-console-claude:
-    unit: llm-console-claude@.service
-    port-range: 8200-8299
-    instances:
-      - port: 8200
-        title: "Claude — Coding"
-  workflow-editor:
-    unit: workflow-editor@.service
-    port-range: 9300-9399
-    instances:
-      - port: 9300
-        title: "Workflow — Analysis"
-
-remotes:
-  local:
-    description: "This machine"
-  stonefly515:
-    address: 192.168.5.15
-    description: "DGX Spark — GPU node"
+```bash
+mvn verify
 ```
 
-## API
+## Prerequisites
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET /` | Dashboard | HTML UI |
-| `GET /api/status` | Full status | All services + containers |
-| `POST /api/management/services/{unit}/start` | Start host service | `systemctl start` |
-| `POST /api/management/services/{unit}/stop` | Stop host service | `systemctl stop` |
-| `POST /api/containers` | Launch container | `lxc launch` |
-| `POST /api/containers/{name}/start` | Start container | `lxc start` |
-| `POST /api/containers/{name}/stop` | Stop container | `lxc stop` |
-| `POST /api/containers/{name}/snapshot` | Snapshot | `lxc snapshot` |
-| `DELETE /api/containers/{name}` | Delete container | `lxc delete` |
+- Java 21
+- Maven 3.9+
 
-## Relationship to k8s-pups
+**backend-lxd を使う場合:**
+- LXD (`sudo snap install lxd && lxd init --minimal`)
+- ユーザーが `lxd` グループに所属していること
 
-| | k8s-pups | LXD-pups |
-|---|---|---|
-| Users | Multi-user (Keycloak) | Single user |
-| Isolation | Kubernetes Pods | LXC containers |
-| Target | University / team server | Personal workstation |
-| Management | kubectl + Operators | lxc + systemd |
-| UI theme | Shared orange theme | Shared orange theme |
+## Relationship to Other Projects
 
-They are complementary — use k8s-pups for shared infrastructure, LXD-pups for your personal AI development environment.
+| Project | Role |
+|---------|------|
+| `quarkus-chat-ui` | 同じプラグインアーキテクチャの先行実装（LLM プロバイダを SPI でプラグイン化） |
+| `lxd-pups` | `backend-lxd` のベース。LXD ホスト上で `quarkus-service-portal` を実行 |
+| `toolkit-launcher` | `backend-docker` のベース。Docker コンテナ内ツール管理の先行実装 |
+| `quarkus-mcp-gateway` | このポータルから管理される主要サービスの一つ |
+
+### Deployment Hierarchy
+
+```
+docker run (ai-toolkit)  ← backend=docker モード（最も簡単）
+      ↓
+LXD-pups                 ← backend=lxd モード（パーソナル開発環境）
+      ↓
+k8s-pups                 ← Kubernetes（マルチユーザー共有環境）
+```
+
+同じ `quarkus-service-portal` が異なるモードで動作することで、ユーザーは段階的に移行できる。
