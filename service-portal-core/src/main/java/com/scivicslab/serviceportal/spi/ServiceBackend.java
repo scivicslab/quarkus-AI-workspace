@@ -1,71 +1,49 @@
 package com.scivicslab.serviceportal.spi;
 
-import com.scivicslab.serviceportal.model.ServiceStatus;
 import com.scivicslab.serviceportal.model.DashboardModel;
 import com.scivicslab.serviceportal.config.ServicePortalConfig;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service management backend abstraction.
  *
  * Implementations:
- * - DockerBackend: manages processes in a Docker container
- * - LxdBackend: manages LXC containers and systemd services
+ * - DockerBackend: manages java processes inside a Docker/k8s container
+ * - LxdBackend:    manages LXC containers and systemd services on an LXD host
  */
 public interface ServiceBackend {
 
-    /**
-     * Initialize backend with configuration.
-     * Called once at application startup.
-     *
-     * @param config Configuration loaded from service-portal.yaml
-     */
+    /** Initialize backend with configuration. Called once at application startup. */
     void initialize(ServicePortalConfig config);
 
     /**
-     * Start a service.
-     *
-     * @param serviceId Service identifier (e.g., "quarkus-chat-ui")
-     * @throws ServiceException if service does not exist or start fails
+     * Launch a new instance of the named tool with the given parameters.
+     * The same tool can be launched multiple times with different parameters;
+     * each instance gets a unique port.
      */
-    void startService(String serviceId) throws ServiceException;
+    void startService(String toolName, Map<String, String> params) throws ServiceException;
 
     /**
-     * Stop a service.
-     *
-     * @param serviceId Service identifier
-     * @throws ServiceException if service does not exist or stop fails
+     * Stop the instance of the named tool running on the given port.
      */
-    void stopService(String serviceId) throws ServiceException;
+    void stopService(String toolName, int port) throws ServiceException;
 
     /**
-     * Get current status of all services.
-     *
-     * @return List of service statuses
+     * Return recent log lines for a specific instance.
      */
-    List<ServiceStatus> getServiceStatuses();
+    List<String> getServiceLogs(String toolName, int port, int lines);
 
     /**
-     * Get logs for a service.
-     *
-     * @param serviceId Service identifier
-     * @param lines Number of lines to retrieve (default: 100)
-     * @return Log lines
-     */
-    List<String> getServiceLogs(String serviceId, int lines);
-
-    /**
-     * Get backend type.
-     *
-     * @return "docker" or "lxd"
-     */
-    String getBackendType();
-
-    /**
-     * Get dashboard model for UI rendering.
-     *
-     * @return Dashboard model with all data
+     * Return the dashboard model for UI rendering.
+     * This is the primary read path for both the HTML dashboard and the /api/status endpoint.
      */
     DashboardModel getDashboardModel();
+
+    /** Update the memo for a specific instance. No-op if instance not found. */
+    default void updateMemo(String toolName, int port, String memo) {}
+
+    /** Returns "docker" or "lxd". Used by BackendLoader. */
+    String getBackendType();
 }

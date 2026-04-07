@@ -20,13 +20,34 @@ public record ServicePortalConfig(
 
     /**
      * Tool definition for Docker backend.
+     * If args is non-null and non-empty, the process is launched as:
+     *   java -jar <jar> <args...>
+     * Otherwise the default Quarkus launch is used:
+     *   java -jar <jar> -Dquarkus.http.port=<port>
      */
     public record ToolDefinition(
         String name,
         String jar,
         int port,
-        boolean autoStart
+        boolean autoStart,
+        java.util.List<String> args,
+        java.util.List<ParamDefinition> params
     ) {}
+
+    /** A user-configurable parameter shown in the tool launch tile. */
+    public record ParamDefinition(
+        String key,          // unique key within the tool
+        String label,        // display label
+        String type,         // "dir" | "select" | "text"
+        String defaultVal,   // default value (env-vars expanded at launch)
+        String jvmProp,      // if set, passed as -D{jvmProp}={value}
+        boolean workingDir,  // if true, sets ProcessBuilder working directory
+        int argPos,          // if >= 0, replaces args[argPos]
+        java.util.List<ParamOption> options  // for type=select
+    ) {}
+
+    /** An option entry for a select-type ParamDefinition. */
+    public record ParamOption(String value, String label) {}
 
     /**
      * LXD backend configuration.

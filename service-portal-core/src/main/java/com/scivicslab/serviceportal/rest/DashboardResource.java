@@ -28,15 +28,8 @@ public class DashboardResource {
     public TemplateInstance get() {
         DashboardModel model = backend.getDashboardModel();
         return dashboard
-            .data("containerMode", model.containerMode())
-            .data("hostMode", model.hostMode())
-            .data("myIp", model.myIp())
             .data("managementServices", model.managementServices())
-            .data("toolInstances", model.toolInstances())
-            .data("tools", model.tools())
-            .data("containers", model.containers())
-            .data("containerProgress", model.containerProgress())
-            .data("hostTools", model.hostTools())
-            .data("storageInfo", model.storageInfo());
+            .data("activeSessions", model.activeSessions())
+            .data("launchTools", model.launchTools());
     }
 }

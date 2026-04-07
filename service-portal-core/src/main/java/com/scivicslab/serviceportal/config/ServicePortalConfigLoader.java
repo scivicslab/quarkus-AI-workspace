@@ -19,21 +19,36 @@ public class ServicePortalConfigLoader {
 
     /**
      * Load configuration from service-portal.yaml.
-     * Looks in current directory first, then classpath.
+     * Search order:
+     *   1. System property -Dservice.portal.config=<path>
+     *   2. Current working directory
+     *   3. /app/service-portal.yaml (standard container path)
+     *   4. Classpath
      */
     public static ServicePortalConfig load() {
-        Path localConfig = Path.of(CONFIG_FILE);
-
-        if (Files.exists(localConfig)) {
-            logger.info("Loading config from: " + localConfig.toAbsolutePath());
-            try (InputStream in = Files.newInputStream(localConfig)) {
-                return parse(in);
-            } catch (Exception e) {
-                logger.warning("Failed to load local config: " + e.getMessage());
+        // 1. System property override
+        String configPathProp = System.getProperty("service.portal.config");
+        if (configPathProp != null) {
+            Path p = Path.of(configPathProp);
+            if (Files.exists(p)) {
+                return loadFromFile(p);
             }
+            logger.warning("Config path from system property not found: " + configPathProp);
         }
 
-        // Fallback to classpath
+        // 2. Current working directory
+        Path localConfig = Path.of(CONFIG_FILE);
+        if (Files.exists(localConfig)) {
+            return loadFromFile(localConfig);
+        }
+
+        // 3. Standard container path
+        Path containerConfig = Path.of("/app/" + CONFIG_FILE);
+        if (Files.exists(containerConfig)) {
+            return loadFromFile(containerConfig);
+        }
+
+        // 4. Classpath fallback
         try (InputStream in = ServicePortalConfigLoader.class.getClassLoader()
                 .getResourceAsStream(CONFIG_FILE)) {
             if (in != null) {
@@ -46,6 +61,16 @@ public class ServicePortalConfigLoader {
 
         logger.info("No config found, using defaults");
         return ServicePortalConfig.defaultConfig();
+    }
+
+    private static ServicePortalConfig loadFromFile(Path path) {
+        logger.info("Loading config from: " + path.toAbsolutePath());
+        try (InputStream in = Files.newInputStream(path)) {
+            return parse(in);
+        } catch (Exception e) {
+            logger.warning("Failed to load config from " + path + ": " + e.getMessage());
+            return ServicePortalConfig.defaultConfig();
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -61,12 +86,40 @@ public class ServicePortalConfigLoader {
             List<Map<String, Object>> tools = (List<Map<String, Object>>) docker.get("tools");
 
             List<ServicePortalConfig.ToolDefinition> toolDefs = tools.stream()
-                .map(t -> new ServicePortalConfig.ToolDefinition(
-                    (String) t.get("name"),
-                    (String) t.get("jar"),
-                    (Integer) t.get("port"),
-                    (Boolean) t.getOrDefault("autoStart", false)
-                ))
+                .map(t -> {
+                    @SuppressWarnings("unchecked")
+                    List<String> args = (List<String>) t.get("args");
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> rawParams = (List<Map<String, Object>>) t.get("params");
+                    List<ServicePortalConfig.ParamDefinition> params = rawParams == null ? List.of()
+                        : rawParams.stream().map(p -> {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, String>> rawOpts = (List<Map<String, String>>) p.get("options");
+                            List<ServicePortalConfig.ParamOption> opts = rawOpts == null ? List.of()
+                                : rawOpts.stream()
+                                    .map(o -> new ServicePortalConfig.ParamOption(
+                                        (String) o.get("value"), (String) o.get("label")))
+                                    .toList();
+                            return new ServicePortalConfig.ParamDefinition(
+                                (String) p.get("key"),
+                                (String) p.getOrDefault("label", p.get("key")),
+                                (String) p.getOrDefault("type", "text"),
+                                (String) p.getOrDefault("default", ""),
+                                (String) p.get("jvmProp"),
+                                (Boolean) p.getOrDefault("workingDir", false),
+                                p.containsKey("argPos") ? ((Number) p.get("argPos")).intValue() : -1,
+                                opts
+                            );
+                        }).toList();
+                    return new ServicePortalConfig.ToolDefinition(
+                        (String) t.get("name"),
+                        (String) t.get("jar"),
+                        (Integer) t.get("port"),
+                        (Boolean) t.getOrDefault("autoStart", false),
+                        args,
+                        params
+                    );
+                })
                 .toList();
 
             dockerConfig = new ServicePortalConfig.DockerConfig(toolDefs);

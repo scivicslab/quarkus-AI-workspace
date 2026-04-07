@@ -1,6 +1,5 @@
 package com.scivicslab.serviceportal.rest;
 
-import com.scivicslab.serviceportal.model.ServiceStatus;
 import com.scivicslab.serviceportal.model.DashboardModel;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
@@ -15,6 +14,15 @@ import java.util.Map;
 
 /**
  * REST API for service management.
+ *
+ * Endpoints:
+ *   GET  /api/status                        - DashboardModel (JSON)
+ *   POST /api/mgmt/{name}/start             - Start management service
+ *   POST /api/mgmt/{name}/stop              - Stop management service
+ *   POST /api/tool/{name}/launch            - Launch new tool instance (body: params map)
+ *   POST /api/tool/{name}/{port}/stop       - Stop tool instance
+ *   POST /api/tool/{name}/{port}/memo       - Update memo for tool instance
+ *   GET  /api/tool/{name}/{port}/logs       - Get recent logs
  */
 @Path("/api")
 @Produces(MediaType.APPLICATION_JSON)
@@ -25,56 +33,50 @@ public class ServiceResource {
 
     @GET
     @Path("/status")
-    public Response getStatus() {
-        DashboardModel model = backend.getDashboardModel();
-        return Response.ok(model).build();
+    public DashboardModel getStatus() {
+        return backend.getDashboardModel();
     }
 
-    // Management service endpoints
+    // ---------------------------------------------------------------
+    // Management services (autoStart=true tools)
+    // ---------------------------------------------------------------
+
     @POST
     @Path("/mgmt/{name}/start")
     public Response startManagementService(@PathParam("name") String name) {
         try {
-            backend.startService("mgmt:" + name);
-            return Response.ok(Map.of("success", true)).build();
+            backend.startService(name, Map.of());
+            return ok();
         } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
+            return error(e);
         }
     }
 
     @POST
     @Path("/mgmt/{name}/stop")
-    public Response stopManagementService(@PathParam("name") String name) {
+    public Response stopManagementService(@PathParam("name") String name,
+                                          @QueryParam("port") int port) {
         try {
-            backend.stopService("mgmt:" + name);
-            return Response.ok(Map.of("success", true)).build();
+            backend.stopService(name, port);
+            return ok();
         } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
+            return error(e);
         }
     }
 
-    @GET
-    @Path("/mgmt/{name}/progress")
-    public Response getManagementServiceProgress(@PathParam("name") String name) {
-        // TODO: Implement progress tracking
-        return Response.ok(Map.of("phase", "COMPLETE", "messages", List.of())).build();
-    }
+    // ---------------------------------------------------------------
+    // Tool instances (autoStart=false tools, multiple instances)
+    // ---------------------------------------------------------------
 
-    // Tool endpoints
     @POST
     @Path("/tool/{name}/launch")
-    public Response launchTool(@PathParam("name") String name) {
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response launchTool(@PathParam("name") String name, Map<String, String> params) {
         try {
-            backend.startService("tool:" + name);
-            return Response.ok(Map.of("success", true)).build();
+            backend.startService(name, params != null ? params : Map.of());
+            return ok();
         } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
+            return error(e);
         }
     }
 
@@ -82,102 +84,44 @@ public class ServiceResource {
     @Path("/tool/{name}/{port}/stop")
     public Response stopTool(@PathParam("name") String name, @PathParam("port") int port) {
         try {
-            backend.stopService("tool:" + name + ":" + port);
-            return Response.ok(Map.of("success", true)).build();
+            backend.stopService(name, port);
+            return ok();
         } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
+            return error(e);
         }
     }
 
     @POST
     @Path("/tool/{name}/{port}/memo")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response updateToolMemo(@PathParam("name") String name,
-                                   @PathParam("port") int port,
-                                   Map<String, String> payload) {
-        String memo = payload.get("memo");
-        // TODO: Implement memo persistence
-        return Response.ok(Map.of("success", true)).build();
-    }
-
-    // Container endpoints
-    @POST
-    @Path("/container/{name}/start")
-    public Response startContainer(@PathParam("name") String name) {
-        try {
-            backend.startService("container:" + name);
-            return Response.ok(Map.of("success", true)).build();
-        } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
-        }
-    }
-
-    @POST
-    @Path("/container/{name}/stop")
-    public Response stopContainer(@PathParam("name") String name) {
-        try {
-            backend.stopService("container:" + name);
-            return Response.ok(Map.of("success", true)).build();
-        } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
-        }
-    }
-
-    @POST
-    @Path("/container/{name}/snapshot")
-    public Response snapshotContainer(@PathParam("name") String name) {
-        // TODO: Implement container snapshot
-        return Response.ok(Map.of("success", true)).build();
-    }
-
-    // Legacy endpoints for backward compatibility
-    @GET
-    @Path("/services/status")
-    public Response getServicesStatus() {
-        List<ServiceStatus> statuses = backend.getServiceStatuses();
-        return Response.ok(Map.of(
-            "backend", backend.getBackendType(),
-            "services", statuses
-        )).build();
-    }
-
-    @POST
-    @Path("/services/{id}/start")
-    public Response startService(@PathParam("id") String serviceId) {
-        try {
-            backend.startService(serviceId);
-            return Response.ok(Map.of("success", true)).build();
-        } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
-        }
-    }
-
-    @POST
-    @Path("/services/{id}/stop")
-    public Response stopService(@PathParam("id") String serviceId) {
-        try {
-            backend.stopService(serviceId);
-            return Response.ok(Map.of("success", true)).build();
-        } catch (ServiceException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(Map.of("success", false, "error", e.getMessage()))
-                .build();
-        }
+    public Response updateMemo(@PathParam("name") String name,
+                               @PathParam("port") int port,
+                               Map<String, String> payload) {
+        String memo = payload != null ? payload.getOrDefault("memo", "") : "";
+        backend.updateMemo(name, port, memo);
+        return ok();
     }
 
     @GET
-    @Path("/services/{id}/logs")
-    public Response getLogs(@PathParam("id") String serviceId,
-                           @QueryParam("lines") @DefaultValue("100") int lines) {
-        List<String> logs = backend.getServiceLogs(serviceId, lines);
+    @Path("/tool/{name}/{port}/logs")
+    public Response getLogs(@PathParam("name") String name,
+                            @PathParam("port") int port,
+                            @QueryParam("lines") @DefaultValue("50") int lines) {
+        List<String> logs = backend.getServiceLogs(name, port, lines);
         return Response.ok(Map.of("logs", logs)).build();
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
+    private Response ok() {
+        return Response.ok(Map.of("success", true)).build();
+    }
+
+    private Response error(ServiceException e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+            .entity(Map.of("success", false, "error", e.getMessage()))
+            .build();
     }
 }

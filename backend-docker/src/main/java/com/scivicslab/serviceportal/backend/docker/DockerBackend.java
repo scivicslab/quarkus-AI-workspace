@@ -1,82 +1,131 @@
 package com.scivicslab.serviceportal.backend.docker;
 
 import com.scivicslab.serviceportal.config.ServicePortalConfig;
-import com.scivicslab.serviceportal.model.*;
+import com.scivicslab.serviceportal.model.DashboardModel;
+import com.scivicslab.serviceportal.model.ParamDefinition;
+import com.scivicslab.serviceportal.model.SessionState;
+import com.scivicslab.serviceportal.model.SessionView;
+import com.scivicslab.serviceportal.model.ToolView;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
 /**
- * Docker backend implementation using process management.
- * Manages Java processes within a Docker container.
+ * ServiceBackend implementation for Docker/k8s environments.
+ * Manages java -jar child processes inside the container.
+ *
+ * Multiple instances of the same tool can run simultaneously on different ports.
+ * Port allocation: base port + number of existing active instances for that tool.
  */
 public class DockerBackend implements ServiceBackend {
 
     private static final Logger logger = Logger.getLogger(DockerBackend.class.getName());
 
-    private final Map<String, ProcessSupervisor> supervisors = new ConcurrentHashMap<>();
+    /** toolName -> list of instances (may have multiple per tool) */
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<ProcessSupervisor>> instances
+        = new ConcurrentHashMap<>();
+
+    private ServicePortalConfig config;
 
     @Override
     public void initialize(ServicePortalConfig config) {
-        if (config.docker() == null || config.docker().tools() == null) {
-            logger.warning("No Docker tools configured");
-            return;
-        }
+        this.config = config;
+        if (config.docker() == null) return;
 
-        for (ServicePortalConfig.ToolDefinition tool : config.docker().tools()) {
-            ProcessSupervisor supervisor = new ProcessSupervisor(tool);
-            supervisors.put(tool.name(), supervisor);
-
-            // Auto-start サービスを起動
+        for (var tool : config.docker().tools()) {
+            instances.put(tool.name(), new CopyOnWriteArrayList<>());
             if (tool.autoStart()) {
                 try {
-                    supervisor.start();
-                } catch (Exception e) {
-                    logger.warning("Failed to auto-start " + tool.name() + ": " + e.getMessage());
+                    startService(tool.name(), Map.of());
+                } catch (ServiceException e) {
+                    logger.severe("Failed to auto-start " + tool.name() + ": " + e.getMessage());
                 }
             }
         }
-
-        logger.info("Docker backend initialized with " + supervisors.size() + " tools");
+        logger.info("Docker backend initialized");
     }
 
     @Override
-    public void startService(String serviceId) throws ServiceException {
-        ProcessSupervisor supervisor = supervisors.get(serviceId);
-        if (supervisor == null) {
-            throw new ServiceException("Service not found: " + serviceId);
-        }
+    public void startService(String toolName, Map<String, String> params) throws ServiceException {
+        ServicePortalConfig.ToolDefinition def = findTool(toolName);
+        CopyOnWriteArrayList<ProcessSupervisor> list =
+            instances.computeIfAbsent(toolName, k -> new CopyOnWriteArrayList<>());
+
+        // Clean up stopped instances before calculating port offset
+        list.removeIf(s -> s.getState() == SessionState.STOPPED);
+
+        int port = def.port() + list.size();
+        ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
+        list.add(supervisor);
         supervisor.start();
     }
 
     @Override
-    public void stopService(String serviceId) throws ServiceException {
-        ProcessSupervisor supervisor = supervisors.get(serviceId);
-        if (supervisor == null) {
-            throw new ServiceException("Service not found: " + serviceId);
-        }
-        supervisor.stop();
+    public void stopService(String toolName, int port) throws ServiceException {
+        List<ProcessSupervisor> list = instances.getOrDefault(toolName, new CopyOnWriteArrayList<>());
+        ProcessSupervisor target = list.stream()
+            .filter(s -> s.getPort() == port)
+            .findFirst()
+            .orElseThrow(() -> new ServiceException("No instance of " + toolName + " on port " + port));
+        target.stop();
     }
 
     @Override
-    public List<ServiceStatus> getServiceStatuses() {
-        return supervisors.values().stream()
-            .map(ProcessSupervisor::getStatus)
-            .toList();
+    public List<String> getServiceLogs(String toolName, int port, int lines) {
+        return instances.getOrDefault(toolName, new CopyOnWriteArrayList<>()).stream()
+            .filter(s -> s.getPort() == port)
+            .findFirst()
+            .map(s -> s.getRecentLogs(lines))
+            .orElse(List.of());
     }
 
     @Override
-    public List<String> getServiceLogs(String serviceId, int lines) {
-        ProcessSupervisor supervisor = supervisors.get(serviceId);
-        if (supervisor == null) {
-            return List.of();
+    public DashboardModel getDashboardModel() {
+        List<SessionView> managementServices = new ArrayList<>();
+        List<SessionView> activeSessions = new ArrayList<>();
+        List<ToolView> launchTools = new ArrayList<>();
+
+        if (config.docker() == null) {
+            return new DashboardModel(managementServices, activeSessions, launchTools);
         }
-        return supervisor.getRecentLogs(lines);
+
+        for (var tool : config.docker().tools()) {
+            CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(tool.name(), new CopyOnWriteArrayList<>());
+
+            if (tool.autoStart()) {
+                // Management service section
+                if (list.isEmpty()) {
+                    managementServices.add(stoppedView(tool));
+                } else {
+                    for (var s : list) managementServices.add(s.toSessionView());
+                }
+            } else {
+                // Active sessions section: non-stopped instances
+                for (var s : list) {
+                    if (s.getState() != SessionState.STOPPED) {
+                        activeSessions.add(s.toSessionView());
+                    }
+                }
+                // Launch tools section: always show tile
+                launchTools.add(toToolView(tool));
+            }
+        }
+
+        return new DashboardModel(managementServices, activeSessions, launchTools);
+    }
+
+    @Override
+    public void updateMemo(String toolName, int port, String memo) {
+        instances.getOrDefault(toolName, new CopyOnWriteArrayList<>()).stream()
+            .filter(s -> s.getPort() == port)
+            .findFirst()
+            .ifPresent(s -> s.setMemo(memo));
     }
 
     @Override
@@ -84,40 +133,40 @@ public class DockerBackend implements ServiceBackend {
         return "docker";
     }
 
-    @Override
-    public DashboardModel getDashboardModel() {
-        List<ToolInstance> toolInstances = supervisors.values().stream()
-            .map(supervisor -> {
-                ServiceStatus s = supervisor.getStatus();
-                ServiceStatusEnum statusEnum = switch (s.status()) {
-                    case RUNNING   -> ServiceStatusEnum.ACTIVE;
-                    case STOPPED,
-                         STOPPING  -> ServiceStatusEnum.INACTIVE;
-                    case STARTING  -> ServiceStatusEnum.STARTING;
-                    case ERROR     -> ServiceStatusEnum.FAILED;
-                };
-                return new ToolInstance(s.id(), s.port(), s.name(), "", statusEnum, "/", "");
-            })
-            .toList();
+    // ---------------------------------------------------------------
+    // Private helpers
+    // ---------------------------------------------------------------
 
-        List<ToolDefinition> tools = supervisors.values().stream()
-            .map(supervisor -> {
-                ServicePortalConfig.ToolDefinition cfg = supervisor.getConfig();
-                return new ToolDefinition(cfg.name(), cfg.name(), "", cfg.jar(), cfg.port(), null, cfg.autoStart());
-            })
-            .toList();
+    private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {
+        if (config.docker() == null) throw new ServiceException("No docker config");
+        return config.docker().tools().stream()
+            .filter(t -> t.name().equals(name))
+            .findFirst()
+            .orElseThrow(() -> new ServiceException("Tool not found: " + name));
+    }
 
-        return new DashboardModel(
-            true,        // containerMode
-            false,       // hostMode
-            "localhost", // myIp
-            List.of(),   // managementServices
-            toolInstances,
-            tools,
-            List.of(),   // containers
-            new HashMap<>(), // containerProgress
-            List.of(),   // hostTools
-            ""           // storageInfo
+    private SessionView stoppedView(ServicePortalConfig.ToolDefinition tool) {
+        return new SessionView(
+            tool.name(), tool.port(), tool.name(), "",
+            SessionState.STOPPED, null, Map.of(), "", List.of()
         );
+    }
+
+    private ToolView toToolView(ServicePortalConfig.ToolDefinition tool) {
+        List<ParamDefinition> params = new ArrayList<>();
+        if (tool.params() != null) {
+            for (var p : tool.params()) {
+                List<ParamDefinition.ParamOption> options = p.options() == null ? List.of()
+                    : p.options().stream()
+                        .map(o -> new ParamDefinition.ParamOption(o.value(), o.label()))
+                        .toList();
+                params.add(new ParamDefinition(
+                    p.key(), p.label(), p.type(),
+                    ProcessSupervisor.expandEnvVars(p.defaultVal()),
+                    options
+                ));
+            }
+        }
+        return new ToolView(tool.name(), tool.name(), "", params);
     }
 }

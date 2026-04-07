@@ -24,7 +24,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
@@ -43,563 +43,280 @@
             z-index: 1000;
         }
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-        }
+        .brand { display: flex; align-items: center; gap: 14px; color: white; text-decoration: none; }
+        .brand-logo { font-size: 1.6rem; }
+        .brand-sep { width: 1px; height: 28px; background: rgba(255,255,255,.35); }
+        .brand-name { font-size: 1.1rem; font-weight: 700; letter-spacing: .3px; }
+        .brand-tag { font-size: .85rem; opacity: .85; }
 
-        .brand-logo {
-            font-size: 28px;
-        }
-
-        .brand-sep {
-            width: 2px;
-            height: 24px;
-            background: rgba(255,255,255,.3);
-        }
-
-        .brand-name {
-            font-size: 20px;
-            font-weight: 700;
-        }
-
-        .brand-tag {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        /* Main container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 28px;
-        }
-
-        /* Section */
-        .sessions-section {
-            margin-bottom: 32px;
-        }
+        /* Main layout */
+        main { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
 
         .section-label {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--muted);
-            margin-bottom: 12px;
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .08em;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* Management card */
-        .mgmt-card {
-            background: var(--card);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 20px 24px;
-        }
-
-        .mgmt-row {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .mgmt-row:last-child {
-            border-bottom: none;
-        }
-
-        .mgmt-name {
-            font-weight: 600;
-            font-size: 16px;
-            color: var(--text);
-        }
-
-        .mgmt-link {
-            color: var(--orange);
-            text-decoration: none;
-        }
-
-        .mgmt-link:hover {
-            text-decoration: underline;
-        }
-
-        .mgmt-port {
             color: var(--muted);
-            font-size: 14px;
+            margin: 28px 0 10px;
         }
 
-        .mgmt-process {
-            color: var(--muted);
-            font-size: 13px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            flex: 1;
-        }
-
-        .mgmt-actions {
-            display: flex;
-            gap: 8px;
-            margin-left: auto;
-        }
-
-        /* Badges */
-        .badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .badge::before {
-            content: '';
-            display: inline-block;
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-        }
-
-        .badge-ACTIVE {
-            background: #D1FAE5;
-            color: #065F46;
-        }
-
-        .badge-ACTIVE::before {
-            background: #10B981;
-        }
-
-        .badge-INACTIVE {
-            background: #F1F5F9;
-            color: #475569;
-        }
-
-        .badge-STARTING {
-            background: #FEF3C7;
-            color: #92400E;
-        }
-
-        .badge-STARTING::before {
-            animation: pulse-dot 1s infinite;
-            background: #F59E0B;
-        }
-
-        .badge-FAILED {
-            background: #FEE2E2;
-            color: #991B1B;
-        }
-
-        .badge-FAILED::before {
-            background: #EF4444;
-        }
-
-        .badge-Running {
-            background: #D1FAE5;
-            color: #065F46;
-        }
-
-        .badge-Stopped {
-            background: #F1F5F9;
-            color: #475569;
-        }
-
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-
-        /* Buttons */
-        .btn {
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .btn-sm {
-            padding: 4px 10px;
-            font-size: 12px;
-        }
-
-        .btn-stop {
-            background: var(--orange);
-            color: white;
-        }
-
-        .btn-stop:hover {
-            background: var(--orange-dark);
-        }
-
-        .btn-start {
-            background: #10B981;
-            color: white;
-        }
-
-        .btn-start:hover {
-            background: #059669;
-        }
-
-        /* Running services card */
-        .running-svc-card {
+        /* Session card */
+        .session-card {
             background: var(--card);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
             padding: 16px 20px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
-        .svc-icon {
-            font-size: 24px;
+        .session-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        .svc-name {
+        .session-name {
             font-weight: 600;
-            font-size: 15px;
+            font-size: 1rem;
+            color: var(--text);
+            text-decoration: none;
+        }
+        .session-name:hover { text-decoration: underline; }
+
+        .session-port {
+            font-size: .85rem;
+            color: var(--muted);
+            font-family: monospace;
+        }
+
+        .session-params {
+            font-size: .8rem;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        .session-log {
+            font-size: .78rem;
+            color: var(--muted);
+            font-family: monospace;
+            margin-top: 8px;
+            max-height: 80px;
+            overflow-y: auto;
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 6px 10px;
         }
 
         .memo-input {
+            margin-top: 8px;
             width: 100%;
-            margin-top: 10px;
-            padding: 6px 10px;
             border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 13px;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: .85rem;
+            color: var(--text);
+            background: var(--bg);
+            outline: none;
+        }
+        .memo-input:focus { border-color: var(--orange); }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: .75rem;
+            font-weight: 600;
+        }
+        .badge::before {
+            content: '';
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: .7;
+        }
+        .badge-READY    { background: #D1FAE5; color: #065F46; }
+        .badge-STARTING { background: #FEF3C7; color: #92400E; }
+        .badge-STARTING::before { animation: pulse 1s infinite; }
+        .badge-FAILED   { background: #FEE2E2; color: #991B1B; }
+        .badge-STOPPED  { background: #F1F5F9; color: #475569; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: .4; }
+            50% { opacity: 1; }
         }
 
-        /* Tool grid */
+        /* Buttons */
+        .btn {
+            padding: 5px 14px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: .82rem;
+            font-weight: 600;
+            transition: opacity .15s;
+        }
+        .btn:hover { opacity: .85; }
+        .btn-start { background: var(--orange); color: white; }
+        .btn-stop  { background: #FEE2E2; color: #991B1B; }
+        .btn-launch { background: var(--orange); color: white; }
+
+        /* Tool tile */
         .tool-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 14px;
         }
 
         .tool-tile {
             background: var(--card);
             border-radius: var(--radius);
-            padding: 20px;
             box-shadow: var(--shadow);
-            cursor: pointer;
+            padding: 20px;
             transition: transform .15s, box-shadow .15s;
-            text-align: center;
         }
-
         .tool-tile:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow-hover);
         }
 
-        .tool-icon {
-            font-size: 40px;
-            margin-bottom: 12px;
-        }
-
-        .tool-name {
-            font-weight: 600;
-            font-size: 15px;
-            margin-bottom: 8px;
-            color: var(--text);
-        }
-
-        .tool-action {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 6px 16px;
-            background: var(--orange);
-            color: white;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .tool-action:hover {
-            background: var(--orange-dark);
-        }
-
-        /* Container card */
-        .container-card {
-            background: var(--card);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-
-        .container-card-head {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .tool-tile-name {
+            font-weight: 700;
+            font-size: 1rem;
             margin-bottom: 14px;
         }
 
-        .container-name {
-            font-weight: 600;
-            font-size: 16px;
-        }
-
-        .dashboard-services {
-            background: var(--bg);
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-        }
-
-        .dashboard-svc {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 0;
-            font-size: 13px;
-        }
-
-        .dashboard-svc-name {
-            font-weight: 500;
-        }
-
-        .dashboard-svc-port {
-            color: var(--muted);
-        }
-
-        .badge-xs {
-            padding: 2px 8px;
-            font-size: 11px;
-        }
-
-        .badge-xs::before {
-            width: 4px;
-            height: 4px;
-        }
-
-        .container-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        /* Launch grid (host tools) */
-        .launch-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-
-        .launch-card {
-            background: var(--card);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 20px;
-            cursor: pointer;
-            transition: transform .15s, box-shadow .15s;
-        }
-
-        .launch-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-hover);
-        }
-
-        .launch-card .tool-icon {
-            font-size: 36px;
-            margin-bottom: 10px;
-        }
-
-        .launch-card .tool-name {
-            font-weight: 600;
-            font-size: 16px;
-            margin-bottom: 6px;
-        }
-
-        .launch-card p {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        /* Progress log */
-        .progress-log {
-            margin-top: 10px;
-            padding: 10px;
-            background: var(--bg);
-            border-radius: 6px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
-            color: var(--muted);
-            display: none;
-        }
-
-        .progress-log.active {
+        .param-row { margin-bottom: 10px; }
+        .param-label {
             display: block;
+            font-size: .75rem;
+            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 3px;
         }
-
-        /* Responsive */
-        @media (max-width: 767px) {
-            .tool-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .mgmt-row {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .mgmt-actions {
-                width: 100%;
-                margin-top: 8px;
-            }
+        .param-input, .param-select {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: .85rem;
+            background: var(--bg);
+            outline: none;
         }
+        .param-input:focus, .param-select:focus { border-color: var(--orange); }
     </style>
 </head>
 <body>
-    <header>
-        <a href="/" class="brand">
-            <span class="brand-logo">🐾</span>
-            <div class="brand-sep"></div>
-            <span class="brand-name">Service Portal</span>
-            <div class="brand-sep"></div>
-            <span class="brand-tag">{#if containerMode}Container Mode{#else}Host Mode{/if}</span>
-        </a>
-    </header>
 
-    <div class="container">
-        {#if containerMode}
-        <!-- Container Mode UI -->
-        <div class="sessions-section">
-            <p class="section-label">Management Services</p>
-            <div class="mgmt-card">
-                {#for svc in managementServices}
-                <div class="mgmt-row">
-                    <a class="mgmt-name mgmt-link" href="{svc.uiUrl}" target="_blank">{svc.name}</a>
-                    <span class="mgmt-port">:{svc.port}</span>
-                    <span class="badge badge-{svc.status}">{svc.status}</span>
-                    <span class="mgmt-process">process: {svc.processName}</span>
-                    <div class="mgmt-actions">
-                        {#if svc.status.name() == 'ACTIVE'}
-                        <button class="btn btn-stop btn-sm" onclick="mgmtStop('{svc.name}')">Stop</button>
-                        {#else}
-                        <button class="btn btn-start btn-sm" onclick="mgmtStart('{svc.name}')">Start</button>
-                        {/if}
-                    </div>
-                    <div class="progress-log" id="progress-{svc.name}"></div>
-                </div>
-                {/for}
-            </div>
-        </div>
+<header>
+    <a href="/" class="brand">
+        <span class="brand-logo">🐾</span>
+        <div class="brand-sep"></div>
+        <span class="brand-name">Service Portal</span>
+    </a>
+</header>
 
-        <div class="sessions-section">
-            <p class="section-label">Running Services</p>
-            {#for inst in toolInstances}
-            <div class="running-svc-card">
-                <div style="display:flex;align-items:center;gap:14px;">
-                    <span class="svc-icon">{inst.icon}</span>
-                    <a class="svc-name mgmt-link" href="http://{myIp}:{inst.port}{inst.uiPath}" target="_blank">{inst.description}</a>
-                    <span class="mgmt-port">:{inst.port}</span>
-                    <span class="badge badge-Running">Running</span>
-                    <button class="btn btn-stop btn-sm" onclick="stopTool('{inst.toolName}', {inst.port})">Stop</button>
-                </div>
-                <input type="text" value="{inst.memo}" placeholder="Add memo..." class="memo-input"
-                       data-tool-name="{inst.toolName}" data-port="{inst.port}">
-            </div>
-            {/for}
-        </div>
+<main>
 
-        <p class="section-label">Available Tools</p>
-        <div class="tool-grid">
-            {#for tool in tools}
-            <div class="tool-tile" id="tool-tile-{tool.name}">
-                <div class="tool-icon">{tool.icon}</div>
-                <div class="tool-name">{tool.description}</div>
-                {#if tool.staticUrl}
-                <span class="tool-action" onclick="window.open('{tool.staticUrl}', '_blank')">Open</span>
+    <!-- Management Services -->
+    <p class="section-label">Management Services</p>
+    {#for svc in managementServices}
+    <div class="session-card" id="session-{svc.toolName}-{svc.port}">
+        <div class="session-head">
+            {#if svc.accessUrl}
+            <a class="session-name" href="{svc.accessUrl}" target="_blank">{svc.toolName}</a>
+            {#else}
+            <span class="session-name">{svc.toolName}</span>
+            {/if}
+            <span class="session-port">:{svc.port}</span>
+            <span class="badge badge-{svc.state}">{svc.state}</span>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+                {#if svc.state.name() == "STOPPED" || svc.state.name() == "FAILED"}
+                <button class="btn btn-start" onclick="mgmtStart('{svc.toolName}', {svc.port})">Start</button>
                 {#else}
-                <span class="tool-action" onclick="launchTool('{tool.name}')">+ New</span>
+                <button class="btn btn-stop" onclick="mgmtStop('{svc.toolName}', {svc.port})">Stop</button>
+                {/if}
+            </div>
+        </div>
+        {#if svc.state.name() == "STARTING" && svc.progressLog}
+        <div class="session-log" id="log-{svc.toolName}-{svc.port}">
+            {#for line in svc.progressLog}{line}<br>{/for}
+        </div>
+        {/if}
+    </div>
+    {/for}
+
+    <!-- Active Sessions -->
+    {#if activeSessions}
+    <p class="section-label">Active Sessions</p>
+    {#for svc in activeSessions}
+    <div class="session-card" id="session-{svc.toolName}-{svc.port}">
+        <div class="session-head">
+            {#if svc.accessUrl}
+            <a class="session-name" href="{svc.accessUrl}" target="_blank">{svc.toolName}</a>
+            {#else}
+            <span class="session-name">{svc.toolName}</span>
+            {/if}
+            <span class="session-port">:{svc.port}</span>
+            <span class="badge badge-{svc.state}">{svc.state}</span>
+            <div style="margin-left:auto;">
+                <button class="btn btn-stop" onclick="stopSession('{svc.toolName}', {svc.port})">Stop</button>
+            </div>
+        </div>
+        {#if svc.params}
+        <div class="session-params">
+            {#for entry in svc.params.entrySet()}{entry.key}: {entry.value}　{/for}
+        </div>
+        {/if}
+        {#if svc.state.name() == "STARTING" && svc.progressLog}
+        <div class="session-log" id="log-{svc.toolName}-{svc.port}">
+            {#for line in svc.progressLog}{line}<br>{/for}
+        </div>
+        {/if}
+        <input type="text" class="memo-input"
+               placeholder="Add memo..."
+               value="{svc.memo}"
+               data-tool-name="{svc.toolName}"
+               data-port="{svc.port}">
+    </div>
+    {/for}
+    {/if}
+
+    <!-- Launch Tools -->
+    {#if launchTools}
+    <p class="section-label">Launch Tools</p>
+    <div class="tool-grid">
+        {#for tool in launchTools}
+        <div class="tool-tile" id="tool-tile-{tool.name}">
+            <div class="tool-tile-name">{tool.displayName}</div>
+            {#for param in tool.params}
+            <div class="param-row">
+                <label class="param-label">{param.label}</label>
+                {#if param.type == "select"}
+                <select class="param-select" id="param-{tool.name}-{param.key}">
+                    {#for opt in param.options}
+                    <option value="{opt.value}">{opt.label}</option>
+                    {/for}
+                </select>
+                {#else}
+                <input type="text" class="param-input"
+                       id="param-{tool.name}-{param.key}"
+                       value="{param.defaultVal}">
                 {/if}
             </div>
             {/for}
+            <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Launch</button>
         </div>
-
-        {#else}
-        <!-- Host Mode UI -->
-        <div class="sessions-section">
-            <p class="section-label">Management Services</p>
-            <div class="mgmt-card">
-                {#for svc in managementServices}
-                <div class="mgmt-row">
-                    <a class="mgmt-name mgmt-link" href="{svc.uiUrl}" target="_blank">{svc.name}</a>
-                    <span class="mgmt-port">:{svc.port}</span>
-                    <span class="badge badge-{svc.status}">{svc.status}</span>
-                    <span class="mgmt-process">unit: {svc.unit}</span>
-                    <div class="mgmt-actions">
-                        {#if svc.status.name() == 'ACTIVE'}
-                        <button class="btn btn-stop btn-sm" onclick="mgmtStop('{svc.name}')">Stop</button>
-                        {#else}
-                        <button class="btn btn-start btn-sm" onclick="mgmtStart('{svc.name}')">Start</button>
-                        {/if}
-                    </div>
-                    <div class="progress-log" id="progress-{svc.name}"></div>
-                </div>
-                {/for}
-            </div>
-        </div>
-
-        {#if hostMode}
-        <div class="sessions-section">
-            <p class="section-label">Worker Containers</p>
-            {#for c in containers}
-            <div class="container-card">
-                <div class="container-card-head">
-                    <a class="container-name mgmt-link" href="http://{c.ip}:16080/" target="_blank">{c.name}</a>
-                    <span class="badge badge-{c.status}">{c.status}</span>
-                </div>
-                <div class="dashboard-services">
-                    {#each containerProgress.get(c.name).services()}
-                    <div class="dashboard-svc">
-                        <span class="badge badge-ACTIVE badge-xs">ACTIVE</span>
-                        <span class="dashboard-svc-name">Service</span>
-                        <span class="dashboard-svc-port">:8080</span>
-                    </div>
-                    {/each}
-                </div>
-                <div class="container-actions">
-                    {#if c.status == 'Running'}
-                    <button class="btn btn-stop" onclick="containerStop('{c.name}', '{c.remote}')">Stop</button>
-                    {#else}
-                    <button class="btn btn-start" onclick="containerStart('{c.name}', '{c.remote}')">Start</button>
-                    {/if}
-                </div>
-            </div>
-            {/for}
-        </div>
-
-        <p class="section-label">Tools</p>
-        <div class="launch-grid">
-            {#for tool in hostTools}
-            <div class="launch-card" onclick="window.open('{tool.url}', '_blank')">
-                <div class="tool-icon">{tool.icon}</div>
-                <div class="tool-name">{tool.name}</div>
-                <p>{tool.description}</p>
-            </div>
-            {/for}
-        </div>
-
-        <p class="section-label">Administration</p>
-        <div class="launch-grid">
-            <div class="launch-card" onclick="window.location.href='/lxc-manager'">
-                <div class="tool-icon">⚙️</div>
-                <div class="tool-name">LXC Manager</div>
-                <p>Manage LXC containers</p>
-            </div>
-        </div>
-        {/if}
-
-        {/if}
+        {/for}
     </div>
+    {/if}
 
-    <script src="/static/app.js"></script>
+</main>
+
+<script src="/static/app.js"></script>
 </body>
 </html>

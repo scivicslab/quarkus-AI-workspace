@@ -1,131 +1,160 @@
-// Service Portal JavaScript
+// Service Portal - adaptive polling, no full page reload
 
-// Auto-refresh every 5 seconds
-setInterval(async () => {
-    const response = await fetch('/api/status');
-    if (response.ok) {
-        const data = await response.json();
-        updateDashboard(data);
-    }
-}, 5000);
+(function () {
+    const POLL_FAST = 2000;  // while any session is STARTING
+    const POLL_SLOW = 5000;  // all sessions stable
 
-// Update dashboard with new data
-function updateDashboard(data) {
-    // TODO: Implement dynamic update without full page reload
-    // For now, just reload the page
-    location.reload();
-}
-
-// Management service actions
-async function mgmtStart(name) {
-    const progressDiv = document.getElementById(`progress-${name}`);
-    if (progressDiv) {
-        progressDiv.classList.add('active');
-        progressDiv.innerHTML = 'Starting...';
+    function hasStarting(model) {
+        const all = (model.managementServices || []).concat(model.activeSessions || []);
+        return all.some(s => s.state === 'STARTING');
     }
 
-    const response = await fetch(`/api/mgmt/${name}/start`, { method: 'POST' });
-    if (response.ok) {
-        pollProgress(name);
-    } else {
-        alert('Failed to start service');
-        if (progressDiv) {
-            progressDiv.classList.remove('active');
+    function sessionKey(toolName, port) {
+        return toolName + '-' + port;
+    }
+
+    function updateBadge(el, state) {
+        el.className = 'badge badge-' + state;
+        el.textContent = state;
+    }
+
+    async function pollStatus() {
+        try {
+            const r = await fetch('/api/status');
+            if (!r.ok) return;
+            const model = await r.json();
+            applyModel(model);
+            const interval = hasStarting(model) ? POLL_FAST : POLL_SLOW;
+            setTimeout(pollStatus, interval);
+        } catch (e) {
+            setTimeout(pollStatus, POLL_SLOW);
         }
     }
-}
 
-async function mgmtStop(name) {
-    const response = await fetch(`/api/mgmt/${name}/stop`, { method: 'POST' });
-    if (response.ok) {
-        setTimeout(() => location.reload(), 1000);
-    } else {
-        alert('Failed to stop service');
-    }
-}
-
-// Poll progress for starting services
-function pollProgress(serviceName) {
-    const progressDiv = document.getElementById(`progress-${serviceName}`);
-    const interval = setInterval(async () => {
-        const response = await fetch(`/api/mgmt/${serviceName}/progress`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.phase === 'COMPLETE') {
-                clearInterval(interval);
+    function applyModel(model) {
+        const all = (model.managementServices || []).concat(model.activeSessions || []);
+        all.forEach(svc => {
+            const card = document.getElementById('session-' + sessionKey(svc.toolName, svc.port));
+            if (!card) {
+                // New session appeared — reload page to render new card
                 location.reload();
-            } else if (data.messages) {
-                progressDiv.innerHTML = data.messages.join('<br>');
+                return;
             }
-        }
-    }, 500);
-}
+            // Update badge
+            const badge = card.querySelector('.badge');
+            if (badge) updateBadge(badge, svc.state);
 
-// Tool actions
-async function launchTool(toolName) {
-    const tile = document.getElementById(`tool-tile-${toolName}`);
-    if (tile) {
-        tile.style.opacity = '0.5';
-        tile.style.pointerEvents = 'none';
-    }
+            // Update link/name
+            const nameEl = card.querySelector('.session-name');
+            if (nameEl && svc.accessUrl && nameEl.tagName !== 'A') {
+                const a = document.createElement('a');
+                a.className = 'session-name';
+                a.href = svc.accessUrl;
+                a.target = '_blank';
+                a.textContent = svc.toolName;
+                nameEl.replaceWith(a);
+            }
 
-    const response = await fetch(`/api/tool/${toolName}/launch`, { method: 'POST' });
-    if (response.ok) {
-        setTimeout(() => location.reload(), 2000);
-    } else {
-        alert('Failed to launch tool');
-        if (tile) {
-            tile.style.opacity = '1';
-            tile.style.pointerEvents = 'auto';
-        }
-    }
-}
-
-async function stopTool(toolName, port) {
-    const response = await fetch(`/api/tool/${toolName}/${port}/stop`, { method: 'POST' });
-    if (response.ok) {
-        setTimeout(() => location.reload(), 1000);
-    } else {
-        alert('Failed to stop tool');
-    }
-}
-
-// Memo update
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.memo-input').forEach(input => {
-        input.addEventListener('blur', async (e) => {
-            const toolName = e.target.dataset.toolName;
-            const port = e.target.dataset.port;
-            const memo = e.target.value;
-
-            const response = await fetch(`/api/tool/${toolName}/${port}/memo`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ memo })
-            });
-
-            if (!response.ok) {
-                alert('Failed to update memo');
+            // Update progress log
+            const logEl = card.querySelector('.session-log');
+            if (svc.state === 'STARTING' && svc.progressLog && svc.progressLog.length > 0) {
+                if (logEl) {
+                    logEl.innerHTML = svc.progressLog.join('<br>');
+                }
+            } else if (logEl && svc.state === 'READY') {
+                logEl.style.display = 'none';
             }
         });
+
+        // Check for sessions that disappeared (stopped)
+        document.querySelectorAll('.session-card').forEach(card => {
+            const id = card.id.replace('session-', '');
+            const stillExists = all.some(s => sessionKey(s.toolName, s.port) === id);
+            if (!stillExists) {
+                card.remove();
+            }
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // Management service actions
+    // ---------------------------------------------------------------
+
+    window.mgmtStart = async function (name, port) {
+        await fetch('/api/mgmt/' + name + '/start', { method: 'POST' });
+        setTimeout(pollStatus, 300);
+    };
+
+    window.mgmtStop = async function (name, port) {
+        await fetch('/api/mgmt/' + name + '/stop?port=' + port, { method: 'POST' });
+        setTimeout(pollStatus, 300);
+    };
+
+    // ---------------------------------------------------------------
+    // Tool session actions
+    // ---------------------------------------------------------------
+
+    window.launchTool = async function (toolName) {
+        const tile = document.getElementById('tool-tile-' + toolName);
+        if (tile) {
+            tile.style.opacity = '0.5';
+            tile.style.pointerEvents = 'none';
+        }
+
+        const body = {};
+        document.querySelectorAll('[id^="param-' + toolName + '-"]').forEach(el => {
+            const key = el.id.replace('param-' + toolName + '-', '');
+            const value = el.value.trim();
+            if (value) body[key] = value;
+        });
+
+        const r = await fetch('/api/tool/' + toolName + '/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        if (r.ok) {
+            // Reload to show new session card, then resume polling
+            location.reload();
+        } else {
+            alert('Failed to launch ' + toolName);
+            if (tile) {
+                tile.style.opacity = '1';
+                tile.style.pointerEvents = 'auto';
+            }
+        }
+    };
+
+    window.stopSession = async function (toolName, port) {
+        const r = await fetch('/api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
+        if (r.ok) {
+            const card = document.getElementById('session-' + sessionKey(toolName, port));
+            if (card) card.remove();
+        } else {
+            alert('Failed to stop session');
+        }
+    };
+
+    // ---------------------------------------------------------------
+    // Memo update (on blur)
+    // ---------------------------------------------------------------
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.memo-input').forEach(input => {
+            input.addEventListener('blur', async e => {
+                const toolName = e.target.dataset.toolName;
+                const port = e.target.dataset.port;
+                await fetch('/api/tool/' + toolName + '/' + port + '/memo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ memo: e.target.value })
+                });
+            });
+        });
+
+        // Start polling
+        setTimeout(pollStatus, POLL_SLOW);
     });
-});
 
-// Container actions
-async function containerStart(name, remote) {
-    const response = await fetch(`/api/container/${name}/start`, { method: 'POST' });
-    if (response.ok) {
-        setTimeout(() => location.reload(), 2000);
-    } else {
-        alert('Failed to start container');
-    }
-}
-
-async function containerStop(name, remote) {
-    const response = await fetch(`/api/container/${name}/stop`, { method: 'POST' });
-    if (response.ok) {
-        setTimeout(() => location.reload(), 1000);
-    } else {
-        alert('Failed to stop container');
-    }
-}
+})();
