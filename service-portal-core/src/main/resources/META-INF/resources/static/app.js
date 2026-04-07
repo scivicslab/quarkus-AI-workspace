@@ -157,4 +157,76 @@
         setTimeout(pollStatus, POLL_SLOW);
     });
 
+    // ---------------------------------------------------------------
+    // Directory browser modal
+    // ---------------------------------------------------------------
+
+    let _dirTargetInputId = null;
+
+    window.openDirBrowser = async function (inputId) {
+        _dirTargetInputId = inputId;
+        const input = document.getElementById(inputId);
+        const startPath = (input && input.value.trim()) || '~';
+        await loadDirListing(startPath);
+        document.getElementById('dir-modal-overlay').classList.add('open');
+    };
+
+    window.closeDirBrowser = function () {
+        document.getElementById('dir-modal-overlay').classList.remove('open');
+        _dirTargetInputId = null;
+    };
+
+    window.confirmDirBrowser = function () {
+        const pathEl = document.getElementById('dir-modal-path');
+        if (_dirTargetInputId && pathEl) {
+            const input = document.getElementById(_dirTargetInputId);
+            if (input) input.value = pathEl.textContent;
+        }
+        closeDirBrowser();
+    };
+
+    async function loadDirListing(path) {
+        const r = await fetch('/api/dirs?path=' + encodeURIComponent(path));
+        if (!r.ok) return;
+        const data = await r.json();
+
+        document.getElementById('dir-modal-path').textContent = data.path;
+
+        const list = document.getElementById('dir-modal-list');
+        list.innerHTML = '';
+
+        // Parent directory entry
+        if (data.parent) {
+            const up = document.createElement('div');
+            up.className = 'dir-item dir-item-up';
+            up.textContent = '⬆ ..';
+            up.onclick = () => loadDirListing(data.parent);
+            list.appendChild(up);
+        }
+
+        // Subdirectories
+        data.dirs.forEach(name => {
+            const item = document.createElement('div');
+            item.className = 'dir-item';
+            item.textContent = '📁 ' + name;
+            item.onclick = () => loadDirListing(data.path + '/' + name);
+            list.appendChild(item);
+        });
+
+        if (!data.parent && data.dirs.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'dir-item';
+            empty.style.color = 'var(--muted)';
+            empty.textContent = '(empty)';
+            list.appendChild(empty);
+        }
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('dir-modal-overlay').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeDirBrowser();
+        });
+    });
+
 })();
