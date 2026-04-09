@@ -18,7 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 /**
- * Reverse-proxy route: /proxy/{toolName}/* → http://localhost:{toolPort}/*
+ * Reverse-proxy route: /proxy/{toolName}/{port}/* → http://localhost:{port}/*
+ *
+ * Port is embedded in the URL so multiple instances of the same tool
+ * can coexist (e.g. two quarkus-chat-ui sessions on :28100 and :28101).
  *
  * Allows access to all tool UIs through a single SSH port forward (28080).
  * HTML responses get a <base> tag injected so relative URLs resolve correctly.
@@ -42,40 +45,47 @@ public class ProxyRoute {
     }
 
     void addRoutes(@Observes Router router) {
-        router.route("/proxy/:toolName/*").handler(this::handleProxy);
-        router.route("/proxy/:toolName").handler(this::handleProxy);
+        router.route("/proxy/:toolName/:port/*").handler(this::handleProxy);
+        router.route("/proxy/:toolName/:port").handler(this::handleProxy);
     }
 
     // ---------------------------------------------------------------
 
-    private int findPort(String toolName) {
+    private boolean isValidSession(String toolName, int port) {
         var model = backend.getDashboardModel();
-        // Check active sessions first, then management services
         return model.activeSessions().stream()
-            .filter(s -> toolName.equals(s.toolName()) && s.state() == SessionState.READY)
-            .mapToInt(s -> s.port())
-            .findFirst()
-            .orElseGet(() -> model.managementServices().stream()
-                .filter(s -> toolName.equals(s.toolName()) && s.state() == SessionState.READY)
-                .mapToInt(s -> s.port())
-                .findFirst()
-                .orElse(-1));
+            .anyMatch(s -> toolName.equals(s.toolName())
+                       && s.port() == port
+                       && s.state() == SessionState.READY)
+            || model.managementServices().stream()
+            .anyMatch(s -> toolName.equals(s.toolName())
+                       && s.port() == port
+                       && s.state() == SessionState.READY);
     }
 
     private void handleProxy(RoutingContext ctx) {
         String toolName = ctx.pathParam("toolName");
-        int port = findPort(toolName);
+        String portStr  = ctx.pathParam("port");
 
-        if (port < 0) {
-            ctx.response().setStatusCode(502).end("Tool '" + toolName + "' is not ready");
+        int port;
+        try {
+            port = Integer.parseInt(portStr);
+        } catch (NumberFormatException e) {
+            ctx.response().setStatusCode(400).end("Invalid port: " + portStr);
+            return;
+        }
+
+        if (!isValidSession(toolName, port)) {
+            ctx.response().setStatusCode(502)
+                .end("Tool '" + toolName + "' on port " + port + " is not ready");
             return;
         }
 
         HttpServerRequest inReq = ctx.request();
         inReq.pause();
 
-        // Strip /proxy/{toolName} prefix to get the target path
-        String mountPoint = "/proxy/" + toolName;
+        // Strip /proxy/{toolName}/{port} prefix to get the target path
+        String mountPoint = "/proxy/" + toolName + "/" + port;
         String path = inReq.path();
         String subPath = path.startsWith(mountPoint) ? path.substring(mountPoint.length()) : "/";
         if (subPath.isEmpty()) subPath = "/";
@@ -85,7 +95,6 @@ public class ProxyRoute {
 
         httpClient.request(inReq.method(), port, "localhost", targetUri)
             .onSuccess(outReq -> {
-                // Forward request headers (skip hop-by-hop)
                 inReq.headers().forEach(e -> {
                     if (!HOP_BY_HOP.contains(e.getKey().toLowerCase())) {
                         outReq.putHeader(e.getKey(), e.getValue());
@@ -98,8 +107,6 @@ public class ProxyRoute {
                     .onSuccess(outResp -> {
                         ctx.response().setStatusCode(outResp.statusCode());
 
-                        // Forward response headers (skip hop-by-hop and content-length;
-                        // will be recalculated if HTML is patched)
                         outResp.headers().forEach(e -> {
                             String key = e.getKey().toLowerCase();
                             if (!HOP_BY_HOP.contains(key) && !key.equals("content-length")) {
@@ -111,10 +118,9 @@ public class ProxyRoute {
                         boolean isHtml = ct != null && ct.contains("text/html");
 
                         if (isHtml) {
-                            // Buffer HTML, inject <base> tag, then send
                             outResp.bodyHandler(body -> {
                                 String html = body.toString(StandardCharsets.UTF_8);
-                                String base = "<base href=\"/proxy/" + toolName + "/\">";
+                                String base = "<base href=\"/proxy/" + toolName + "/" + port + "/\">";
                                 String patched = html.replaceFirst("(?i)<head([^>]*)>",
                                     "<head$1>" + base);
                                 byte[] bytes = patched.getBytes(StandardCharsets.UTF_8);
@@ -123,7 +129,6 @@ public class ProxyRoute {
                                     .end(Buffer.buffer(bytes));
                             });
                         } else {
-                            // Stream all other content (SSE, binary, JSON, etc.)
                             outResp.pipeTo(ctx.response());
                         }
                     })
