@@ -1,0 +1,75 @@
+name: Native Image Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            suffix: ''
+          - os: ubuntu-24.04-arm
+            label: linux-aarch64
+            suffix: ''
+          - os: macos-14
+            label: macos-aarch64
+            suffix: ''
+          - os: windows-latest
+            label: windows-x86_64
+            suffix: '.exe'
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.label }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm-community'
+
+      - name: Build native image
+        run: mvn package -Dnative -DskipTests -pl service-portal-core,backend-docker
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          DEST="quarkus-service-portal-${TAG}-${{ matrix.label }}${{ matrix.suffix }}"
+          SRC=$(ls backend-docker/target/backend-docker-*-runner${{ matrix.suffix }} 2>/dev/null || echo "")
+          if [ -z "$SRC" ]; then
+            echo "::error::Native image not found in backend-docker/target/"
+            ls -la backend-docker/target/
+            exit 1
+          fi
+          cp "${SRC}" "${DEST}"
+          echo "ARTIFACT=${DEST}" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: ${{ env.ARTIFACT }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
