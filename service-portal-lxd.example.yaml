@@ -1,0 +1,5 @@
+backend: lxd
+
+lxd:
+  baseImage: ubuntu:22.04
+  defaultWorkdir: /home/devteam/works

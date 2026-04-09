@@ -8,6 +8,9 @@ target.old*/
 node_modules/
 test-results/
 
+# Production config — kept on disk only, never committed
+service-portal.yaml
+
 # Generated artifacts and backups
 docs/
 search-index/

@@ -1,0 +1,65 @@
+backend: jvm
+
+jvm:
+  tools:
+    # MCP Gateway: auto-start
+    - name: quarkus-mcp-gateway
+      jar: ${SCIVICSLAB_HOME}/quarkus-mcp-gateway.jar
+      port: 28081
+      autoStart: true
+
+    # Chat UI (on-demand)
+    - name: quarkus-chat-ui
+      jar: ${SCIVICSLAB_HOME}/quarkus-chat-ui.jar
+      port: 28100
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
+        - key: provider
+          label: LLM Provider
+          type: select
+          default: claude
+          jvmProp: chat-ui.provider
+          options:
+            - { value: claude,        label: Claude }
+            - { value: codex,         label: Codex (OpenAI) }
+            - { value: openai-compat, label: Local LLM (vLLM) }
+        - key: servers
+          label: vLLM Endpoint (Local LLM only)
+          type: text
+          default: ${VLLM_ENDPOINT}
+          jvmProp: chat-ui.servers
+
+    # Document portal (on-demand)
+    - name: html-saurus
+      jar: ${SCIVICSLAB_HOME}/html-saurus.jar
+      port: 28110
+      autoStart: false
+      args:
+        - ${HOME}/works
+        - --portal-mode
+        - --serve
+        - --port
+        - "28110"
+      params:
+        - key: dir
+          label: Document Root
+          type: dir
+          default: ${HOME}/works
+          argPos: 0
+
+    # Turing Workflow Editor (on-demand)
+    - name: turing-workflow-editor
+      jar: ${SCIVICSLAB_HOME}/turing-workflow-editor.jar
+      port: 28120
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
