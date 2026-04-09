@@ -7,6 +7,7 @@ import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.*;
 
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -38,7 +39,9 @@ class ToolStartupIT {
             .getResource("service-portal-test.yaml");
         if (configUrl == null) throw new IllegalStateException("service-portal-test.yaml not found");
         Path configPath = Paths.get(configUrl.toURI());
-        portal = ServicePortalProcess.start(configPath, PORTAL_PORT);
+        Path testJarsDir = prepareTestJarsDir();
+        portal = ServicePortalProcess.start(configPath, PORTAL_PORT,
+            Map.of("TEST_JARS_DIR", testJarsDir.toString()));
         RestAssured.baseURI = "http://localhost";
         RestAssured.port    = PORTAL_PORT;
     }
@@ -137,6 +140,73 @@ class ToolStartupIT {
         assertThat(body)
             .as("turing-workflow-editor page should contain editor UI HTML")
             .containsAnyOf("workflow", "Workflow", "editor", "Editor");
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // JAR preparation
+    // ═══════════════════════════════════════════════════════════════
+
+    private static Path prepareTestJarsDir() throws Exception {
+        String override = System.getProperty("test.jars.dir");
+        if (override != null) return Path.of(override);
+
+        // If all deployed JARs exist in SCIVICSLAB_HOME, use that directory directly
+        String scivicsHome = System.getenv("SCIVICSLAB_HOME");
+        if (scivicsHome == null) {
+            scivicsHome = System.getProperty("user.home") + "/works";
+        }
+        Path scivicsDir = Path.of(scivicsHome);
+        if (Files.exists(scivicsDir.resolve("quarkus-chat-ui.jar"))
+                && Files.exists(scivicsDir.resolve("html-saurus.jar"))
+                && Files.exists(scivicsDir.resolve("turing-workflow-editor.jar"))) {
+            return scivicsDir;
+        }
+
+        // Fall back: build a temp dir from source targets
+        Path tempDir = Files.createTempDirectory("service-portal-tool-jars-");
+        tempDir.toFile().deleteOnExit();
+
+        copyJar(findJar("quarkus-chat-ui",
+            "../../quarkus-chat-ui/app/target",
+            "chat-ui-app", "-runner.jar"),
+            tempDir.resolve("quarkus-chat-ui.jar"));
+
+        copyJar(findJar("html-saurus",
+            "../../html-saurus/target",
+            "html-saurus", "-runner.jar"),
+            tempDir.resolve("html-saurus.jar"));
+
+        copyJar(findJar("turing-workflow-editor",
+            "../../Turing-workflow-editor/target",
+            "turing-workflow-editor", "-runner.jar"),
+            tempDir.resolve("turing-workflow-editor.jar"));
+
+        return tempDir;
+    }
+
+    private static Path findJar(String label, String relDir, String prefix, String suffix) throws Exception {
+        String envDir = System.getenv("TEST_JARS_DIR");
+        if (envDir != null) {
+            Path named = Path.of(envDir, label + ".jar");
+            if (Files.exists(named)) return named;
+        }
+        Path base = Path.of(relDir).toAbsolutePath();
+        try (var stream = Files.list(base)) {
+            return stream
+                .filter(p -> p.getFileName().toString().startsWith(prefix)
+                          && p.getFileName().toString().endsWith(suffix)
+                          && !p.getFileName().toString().contains("sources")
+                          && !p.getFileName().toString().contains("javadoc"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                    label + " JAR not found in " + base));
+        }
+    }
+
+    private static void copyJar(Path src, Path dest) throws Exception {
+        if (!Files.exists(dest)) {
+            Files.copy(src, dest);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

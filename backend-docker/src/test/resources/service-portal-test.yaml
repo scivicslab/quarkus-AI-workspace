@@ -19,6 +19,7 @@ jvm:
           jvmProp: chat-ui.provider
           options:
             - { value: claude,        label: Claude }
+            - { value: codex,         label: Codex (OpenAI) }
             - { value: openai-compat, label: Local LLM (vLLM) }
         - key: servers
           label: vLLM Endpoint (Local LLM only)

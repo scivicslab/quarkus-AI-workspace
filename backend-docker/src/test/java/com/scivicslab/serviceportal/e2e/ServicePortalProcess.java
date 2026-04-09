@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.Map;
 
 /**
  * Starts the service-portal uber-JAR as a child process for integration tests.
@@ -33,6 +34,40 @@ public class ServicePortalProcess {
         this.logFile = logFile;
     }
 
+    /**
+     * Start service-portal with an explicit jarsDir that overrides TEST_JARS_DIR.
+     * Useful when the test prepares a temp dir with correctly-named JARs.
+     */
+    public static ServicePortalProcess start(Path configYaml, int port,
+                                             Map<String, String> extraEnv) throws Exception {
+        String jarPath = System.getProperty(JAR_PROP, DEFAULT_JAR);
+        File   jarFile = new File(jarPath);
+        if (!jarFile.exists()) {
+            throw new IllegalStateException(
+                "service-portal JAR not found: " + jarFile.getAbsolutePath()
+                + " — run 'mvn package -DskipTests' first");
+        }
+
+        File logFile = File.createTempFile("service-portal-", ".log");
+        logFile.deleteOnExit();
+
+        ProcessBuilder pb = new ProcessBuilder(
+            "java",
+            "-Dquarkus.http.port=" + port,
+            "-Dservice.portal.config=" + configYaml.toAbsolutePath(),
+            "-jar", jarFile.getAbsolutePath()
+        );
+        pb.directory(configYaml.getParent().toFile());
+        extraEnv.forEach((k, v) -> pb.environment().put(k, v));
+        pb.redirectErrorStream(true);
+        pb.redirectOutput(logFile);
+
+        Process proc = pb.start();
+        ServicePortalProcess spp = new ServicePortalProcess(proc, port, logFile);
+        spp.waitForReady(20_000);
+        return spp;
+    }
+
     public static ServicePortalProcess start(Path configYaml, int port) throws Exception {
         requireEnv("TEST_JARS_DIR");
 
@@ -54,6 +89,11 @@ public class ServicePortalProcess {
             "-jar", jarFile.getAbsolutePath()
         );
         pb.directory(configYaml.getParent().toFile());
+        // Propagate TEST_JARS_DIR so service-portal can resolve ${TEST_JARS_DIR} in the YAML
+        String testJarsDir = System.getenv("TEST_JARS_DIR");
+        if (testJarsDir != null) {
+            pb.environment().put("TEST_JARS_DIR", testJarsDir);
+        }
         pb.redirectErrorStream(true);
         pb.redirectOutput(logFile);
 
