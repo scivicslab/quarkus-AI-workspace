@@ -117,6 +117,15 @@ public class ProxyRoute {
                         String ct = outResp.getHeader("content-type");
                         boolean isHtml = ct != null && ct.contains("text/html");
 
+                        if (!isHtml) {
+                            String upstreamLen = outResp.getHeader("content-length");
+                            if (upstreamLen != null) {
+                                ctx.response().putHeader("content-length", upstreamLen);
+                            } else {
+                                ctx.response().putHeader("transfer-encoding", "chunked");
+                            }
+                        }
+
                         if (isHtml) {
                             outResp.bodyHandler(body -> {
                                 String html = body.toString(StandardCharsets.UTF_8);

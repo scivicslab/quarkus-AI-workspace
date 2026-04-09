@@ -71,6 +71,7 @@ public class ProcessSupervisor {
 
         try {
             List<String> command = buildCommand();
+            logger.info("Executing: " + String.join(" ", command));
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
 
