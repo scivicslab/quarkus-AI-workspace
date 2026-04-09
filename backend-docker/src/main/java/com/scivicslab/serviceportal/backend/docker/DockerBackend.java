@@ -10,6 +10,8 @@ import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -59,10 +61,10 @@ public class DockerBackend implements ServiceBackend {
         CopyOnWriteArrayList<ProcessSupervisor> list =
             instances.computeIfAbsent(toolName, k -> new CopyOnWriteArrayList<>());
 
-        // Clean up stopped instances before calculating port offset
+        // Clean up stopped instances before calculating port
         list.removeIf(s -> s.getState() == SessionState.STOPPED);
 
-        int port = def.port() + list.size();
+        int port = findFreePort(def.port(), list);
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
         list.add(supervisor);
         supervisor.start();
@@ -138,6 +140,33 @@ public class DockerBackend implements ServiceBackend {
     // ---------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------
+
+    /**
+     * Finds the first free TCP port starting from {@code basePort}.
+     * Skips ports already claimed by active instances and ports that have
+     * something else listening on them (occupied by another process).
+     * Searches up to 100 ports before giving up.
+     */
+    private int findFreePort(int basePort, List<ProcessSupervisor> activeInstances) throws ServiceException {
+        var usedPorts = activeInstances.stream()
+            .map(ProcessSupervisor::getPort)
+            .collect(java.util.stream.Collectors.toSet());
+
+        for (int port = basePort; port < basePort + 100; port++) {
+            if (usedPorts.contains(port)) continue;
+            if (!isTcpPortOpen(port)) return port;
+        }
+        throw new ServiceException("No free port found in range " + basePort + "-" + (basePort + 99));
+    }
+
+    private boolean isTcpPortOpen(int port) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("localhost", port), 200);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {
         if (config.jvm() == null) throw new ServiceException("No docker config");
