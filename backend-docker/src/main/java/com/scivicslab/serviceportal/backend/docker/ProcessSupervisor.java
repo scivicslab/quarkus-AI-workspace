@@ -138,7 +138,10 @@ public class ProcessSupervisor {
         return size <= lines ? all : all.subList(size - lines, size);
     }
 
-    /** Expands ${VAR} and $VAR patterns using System.getenv(). */
+    /** Expands ${VAR} and $VAR patterns using System.getenv().
+     *  If the variable is not set, replaces with empty string so the caller's
+     *  blank-check can skip the parameter rather than passing an unresolvable
+     *  expression to the child JVM. */
     static String expandEnvVars(String value) {
         if (value == null) return null;
         java.util.regex.Matcher m = java.util.regex.Pattern
@@ -148,7 +151,7 @@ public class ProcessSupervisor {
             String varName = m.group(1) != null ? m.group(1) : m.group(2);
             String envVal = System.getenv(varName);
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
-                envVal != null ? envVal : m.group()));
+                envVal != null ? envVal : ""));
         }
         m.appendTail(sb);
         return sb.toString();
@@ -174,7 +177,8 @@ public class ProcessSupervisor {
         // -D flags from params (supported by both JVM and Quarkus native binaries)
         if (config.params() != null) {
             for (var param : config.params()) {
-                String value = launchParams.getOrDefault(param.key(), expandEnvVars(param.defaultVal()));
+                String raw = launchParams.getOrDefault(param.key(), param.defaultVal());
+                String value = expandEnvVars(raw);
                 if (value == null || value.isBlank()) continue;
                 if (param.jvmProp() != null && !param.jvmProp().isBlank()) {
                     command.add("-D" + param.jvmProp() + "=" + value);
@@ -196,8 +200,9 @@ public class ProcessSupervisor {
                     var paramAtPos = config.params().stream()
                         .filter(p -> p.argPos() == fi).findFirst();
                     if (paramAtPos.isPresent()) {
-                        String val = launchParams.getOrDefault(paramAtPos.get().key(),
-                            expandEnvVars(paramAtPos.get().defaultVal()));
+                        String val = expandEnvVars(
+                            launchParams.getOrDefault(paramAtPos.get().key(),
+                                paramAtPos.get().defaultVal()));
                         arg = (val != null && !val.isBlank()) ? val : arg;
                     }
                 }

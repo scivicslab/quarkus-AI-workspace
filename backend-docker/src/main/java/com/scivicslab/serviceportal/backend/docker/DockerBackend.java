@@ -8,6 +8,7 @@ import com.scivicslab.serviceportal.model.SessionView;
 import com.scivicslab.serviceportal.model.ToolView;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.logging.Logger;
  * Multiple instances of the same tool can run simultaneously on different ports.
  * Port allocation: base port + number of existing active instances for that tool.
  */
+@RegisterForReflection
 public class DockerBackend implements ServiceBackend {
 
     private static final Logger logger = Logger.getLogger(DockerBackend.class.getName());

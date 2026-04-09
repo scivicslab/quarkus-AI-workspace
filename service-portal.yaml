@@ -1,0 +1,6 @@
+backend: multi-docker
+
+multi-docker:
+  image: 192.168.5.23:32000/scivicslab/ai-toolkit:3.0.0-2604080723
+  vllmEndpoint: http://192.168.5.17:8000
+  defaultWorkdir: /home/devteam/works

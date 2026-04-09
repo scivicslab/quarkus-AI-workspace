@@ -7,6 +7,7 @@ import com.scivicslab.serviceportal.model.SessionState;
 import com.scivicslab.serviceportal.model.ToolView;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,7 @@ import java.util.stream.Stream;
  *
  * The host portal itself runs on :29080.
  */
+@RegisterForReflection
 public class MultiDockerBackend implements ServiceBackend {
 
     private static final Logger logger = Logger.getLogger(MultiDockerBackend.class.getName());

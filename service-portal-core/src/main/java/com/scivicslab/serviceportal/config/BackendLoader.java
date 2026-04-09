@@ -2,11 +2,9 @@ package com.scivicslab.serviceportal.config;
 
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ServiceLoader;
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**
@@ -16,6 +14,12 @@ public class BackendLoader {
 
     private static final Logger logger = Logger.getLogger(BackendLoader.class.getName());
 
+    private static final Map<String, String> BACKEND_CLASSES = Map.of(
+        "jvm",          "com.scivicslab.serviceportal.backend.docker.DockerBackend",
+        "docker",       "com.scivicslab.serviceportal.backend.docker.DockerBackend",
+        "multi-docker", "com.scivicslab.serviceportal.backend.docker.MultiDockerBackend"
+    );
+
     /**
      * Load backend based on configuration.
      */
@@ -23,17 +27,19 @@ public class BackendLoader {
         String backendType = detectBackendType(config);
         logger.info("Selected backend: " + backendType);
 
-        // ServiceLoader で実装を探す
-        ServiceLoader<ServiceBackend> loader = ServiceLoader.load(ServiceBackend.class);
-
-        for (ServiceBackend backend : loader) {
-            if (backend.getBackendType().equals(backendType)) {
-                backend.initialize(config);
-                return backend;
-            }
+        String className = BACKEND_CLASSES.get(backendType);
+        if (className == null) {
+            throw new IllegalStateException("No backend found for type: " + backendType);
         }
-
-        throw new IllegalStateException("No backend found for type: " + backendType);
+        try {
+            ServiceBackend backend = (ServiceBackend) Class.forName(className)
+                .getDeclaredConstructor()
+                .newInstance();
+            backend.initialize(config);
+            return backend;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to instantiate backend: " + className, e);
+        }
     }
 
     /**

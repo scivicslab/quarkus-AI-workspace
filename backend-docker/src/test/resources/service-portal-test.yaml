@@ -3,7 +3,7 @@ backend: jvm
 jvm:
   tools:
     - name: quarkus-chat-ui
-      jar: ${TEST_JARS_DIR}/quarkus-chat-ui-v1.2.0.jar
+      jar: ${TEST_JARS_DIR}/quarkus-chat-ui.jar
       port: 18100
       autoStart: false
       params:
@@ -23,11 +23,11 @@ jvm:
         - key: servers
           label: vLLM Endpoint (Local LLM only)
           type: text
-          default: http://localhost:8000
+          default: ${VLLM_ENDPOINT}
           jvmProp: chat-ui.servers
 
     - name: html-saurus
-      jar: ${TEST_JARS_DIR}/html-saurus-v1.5.0.jar
+      jar: ${TEST_JARS_DIR}/html-saurus.jar
       port: 18110
       autoStart: false
       args:
@@ -44,7 +44,7 @@ jvm:
           argPos: 0
 
     - name: turing-workflow-editor
-      jar: ${TEST_JARS_DIR}/turing-workflow-editor-v2.0.0.jar
+      jar: ${TEST_JARS_DIR}/turing-workflow-editor.jar
       port: 18120
       autoStart: false
       params:

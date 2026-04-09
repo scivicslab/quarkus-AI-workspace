@@ -10,16 +10,18 @@ import java.nio.file.Path;
  * Starts the service-portal uber-JAR as a child process for integration tests.
  *
  * Required environment variables:
- *   TEST_JARS_DIR  — directory containing html-saurus-vX.Y.Z.jar, quarkus-chat-ui-vX.Y.Z.jar, etc.
+ *   TEST_JARS_DIR  — directory containing the tool uber-JARs with non-versioned names:
+ *                    quarkus-chat-ui.jar, html-saurus.jar, turing-workflow-editor.jar
+ *                    (same naming convention as production service-portal.yaml)
  *
  * System properties:
  *   service.portal.jar  — path to the service-portal uber-JAR
- *                         (default: target/backend-docker-1.0.0-runner.jar)
+ *                         (default: target/service-portal-1.0.0-runner.jar)
  */
 public class ServicePortalProcess {
 
     private static final String JAR_PROP    = "service.portal.jar";
-    private static final String DEFAULT_JAR = "target/backend-docker-1.0.0-runner.jar";
+    private static final String DEFAULT_JAR = "target/service-portal-1.0.0-runner.jar";
 
     private final Process process;
     private final int     port;

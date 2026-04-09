@@ -42,7 +42,7 @@ public class AiTeamSupervisor {
     private volatile boolean      stopping = false;
     private volatile String       milestone = "S0";
 
-    private static final HttpClient HTTP = HttpClient.newBuilder()
+    private final HttpClient http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(3))
         .build();
 
@@ -233,7 +233,7 @@ public class AiTeamSupervisor {
             .timeout(Duration.ofSeconds(3))
             .GET()
             .build();
-        HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) throw new Exception("HTTP " + resp.statusCode());
         return parseStatus(resp.body());
     }

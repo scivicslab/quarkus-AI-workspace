@@ -79,7 +79,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           DEST="quarkus-service-portal-${TAG}-runner.jar"
-          SRC=$(ls backend-docker/target/backend-docker-*-runner.jar 2>/dev/null || echo "")
+          SRC=$(ls backend-docker/target/service-portal-*-runner.jar 2>/dev/null || echo "")
           if [ -z "$SRC" ]; then
             echo "::error::uber-JAR not found in backend-docker/target/"
             ls -la backend-docker/target/

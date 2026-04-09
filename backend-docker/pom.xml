@@ -10,10 +10,10 @@
         <version>1.0.0</version>
     </parent>
 
-    <artifactId>backend-docker</artifactId>
+    <artifactId>service-portal</artifactId>
 
-    <name>Service Portal - Docker Backend</name>
-    <description>Process management backend for Docker containers (POJO-actor based)</description>
+    <name>Service Portal</name>
+    <description>Service portal main executable — manages JVM tool processes via uber-JAR</description>
 
     <dependencies>
         <!-- Core module -->
