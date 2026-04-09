@@ -1,0 +1,55 @@
+backend: jvm
+
+jvm:
+  tools:
+    - name: quarkus-chat-ui
+      jar: ${TEST_JARS_DIR}/quarkus-chat-ui-v1.2.0.jar
+      port: 18100
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
+        - key: provider
+          label: LLM Provider
+          type: select
+          default: claude
+          jvmProp: chat-ui.provider
+          options:
+            - { value: claude,        label: Claude }
+            - { value: openai-compat, label: Local LLM (vLLM) }
+        - key: servers
+          label: vLLM Endpoint (Local LLM only)
+          type: text
+          default: http://localhost:8000
+          jvmProp: chat-ui.servers
+
+    - name: html-saurus
+      jar: ${TEST_JARS_DIR}/html-saurus-v1.5.0.jar
+      port: 18110
+      autoStart: false
+      args:
+        - ${HOME}/works
+        - --portal-mode
+        - --serve
+        - --port
+        - "18110"
+      params:
+        - key: dir
+          label: Document Root
+          type: dir
+          default: ${HOME}/works
+          argPos: 0
+
+    - name: turing-workflow-editor
+      jar: ${TEST_JARS_DIR}/turing-workflow-editor-v2.0.0.jar
+      port: 18120
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
