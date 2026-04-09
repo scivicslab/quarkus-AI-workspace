@@ -310,14 +310,14 @@
             <span class="session-port">:{svc.port}</span>
             <span class="badge badge-{svc.state}">{svc.state}</span>
             <div style="margin-left:auto;display:flex;gap:8px;">
-                {#if svc.state.name() == "STOPPED" || svc.state.name() == "FAILED"}
+                {#if svc.state.isStopped() || svc.state.isFailed()}
                 <button class="btn btn-start" onclick="mgmtStart('{svc.toolName}', {svc.port})">Start</button>
                 {#else}
                 <button class="btn btn-stop" onclick="mgmtStop('{svc.toolName}', {svc.port})">Stop</button>
                 {/if}
             </div>
         </div>
-        {#if svc.state.name() == "STARTING" && svc.progressLog}
+        {#if svc.state.isStarting() && svc.progressLog}
         <div class="session-log" id="log-{svc.toolName}-{svc.port}">
             {#for line in svc.progressLog}{line}<br>{/for}
         </div>
@@ -347,7 +347,7 @@
             {#for entry in svc.params.entrySet()}{entry.key}: {entry.value}　{/for}
         </div>
         {/if}
-        {#if svc.state.name() == "STARTING" && svc.progressLog}
+        {#if svc.state.isStarting() && svc.progressLog}
         <div class="session-log" id="log-{svc.toolName}-{svc.port}">
             {#for line in svc.progressLog}{line}<br>{/for}
         </div>
