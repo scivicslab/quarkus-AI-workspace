@@ -309,7 +309,7 @@
             {/if}
             <span class="session-port">:{svc.port}</span>
             <span class="badge badge-{svc.state}">{svc.state}</span>
-            <div style="margin-left:auto;display:flex;gap:8px;">
+            <div class="session-actions" style="margin-left:auto;display:flex;gap:8px;">
                 {#if svc.state.isStopped() || svc.state.isFailed()}
                 <button class="btn btn-start" onclick="mgmtStart('{svc.toolName}', {svc.port})">Start</button>
                 {#else}

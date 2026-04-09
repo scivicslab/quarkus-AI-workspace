@@ -55,6 +55,19 @@
                 nameEl.replaceWith(a);
             }
 
+            // Update Start/Stop button for management services
+            const actions = card.querySelector('.session-actions');
+            if (actions) {
+                const isStopped = svc.state === 'STOPPED' || svc.state === 'FAILED';
+                const btn = actions.querySelector('button');
+                const isStartBtn = btn && btn.classList.contains('btn-start');
+                if (isStopped && !isStartBtn) {
+                    actions.innerHTML = '<button class="btn btn-start" onclick="mgmtStart(\'' + svc.toolName + '\', ' + svc.port + ')">Start</button>';
+                } else if (!isStopped && isStartBtn) {
+                    actions.innerHTML = '<button class="btn btn-stop" onclick="mgmtStop(\'' + svc.toolName + '\', ' + svc.port + ')">Stop</button>';
+                }
+            }
+
             // Update progress log
             const logEl = card.querySelector('.session-log');
             if (svc.state === 'STARTING' && svc.progressLog && svc.progressLog.length > 0) {
