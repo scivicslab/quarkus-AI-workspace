@@ -116,7 +116,7 @@ public class ProcessSupervisor {
 
     public SessionView toSessionView() {
         String accessUrl = (state == SessionState.READY)
-            ? "http://localhost:" + externalPort()
+            ? "/proxy/" + config.name()
             : null;
 
         return new SessionView(
