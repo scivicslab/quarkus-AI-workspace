@@ -34,6 +34,14 @@ public class ProxyRoute {
         "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
         "te", "trailers", "transfer-encoding", "upgrade", "host");
 
+    // Additional request headers to strip before forwarding:
+    // origin/referer are stripped so upstream CORS filters don't reject the request
+    // (from the browser's perspective, everything goes through the same Service Portal origin)
+    private static final Set<String> STRIP_REQUEST = Set.of(
+        "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+        "te", "trailers", "transfer-encoding", "upgrade", "host",
+        "origin", "referer");
+
     @Inject Vertx vertx;
     @Inject ServiceBackend backend;
 
@@ -96,7 +104,7 @@ public class ProxyRoute {
         httpClient.request(inReq.method(), port, "localhost", targetUri)
             .onSuccess(outReq -> {
                 inReq.headers().forEach(e -> {
-                    if (!HOP_BY_HOP.contains(e.getKey().toLowerCase())) {
+                    if (!STRIP_REQUEST.contains(e.getKey().toLowerCase())) {
                         outReq.putHeader(e.getKey(), e.getValue());
                     }
                 });
