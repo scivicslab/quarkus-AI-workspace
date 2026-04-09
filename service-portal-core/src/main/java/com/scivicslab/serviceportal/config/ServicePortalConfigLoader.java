@@ -10,23 +10,27 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Loads service-portal.yaml configuration.
+ * Loads service-portal configuration.
+ *
+ * <p>Search order:
+ * <ol>
+ *   <li>{@code -Dservice.portal.config=<path>} — explicit file path (highest priority)</li>
+ *   <li>{@code -Dservice.portal.backend=<mode>} — mode-specific file
+ *       {@code service-portal-<mode>.yaml} in cwd, then {@code /app/}</li>
+ *   <li>{@code service-portal.yaml} in cwd</li>
+ *   <li>{@code /app/service-portal.yaml}</li>
+ *   <li>Classpath {@code service-portal.yaml}</li>
+ * </ol>
+ *
+ * <p>Valid backend modes: {@code jvm}, {@code multi-docker}, {@code lxd}
  */
 public class ServicePortalConfigLoader {
 
     private static final Logger logger = Logger.getLogger(ServicePortalConfigLoader.class.getName());
     private static final String CONFIG_FILE = "service-portal.yaml";
 
-    /**
-     * Load configuration from service-portal.yaml.
-     * Search order:
-     *   1. System property -Dservice.portal.config=<path>
-     *   2. Current working directory
-     *   3. /app/service-portal.yaml (standard container path)
-     *   4. Classpath
-     */
     public static ServicePortalConfig load() {
-        // 1. System property override
+        // 1. Explicit path override
         String configPathProp = System.getProperty("service.portal.config");
         if (configPathProp != null) {
             Path p = Path.of(configPathProp);
@@ -36,19 +40,35 @@ public class ServicePortalConfigLoader {
             logger.warning("Config path from system property not found: " + configPathProp);
         }
 
-        // 2. Current working directory
+        // 2. Backend mode → service-portal-<mode>.yaml
+        String backend = System.getProperty("service.portal.backend");
+        if (backend != null && !backend.isBlank()) {
+            String modeFile = "service-portal-" + backend.trim() + ".yaml";
+            Path local = Path.of(modeFile);
+            if (Files.exists(local)) {
+                return loadFromFile(local);
+            }
+            Path container = Path.of("/app/" + modeFile);
+            if (Files.exists(container)) {
+                return loadFromFile(container);
+            }
+            logger.warning("Backend mode '" + backend + "' specified but " + modeFile
+                + " not found in cwd or /app/ — falling through to generic config");
+        }
+
+        // 3. Generic service-portal.yaml in cwd
         Path localConfig = Path.of(CONFIG_FILE);
         if (Files.exists(localConfig)) {
             return loadFromFile(localConfig);
         }
 
-        // 3. Standard container path
+        // 4. Standard container path
         Path containerConfig = Path.of("/app/" + CONFIG_FILE);
         if (Files.exists(containerConfig)) {
             return loadFromFile(containerConfig);
         }
 
-        // 4. Classpath fallback
+        // 5. Classpath fallback
         try (InputStream in = ServicePortalConfigLoader.class.getClassLoader()
                 .getResourceAsStream(CONFIG_FILE)) {
             if (in != null) {
