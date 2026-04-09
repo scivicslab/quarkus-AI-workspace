@@ -85,6 +85,14 @@ public class ServicePortalProcess {
     public int port() { return port; }
 
     public void stop() {
+        // Kill child processes first (tools launched by service-portal),
+        // then the service-portal itself.
+        long pid = process.pid();
+        try {
+            new ProcessBuilder("pkill", "-KILL", "-P", String.valueOf(pid))
+                .start().waitFor();
+        } catch (Exception ignored) {
+        }
         process.destroyForcibly();
     }
 
