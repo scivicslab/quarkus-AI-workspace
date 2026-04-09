@@ -6,7 +6,7 @@
 
     <groupId>com.scivicslab</groupId>
     <artifactId>service-portal</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.1</version>
 
     <name>Service Portal</name>
     <description>Service management portal — manages JVM tool processes via uber-JAR</description>
