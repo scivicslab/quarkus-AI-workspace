@@ -36,9 +36,9 @@ public class DockerBackend implements ServiceBackend {
     @Override
     public void initialize(ServicePortalConfig config) {
         this.config = config;
-        if (config.docker() == null) return;
+        if (config.jvm() == null) return;
 
-        for (var tool : config.docker().tools()) {
+        for (var tool : config.jvm().tools()) {
             instances.put(tool.name(), new CopyOnWriteArrayList<>());
             if (tool.autoStart()) {
                 try {
@@ -91,11 +91,11 @@ public class DockerBackend implements ServiceBackend {
         List<SessionView> activeSessions = new ArrayList<>();
         List<ToolView> launchTools = new ArrayList<>();
 
-        if (config.docker() == null) {
+        if (config.jvm() == null) {
             return new DashboardModel(managementServices, activeSessions, launchTools);
         }
 
-        for (var tool : config.docker().tools()) {
+        for (var tool : config.jvm().tools()) {
             CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(tool.name(), new CopyOnWriteArrayList<>());
 
             if (tool.autoStart()) {
@@ -130,7 +130,7 @@ public class DockerBackend implements ServiceBackend {
 
     @Override
     public String getBackendType() {
-        return "docker";
+        return "jvm";
     }
 
     // ---------------------------------------------------------------
@@ -138,8 +138,8 @@ public class DockerBackend implements ServiceBackend {
     // ---------------------------------------------------------------
 
     private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {
-        if (config.docker() == null) throw new ServiceException("No docker config");
-        return config.docker().tools().stream()
+        if (config.jvm() == null) throw new ServiceException("No docker config");
+        return config.jvm().tools().stream()
             .filter(t -> t.name().equals(name))
             .findFirst()
             .orElseThrow(() -> new ServiceException("Tool not found: " + name));

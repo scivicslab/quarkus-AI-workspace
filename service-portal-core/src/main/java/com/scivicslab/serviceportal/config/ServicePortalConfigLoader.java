@@ -81,8 +81,8 @@ public class ServicePortalConfigLoader {
         String backend = (String) root.getOrDefault("backend", "auto");
 
         ServicePortalConfig.DockerConfig dockerConfig = null;
-        if (root.containsKey("docker")) {
-            Map<String, Object> docker = (Map<String, Object>) root.get("docker");
+        if (root.containsKey("jvm")) {
+            Map<String, Object> docker = (Map<String, Object>) root.get("jvm");
             List<Map<String, Object>> tools = (List<Map<String, Object>>) docker.get("tools");
 
             List<ServicePortalConfig.ToolDefinition> toolDefs = tools.stream()
@@ -125,6 +125,16 @@ public class ServicePortalConfigLoader {
             dockerConfig = new ServicePortalConfig.DockerConfig(toolDefs);
         }
 
+        ServicePortalConfig.MultiDockerConfig multiDockerConfig = null;
+        if (root.containsKey("multi-docker")) {
+            Map<String, Object> md = (Map<String, Object>) root.get("multi-docker");
+            multiDockerConfig = new ServicePortalConfig.MultiDockerConfig(
+                (String) md.get("image"),
+                (String) md.get("vllmEndpoint"),
+                (String) md.get("defaultWorkdir")
+            );
+        }
+
         ServicePortalConfig.LxdConfig lxdConfig = null;
         if (root.containsKey("lxd")) {
             Map<String, Object> lxd = (Map<String, Object>) root.get("lxd");
@@ -154,6 +164,6 @@ public class ServicePortalConfigLoader {
             lxdConfig = new ServicePortalConfig.LxdConfig(management, containers);
         }
 
-        return new ServicePortalConfig(backend, dockerConfig, lxdConfig);
+        return new ServicePortalConfig(backend, dockerConfig, multiDockerConfig, lxdConfig);
     }
 }

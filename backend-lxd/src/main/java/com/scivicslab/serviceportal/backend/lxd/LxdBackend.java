@@ -7,8 +7,6 @@ import com.scivicslab.serviceportal.model.*;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,7 +52,7 @@ public class LxdBackend implements ServiceBackend {
     }
 
     @Override
-    public void startService(String serviceId) throws ServiceException {
+    public void startService(String serviceId, java.util.Map<String, String> params) throws ServiceException {
         // serviceId が "unit:name" 形式の場合はホストサービス
         if (serviceId.startsWith("unit:")) {
             String unitName = serviceId.substring(5);
@@ -73,48 +71,31 @@ public class LxdBackend implements ServiceBackend {
     }
 
     @Override
-    public void stopService(String serviceId) throws ServiceException {
-        if (serviceId.startsWith("unit:")) {
-            String unitName = serviceId.substring(5);
+    public void stopService(String toolName, int port) throws ServiceException {
+        if (toolName.startsWith("unit:")) {
+            String unitName = toolName.substring(5);
             stopHostService(unitName);
             return;
         }
 
-        if (serviceId.startsWith("container:")) {
-            String containerName = serviceId.substring(10);
+        if (toolName.startsWith("container:")) {
+            String containerName = toolName.substring(10);
             stopContainer(containerName);
             return;
         }
 
-        throw new ServiceException("Invalid service ID: " + serviceId);
+        throw new ServiceException("Invalid service ID: " + toolName);
     }
 
     @Override
-    public List<ServiceStatus> getServiceStatuses() {
-        List<ServiceStatus> statuses = new ArrayList<>();
-
-        // ホストサービスのステータス
-        for (HostService svc : hostServices.values()) {
-            statuses.add(toServiceStatus(svc));
-        }
-
-        // コンテナのステータス
-        for (Container container : containers.values()) {
-            statuses.add(toContainerStatus(container));
-        }
-
-        return statuses;
-    }
-
-    @Override
-    public List<String> getServiceLogs(String serviceId, int lines) {
-        if (serviceId.startsWith("unit:")) {
-            String unitName = serviceId.substring(5);
+    public List<String> getServiceLogs(String toolName, int port, int lines) {
+        if (toolName.startsWith("unit:")) {
+            String unitName = toolName.substring(5);
             return getHostServiceLogs(unitName, lines);
         }
 
-        if (serviceId.startsWith("container:")) {
-            String containerName = serviceId.substring(10);
+        if (toolName.startsWith("container:")) {
+            String containerName = toolName.substring(10);
             return getContainerLogs(containerName, lines);
         }
 
@@ -128,26 +109,11 @@ public class LxdBackend implements ServiceBackend {
 
     @Override
     public DashboardModel getDashboardModel() {
-        // Mock data for now - should be populated from actual services
-        List<com.scivicslab.serviceportal.model.HostService> managementServices = new ArrayList<>();
-        List<ToolInstance> toolInstances = new ArrayList<>();
-        List<ToolDefinition> tools = new ArrayList<>();
-        List<com.scivicslab.serviceportal.model.Container> containerList = new ArrayList<>();
-        List<HostTool> hostTools = new ArrayList<>();
-
         // TODO: Populate with actual service data from hostServices and containers
-
         return new DashboardModel(
-            false,                      // containerMode
-            true,                       // hostMode
-            "localhost",                // myIp
-            managementServices,         // managementServices
-            toolInstances,              // toolInstances
-            tools,                      // tools
-            containerList,              // containers
-            new HashMap<>(),            // containerProgress
-            hostTools,                  // hostTools
-            ""                          // storageInfo
+            List.of(),  // managementServices
+            List.of(),  // activeSessions
+            List.of()   // launchTools
         );
     }
 

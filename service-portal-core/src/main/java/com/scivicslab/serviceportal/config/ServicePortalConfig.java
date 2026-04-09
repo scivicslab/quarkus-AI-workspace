@@ -7,8 +7,9 @@ import java.util.Map;
  * Service portal configuration loaded from service-portal.yaml.
  */
 public record ServicePortalConfig(
-    String backend,  // "auto", "docker", or "lxd"
-    DockerConfig docker,
+    String backend,  // "auto", "jvm", "multi-docker", or "lxd"
+    DockerConfig jvm,
+    MultiDockerConfig multiDocker,
     LxdConfig lxd
 ) {
     /**
@@ -50,6 +51,15 @@ public record ServicePortalConfig(
     public record ParamOption(String value, String label) {}
 
     /**
+     * Multi-Docker backend configuration (multiple ai-toolkit containers).
+     */
+    public record MultiDockerConfig(
+        String image,           // ai-toolkit Docker image tag
+        String vllmEndpoint,    // vLLM server URL (env-var expansion supported)
+        String defaultWorkdir   // default working directory for new AI teams
+    ) {}
+
+    /**
      * LXD backend configuration.
      */
     public record LxdConfig(
@@ -77,6 +87,6 @@ public record ServicePortalConfig(
      * Create default configuration.
      */
     public static ServicePortalConfig defaultConfig() {
-        return new ServicePortalConfig("auto", null, null);
+        return new ServicePortalConfig("auto", null, null, null);  // jvm=null
     }
 }

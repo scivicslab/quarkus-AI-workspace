@@ -37,6 +37,7 @@ public class ProcessSupervisor {
 
     private volatile Process process;
     private volatile SessionState state = SessionState.STOPPED;
+    private volatile boolean stopping = false;
 
     public ProcessSupervisor(ServicePortalConfig.ToolDefinition config,
                              int port,
@@ -99,6 +100,7 @@ public class ProcessSupervisor {
             return;
         }
 
+        stopping = true;
         process.destroy();
         try {
             if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -114,7 +116,7 @@ public class ProcessSupervisor {
 
     public SessionView toSessionView() {
         String accessUrl = (state == SessionState.READY)
-            ? "http://localhost:" + port
+            ? "http://localhost:" + externalPort()
             : null;
 
         return new SessionView(
@@ -145,9 +147,8 @@ public class ProcessSupervisor {
         while (m.find()) {
             String varName = m.group(1) != null ? m.group(1) : m.group(2);
             String envVal = System.getenv(varName);
-            m.appendReplacement(sb, envVal != null
-                ? java.util.regex.Matcher.quoteReplacement(envVal)
-                : m.group());
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
+                envVal != null ? envVal : m.group()));
         }
         m.appendTail(sb);
         return sb.toString();
@@ -159,9 +160,18 @@ public class ProcessSupervisor {
 
     private List<String> buildCommand() {
         List<String> command = new ArrayList<>();
-        command.add("java");
+        String exec = expandEnvVars(config.jar());
+        boolean isNative = !exec.endsWith(".jar");
+        boolean hasPositionalArgs = config.args() != null && !config.args().isEmpty();
 
-        // JVM system properties from params
+        // Launcher: native binary runs directly; JVM mode needs "java"
+        if (isNative) {
+            command.add(exec);
+        } else {
+            command.add("java");
+        }
+
+        // -D flags from params (supported by both JVM and Quarkus native binaries)
         if (config.params() != null) {
             for (var param : config.params()) {
                 String value = launchParams.getOrDefault(param.key(), expandEnvVars(param.defaultVal()));
@@ -172,9 +182,12 @@ public class ProcessSupervisor {
             }
         }
 
-        if (config.args() != null && !config.args().isEmpty()) {
-            command.add("-jar");
-            command.add(config.jar());
+        if (hasPositionalArgs) {
+            // Positional-arg mode (e.g. html-saurus): no -Dquarkus.http.port, tool handles port itself
+            if (!isNative) {
+                command.add("-jar");
+                command.add(exec);
+            }
             List<String> args = config.args();
             for (int i = 0; i < args.size(); i++) {
                 String arg = expandEnvVars(args.get(i));
@@ -191,9 +204,12 @@ public class ProcessSupervisor {
                 command.add(arg);
             }
         } else {
+            // Quarkus mode: port flag always added
             command.add("-Dquarkus.http.port=" + port);
-            command.add("-jar");
-            command.add(config.jar());
+            if (!isNative) {
+                command.add("-jar");
+                command.add(exec);
+            }
         }
 
         return command;
@@ -215,11 +231,13 @@ public class ProcessSupervisor {
 
     private void waitForPort() {
         for (int attempt = 0; attempt < PORT_CHECK_MAX_ATTEMPTS; attempt++) {
+            if (stopping) return;
             if (process == null || !process.isAlive()) {
                 state = SessionState.FAILED;
                 return;
             }
             if (isTcpPortOpen(port)) {
+                if (stopping) return;
                 state = SessionState.READY;
                 logger.info(config.name() + ":" + port + " is READY");
                 return;
@@ -233,6 +251,22 @@ public class ProcessSupervisor {
         }
         logger.warning(config.name() + ":" + port + " timed out waiting for port");
         state = SessionState.FAILED;
+    }
+
+    /**
+     * Returns the external (host) port for this service.
+     * If HOST_PORT_BASE is set, maps container port to host port:
+     *   hostPort = HOST_PORT_BASE + (containerPort - 28080)
+     * Otherwise returns the container port as-is.
+     */
+    private int externalPort() {
+        String hostPortBase = System.getenv("HOST_PORT_BASE");
+        if (hostPortBase != null && !hostPortBase.isBlank()) {
+            try {
+                return Integer.parseInt(hostPortBase) + (port - 28080);
+            } catch (NumberFormatException ignored) {}
+        }
+        return port;
     }
 
     private boolean isTcpPortOpen(int p) {
