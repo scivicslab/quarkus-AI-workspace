@@ -22,7 +22,7 @@ import java.util.Map;
 public class ServicePortalProcess {
 
     private static final String JAR_PROP    = "service.portal.jar";
-    private static final String DEFAULT_JAR = "target/service-portal-1.0.0-runner.jar";
+    private static final String DEFAULT_JAR = "target/service-portal-1.1.0-runner.jar";
 
     private final Process process;
     private final int     port;

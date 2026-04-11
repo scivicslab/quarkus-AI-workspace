@@ -8,6 +8,10 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -100,6 +104,8 @@ public class ProcessSupervisor {
             logger.info(config.name() + ":" + port + " is not running");
             return;
         }
+
+        unregisterFromGateway();
 
         stopping = true;
         process.destroy();
@@ -246,6 +252,7 @@ public class ProcessSupervisor {
                 if (stopping) return;
                 state = SessionState.READY;
                 logger.info(config.name() + ":" + port + " is READY");
+                registerWithGateway();
                 return;
             }
             try {
@@ -281,6 +288,62 @@ public class ProcessSupervisor {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // MCP Gateway integration
+    // ---------------------------------------------------------------
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
+
+    private String gatewayUrl() {
+        String url = System.getProperty("mcp.gateway.url");
+        if (url != null && !url.isBlank()) return url;
+        url = System.getenv("MCP_GATEWAY_URL");
+        return (url != null && !url.isBlank()) ? url : null;
+    }
+
+    private void registerWithGateway() {
+        String gwUrl = gatewayUrl();
+        if (gwUrl == null) return;
+
+        String name = config.name() + "-" + port;
+        String url  = "http://localhost:" + port;
+        String body = "{\"name\":\"" + name + "\","
+            + "\"url\":\"" + url + "\","
+            + "\"description\":\"" + config.name() + " on port " + port + "\"}";
+
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(gwUrl + "/api/servers"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+                .thenAccept(r -> logger.info("Gateway registered: " + name + " (HTTP " + r.statusCode() + ")"))
+                .exceptionally(e -> { logger.warning("Gateway registration failed for " + name + ": " + e.getMessage()); return null; });
+        } catch (Exception e) {
+            logger.warning("Gateway registration failed for " + name + ": " + e.getMessage());
+        }
+    }
+
+    private void unregisterFromGateway() {
+        String gwUrl = gatewayUrl();
+        if (gwUrl == null) return;
+
+        String name = config.name() + "-" + port;
+
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(gwUrl + "/api/servers/" + name))
+                .DELETE()
+                .build();
+            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+                .thenAccept(r -> logger.info("Gateway unregistered: " + name + " (HTTP " + r.statusCode() + ")"))
+                .exceptionally(e -> { logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage()); return null; });
+        } catch (Exception e) {
+            logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage());
         }
     }
 

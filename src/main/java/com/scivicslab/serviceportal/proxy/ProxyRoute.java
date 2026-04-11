@@ -168,8 +168,15 @@ public class ProxyRoute {
                                 // Rewrite absolute-path URLs BEFORE injecting <base> tag,
                                 // so the injected tag itself is not re-rewritten.
                                 String patched = rewriteAbsoluteUrls(html, proxyBase);
-                                // Inject <base> tag so relative URLs resolve through the proxy
-                                String base = "<base href=\"" + proxyBase + "/\">";
+                                // Inject <base> tag using the request URL's own directory,
+                                // so relative links (e.g. ../../foo) resolve correctly for
+                                // deeply nested pages (e.g. /proxy/t/p/project/sub/file.html).
+                                String reqPath = inReq.path();
+                                int lastSlash = reqPath.lastIndexOf('/');
+                                String baseDir = lastSlash >= 0
+                                    ? reqPath.substring(0, lastSlash + 1)
+                                    : proxyBase + "/";
+                                String base = "<base href=\"" + baseDir + "\">";
                                 patched = patched.replaceFirst("(?i)<head([^>]*)>",
                                     "<head$1>" + base);
                                 byte[] bytes = patched.getBytes(StandardCharsets.UTF_8);
