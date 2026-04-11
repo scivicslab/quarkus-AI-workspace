@@ -9,6 +9,8 @@ import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+
+import java.util.regex.Pattern;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -16,6 +18,7 @@ import jakarta.inject.Inject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
+import java.util.regex.Matcher;
 
 /**
  * Reverse-proxy route: /proxy/{toolName}/{port}/* → http://localhost:{port}/*
@@ -47,9 +50,17 @@ public class ProxyRoute {
 
     private HttpClient httpClient;
 
+    // Matches absolute-path URLs in HTML attributes: href="/...", src="/...", action="/..."
+    // Captures the attribute name and the leading slash to prepend the proxy prefix.
+    private static final Pattern ABS_URL_PATTERN = Pattern.compile(
+        "((?:href|src|action|data-src)=\")(/)");
+
     @PostConstruct
     void init() {
-        httpClient = vertx.createHttpClient(new HttpClientOptions().setMaxPoolSize(100));
+        httpClient = vertx.createHttpClient(new HttpClientOptions()
+            .setMaxPoolSize(100)
+            .setIdleTimeout(0)          // disable idle timeout for long-lived SSE connections
+            .setKeepAlive(true));
     }
 
     void addRoutes(@Observes Router router) {
@@ -58,6 +69,21 @@ public class ProxyRoute {
     }
 
     // ---------------------------------------------------------------
+
+    /**
+     * Rewrites absolute-path URLs in HTML attributes to route through the proxy.
+     * e.g. href="/foo/bar" → href="/proxy/html-saurus/28110/foo/bar"
+     * Leaves protocol-relative (//...) and full URLs (http://...) untouched.
+     */
+    private static String rewriteAbsoluteUrls(String html, String proxyBase) {
+        Matcher m = ABS_URL_PATTERN.matcher(html);
+        StringBuilder sb = new StringBuilder(html.length() + 64);
+        while (m.find()) {
+            m.appendReplacement(sb, m.group(1) + Matcher.quoteReplacement(proxyBase) + "/");
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
 
     private boolean isValidSession(String toolName, int port) {
         var model = backend.getDashboardModel();
@@ -124,10 +150,11 @@ public class ProxyRoute {
 
                         String ct = outResp.getHeader("content-type");
                         boolean isHtml = ct != null && ct.contains("text/html");
+                        boolean isSse  = ct != null && ct.contains("text/event-stream");
 
                         if (!isHtml) {
                             String upstreamLen = outResp.getHeader("content-length");
-                            if (upstreamLen != null) {
+                            if (upstreamLen != null && !isSse) {
                                 ctx.response().putHeader("content-length", upstreamLen);
                             } else {
                                 ctx.response().putHeader("transfer-encoding", "chunked");
@@ -137,8 +164,13 @@ public class ProxyRoute {
                         if (isHtml) {
                             outResp.bodyHandler(body -> {
                                 String html = body.toString(StandardCharsets.UTF_8);
-                                String base = "<base href=\"/proxy/" + toolName + "/" + port + "/\">";
-                                String patched = html.replaceFirst("(?i)<head([^>]*)>",
+                                String proxyBase = "/proxy/" + toolName + "/" + port;
+                                // Rewrite absolute-path URLs BEFORE injecting <base> tag,
+                                // so the injected tag itself is not re-rewritten.
+                                String patched = rewriteAbsoluteUrls(html, proxyBase);
+                                // Inject <base> tag so relative URLs resolve through the proxy
+                                String base = "<base href=\"" + proxyBase + "/\">";
+                                patched = patched.replaceFirst("(?i)<head([^>]*)>",
                                     "<head$1>" + base);
                                 byte[] bytes = patched.getBytes(StandardCharsets.UTF_8);
                                 ctx.response()
@@ -146,6 +178,7 @@ public class ProxyRoute {
                                     .end(Buffer.buffer(bytes));
                             });
                         } else {
+                            // SSE and other streaming responses: pipe without buffering
                             outResp.pipeTo(ctx.response());
                         }
                     })
