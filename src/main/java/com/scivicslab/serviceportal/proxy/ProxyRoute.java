@@ -141,10 +141,23 @@ public class ProxyRoute {
                     .onSuccess(outResp -> {
                         ctx.response().setStatusCode(outResp.statusCode());
 
+                        String proxyBase = "/proxy/" + toolName + "/" + port;
+
                         outResp.headers().forEach(e -> {
                             String key = e.getKey().toLowerCase();
                             if (!HOP_BY_HOP.contains(key) && !key.equals("content-length")) {
-                                ctx.response().putHeader(e.getKey(), e.getValue());
+                                // Rewrite server-side redirect Location headers so the browser
+                                // stays within the proxy (e.g. 302 Location: /foo → /proxy/t/p/foo).
+                                if (key.equals("location")) {
+                                    String loc = e.getValue();
+                                    if (loc != null && loc.startsWith("/") && !loc.startsWith(proxyBase)) {
+                                        ctx.response().putHeader(e.getKey(), proxyBase + loc);
+                                    } else {
+                                        ctx.response().putHeader(e.getKey(), loc);
+                                    }
+                                } else {
+                                    ctx.response().putHeader(e.getKey(), e.getValue());
+                                }
                             }
                         });
 
@@ -164,21 +177,49 @@ public class ProxyRoute {
                         if (isHtml) {
                             outResp.bodyHandler(body -> {
                                 String html = body.toString(StandardCharsets.UTF_8);
-                                String proxyBase = "/proxy/" + toolName + "/" + port;
-                                // Rewrite absolute-path URLs BEFORE injecting <base> tag,
-                                // so the injected tag itself is not re-rewritten.
+
+                                // Step 1: Rewrite absolute-path URLs in HTML attributes
+                                // (href, src, action, data-src) before injecting the <base>
+                                // tag so the injected markup is not re-processed.
                                 String patched = rewriteAbsoluteUrls(html, proxyBase);
-                                // Inject <base> tag using the request URL's own directory,
-                                // so relative links (e.g. ../../foo) resolve correctly for
-                                // deeply nested pages (e.g. /proxy/t/p/project/sub/file.html).
+
+                                // Step 2: Inject <base> tag using the request URL's own
+                                // directory so that relative links (e.g. ../../foo) resolve
+                                // correctly regardless of how deeply nested the page is within
+                                // the portal hierarchy.
                                 String reqPath = inReq.path();
                                 int lastSlash = reqPath.lastIndexOf('/');
                                 String baseDir = lastSlash >= 0
                                     ? reqPath.substring(0, lastSlash + 1)
                                     : proxyBase + "/";
                                 String base = "<base href=\"" + baseDir + "\">";
+
+                                // Step 3: Inject a monkey-patch script that rewrites
+                                // absolute-path URLs in programmatic navigation so that
+                                // fetch(), XMLHttpRequest, location.assign(), and
+                                // location.replace() all go through the proxy without
+                                // requiring any changes in the backend tool.
+                                String pb = proxyBase; // effectively final for use in string
+                                String script = "<script>(function(){"
+                                    + "var b='" + pb + "';"
+                                    + "var pf=window.fetch;"
+                                    + "window.fetch=function(u,o){"
+                                    + "if(typeof u==='string'&&u.charCodeAt(0)===47&&!u.startsWith(b))u=b+u;"
+                                    + "return pf.call(this,u,o);};"
+                                    + "var px=XMLHttpRequest.prototype.open;"
+                                    + "XMLHttpRequest.prototype.open=function(m,u){"
+                                    + "if(typeof u==='string'&&u.charCodeAt(0)===47&&!u.startsWith(b))u=b+u;"
+                                    + "return px.apply(this,arguments);};"
+                                    + "var pa=location.assign.bind(location);"
+                                    + "location.assign=function(u){"
+                                    + "if(u.charCodeAt(0)===47&&!u.startsWith(b))u=b+u;pa(u);};"
+                                    + "var pr=location.replace.bind(location);"
+                                    + "location.replace=function(u){"
+                                    + "if(u.charCodeAt(0)===47&&!u.startsWith(b))u=b+u;pr(u);};"
+                                    + "})();</script>";
+
                                 patched = patched.replaceFirst("(?i)<head([^>]*)>",
-                                    "<head$1>" + base);
+                                    "<head$1>" + base + script);
                                 byte[] bytes = patched.getBytes(StandardCharsets.UTF_8);
                                 ctx.response()
                                     .putHeader("content-length", String.valueOf(bytes.length))
