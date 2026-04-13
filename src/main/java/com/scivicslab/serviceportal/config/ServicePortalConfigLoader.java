@@ -29,6 +29,13 @@ public class ServicePortalConfigLoader {
     private static final Logger logger = Logger.getLogger(ServicePortalConfigLoader.class.getName());
     private static final String CONFIG_FILE = "service-portal.yaml";
 
+    private static String lastLoadedPath = "(none)";
+
+    /** Returns the path of the config file loaded most recently. */
+    public static String getLastLoadedPath() {
+        return lastLoadedPath;
+    }
+
     public static ServicePortalConfig load() {
         // 1. Explicit path override
         String configPathProp = System.getProperty("service.portal.config");
@@ -85,6 +92,7 @@ public class ServicePortalConfigLoader {
 
     private static ServicePortalConfig loadFromFile(Path path) {
         logger.info("Loading config from: " + path.toAbsolutePath());
+        lastLoadedPath = path.toAbsolutePath().toString();
         try (InputStream in = Files.newInputStream(path)) {
             return parse(in);
         } catch (Exception e) {
@@ -98,7 +106,12 @@ public class ServicePortalConfigLoader {
         Yaml yaml = new Yaml();
         Map<String, Object> root = yaml.load(in);
 
-        String backend = (String) root.getOrDefault("backend", "auto");
+        String backend    = (String) root.getOrDefault("backend", "auto");
+        String accessHost = (String) root.get("accessHost");
+
+        // System property overrides YAML value
+        String propHost = System.getProperty("service.portal.access.host");
+        if (propHost != null && !propHost.isBlank()) accessHost = propHost;
 
         ServicePortalConfig.DockerConfig dockerConfig = null;
         if (root.containsKey("jvm")) {
@@ -136,6 +149,7 @@ public class ServicePortalConfigLoader {
                         (String) t.get("jar"),
                         (Integer) t.get("port"),
                         (Boolean) t.getOrDefault("autoStart", false),
+                        (Boolean) t.getOrDefault("fixedPort", false),
                         args,
                         params
                     );
@@ -184,6 +198,7 @@ public class ServicePortalConfigLoader {
             lxdConfig = new ServicePortalConfig.LxdConfig(management, containers);
         }
 
-        return new ServicePortalConfig(backend, dockerConfig, multiDockerConfig, lxdConfig);
+        return new ServicePortalConfig(backend, accessHost,
+            dockerConfig, multiDockerConfig, lxdConfig);
     }
 }

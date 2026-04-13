@@ -150,12 +150,8 @@ class ToolStartupIT {
         String override = System.getProperty("test.jars.dir");
         if (override != null) return Path.of(override);
 
-        // If all deployed JARs exist in SCIVICSLAB_HOME, use that directory directly
-        String scivicsHome = System.getenv("SCIVICSLAB_HOME");
-        if (scivicsHome == null) {
-            scivicsHome = System.getProperty("user.home") + "/works";
-        }
-        Path scivicsDir = Path.of(scivicsHome);
+        // If all deployed JARs exist in ~/works, use that directory directly
+        Path scivicsDir = Path.of(System.getProperty("user.home"), "works");
         if (Files.exists(scivicsDir.resolve("quarkus-chat-ui.jar"))
                 && Files.exists(scivicsDir.resolve("html-saurus.jar"))
                 && Files.exists(scivicsDir.resolve("turing-workflow-editor.jar"))) {

@@ -7,7 +7,8 @@ import java.util.Map;
  * Service portal configuration loaded from service-portal.yaml.
  */
 public record ServicePortalConfig(
-    String backend,  // "auto", "jvm", "multi-docker", or "lxd"
+    String backend,     // "auto", "jvm", "multi-docker", or "lxd"
+    String accessHost,  // hostname used in dashboard URLs (default: "localhost")
     DockerConfig jvm,
     MultiDockerConfig multiDocker,
     LxdConfig lxd
@@ -31,6 +32,7 @@ public record ServicePortalConfig(
         String jar,
         int port,
         boolean autoStart,
+        boolean fixedPort,
         java.util.List<String> args,
         java.util.List<ParamDefinition> params
     ) {}
@@ -87,6 +89,6 @@ public record ServicePortalConfig(
      * Create default configuration.
      */
     public static ServicePortalConfig defaultConfig() {
-        return new ServicePortalConfig("auto", null, null, null);  // jvm=null
+        return new ServicePortalConfig("auto", null, null, null, null);
     }
 }

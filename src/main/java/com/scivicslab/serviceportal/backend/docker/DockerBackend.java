@@ -10,8 +10,9 @@ import com.scivicslab.serviceportal.spi.ServiceBackend;
 import com.scivicslab.serviceportal.spi.ServiceException;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,29 +31,158 @@ import java.util.logging.Logger;
 public class DockerBackend implements ServiceBackend {
 
     private static final Logger logger = Logger.getLogger(DockerBackend.class.getName());
+    private static final Path PID_FILE = Path.of(System.getProperty("user.home"),
+        ".cache", "service-portal", "children.pid");
 
     /** toolName -> list of instances (may have multiple per tool) */
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<ProcessSupervisor>> instances
         = new ConcurrentHashMap<>();
 
     private ServicePortalConfig config;
+    private String accessHost;
 
     @Override
     public void initialize(ServicePortalConfig config) {
         this.config = config;
+        this.accessHost = config.accessHost() != null ? config.accessHost() : "localhost";
         if (config.jvm() == null) return;
 
+        adoptOrKillOrphans();
+
         for (var tool : config.jvm().tools()) {
-            instances.put(tool.name(), new CopyOnWriteArrayList<>());
+            // computeIfAbsent preserves any supervisors already adopted from the PID file
+            CopyOnWriteArrayList<ProcessSupervisor> existing =
+                instances.computeIfAbsent(tool.name(), k -> new CopyOnWriteArrayList<>());
             if (tool.autoStart()) {
-                try {
-                    startService(tool.name(), Map.of());
-                } catch (ServiceException e) {
-                    logger.severe("Failed to auto-start " + tool.name() + ": " + e.getMessage());
+                boolean alreadyRunning = existing.stream()
+                    .anyMatch(s -> s.getState() == SessionState.READY || s.getState() == SessionState.STARTING);
+                if (alreadyRunning) {
+                    logger.info("Skipping auto-start for " + tool.name() + " — adopted process already running");
+                } else {
+                    try {
+                        startService(tool.name(), Map.of());
+                    } catch (ServiceException e) {
+                        logger.severe("Failed to auto-start " + tool.name() + ": " + e.getMessage());
+                    }
                 }
             }
         }
         logger.info("Docker backend initialized");
+    }
+
+    /**
+     * On startup, reads the PID file written by the previous session.
+     * If a recorded process is still alive, it is adopted back into the
+     * instances map as a READY supervisor (no new process is spawned).
+     * If it is dead, it is treated as a true orphan and ignored.
+     * Any entry that cannot be matched to a configured tool is killed.
+     */
+    private void adoptOrKillOrphans() {
+        if (!Files.exists(PID_FILE)) return;
+        try {
+            List<String> remaining = new ArrayList<>();
+            for (String line : Files.readAllLines(PID_FILE)) {
+                String[] p = line.trim().split(" ");
+                if (p.length < 3) continue;
+                String toolName = p[0];
+                int port;
+                long pid;
+                try {
+                    port = Integer.parseInt(p[1]);
+                    pid  = Long.parseLong(p[2]);
+                } catch (NumberFormatException ignored) { continue; }
+
+                ProcessHandle handle = ProcessHandle.of(pid).orElse(null);
+                if (handle == null || !handle.isAlive()) {
+                    logger.info("Orphan already dead: " + toolName + ":" + port + " (PID " + pid + ")");
+                    continue;
+                }
+
+                // Check if this tool is still in the config
+                boolean knownTool = config.jvm() != null && config.jvm().tools().stream()
+                    .anyMatch(t -> t.name().equals(toolName));
+
+                if (!knownTool) {
+                    logger.info("Tool removed from config, leaving process alone: "
+                        + toolName + ":" + port + " (PID " + pid + ")");
+                    continue;
+                }
+
+                // Adopt: create a supervisor that wraps the existing process
+                ServicePortalConfig.ToolDefinition def;
+                try { def = findTool(toolName); } catch (Exception e) { continue; }
+
+                // Verify the live process is actually the expected java -jar invocation.
+                // OS PID reuse can cause an unrelated process (e.g. emacs) to hold the
+                // same PID after the original tool was stopped manually.
+                if (!isExpectedJarProcess(handle, def.jar())) {
+                    logger.warning("PID " + pid + " is alive but does not match jar '"
+                        + def.jar() + "' — skipping adoption of " + toolName + ":" + port);
+                    continue;
+                }
+
+                ProcessSupervisor supervisor = ProcessSupervisor.adopt(def, port, pid);
+                instances.computeIfAbsent(toolName, k -> new CopyOnWriteArrayList<>()).add(supervisor);
+                remaining.add(line);
+                logger.info("Adopted existing process: " + toolName + ":" + port + " (PID " + pid + ")");
+            }
+
+            if (remaining.isEmpty()) {
+                Files.deleteIfExists(PID_FILE);
+            } else {
+                Files.writeString(PID_FILE, String.join("\n", remaining) + "\n");
+            }
+        } catch (Exception e) {
+            logger.warning("Failed to process orphan PID file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Returns true if the process identified by handle was launched with the
+     * expected jar (or native binary). Checks that the command is "java" and
+     * that one of the arguments contains the jar filename, or that the command
+     * itself contains the binary filename for native executables.
+     * This guards against OS PID reuse: a new unrelated process may have been
+     * assigned the same PID after the original tool exited.
+     */
+    private static boolean isExpectedJarProcess(ProcessHandle handle, String jarPath) {
+        if (jarPath == null || jarPath.isBlank()) return false;
+        String jarFileName = java.nio.file.Path.of(jarPath).getFileName().toString();
+        ProcessHandle.Info info = handle.info();
+        String command = info.command().orElse("");
+        String[] args  = info.arguments().orElse(new String[0]);
+        boolean isJar    = jarFileName.endsWith(".jar");
+        if (isJar) {
+            boolean commandIsJava = command.endsWith("java") || command.endsWith("java.exe");
+            boolean argHasJar     = java.util.Arrays.stream(args)
+                .anyMatch(a -> a.contains(jarFileName));
+            return commandIsJava && argHasJar;
+        } else {
+            // Native binary: the command path itself should contain the binary name
+            return command.contains(jarFileName);
+        }
+    }
+
+    private void recordPid(String toolName, int port, long pid) {
+        try {
+            Files.createDirectories(PID_FILE.getParent());
+            Files.writeString(PID_FILE, toolName + " " + port + " " + pid + "\n",
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception e) {
+            logger.warning("Failed to write PID file: " + e.getMessage());
+        }
+    }
+
+    private void removePid(int port) {
+        try {
+            if (!Files.exists(PID_FILE)) return;
+            var lines = Files.readAllLines(PID_FILE).stream()
+                .filter(l -> !l.matches("\\S+ " + port + " \\d+"))
+                .toList();
+            Files.writeString(PID_FILE, String.join("\n", lines) + (lines.isEmpty() ? "" : "\n"));
+        } catch (Exception e) {
+            logger.warning("Failed to update PID file: " + e.getMessage());
+        }
     }
 
     @Override
@@ -64,10 +194,21 @@ public class DockerBackend implements ServiceBackend {
         // Clean up stopped instances before calculating port
         list.removeIf(s -> s.getState() == SessionState.STOPPED);
 
-        int port = findFreePort(def.port(), list);
+        int port;
+        if (def.fixedPort()) {
+            port = def.port();
+            if (!isPortAvailable(port)) {
+                throw new ServiceException(toolName + " requires fixed port :" + port
+                    + " but the port is already in use. Free the port before starting " + toolName + ".");
+            }
+        } else {
+            port = findFreePort(def.port(), list);
+        }
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
         list.add(supervisor);
         supervisor.start();
+        long pid = supervisor.getPid();
+        if (pid > 0) recordPid(toolName, port, pid);
     }
 
     @Override
@@ -78,6 +219,7 @@ public class DockerBackend implements ServiceBackend {
             .findFirst()
             .orElseThrow(() -> new ServiceException("No instance of " + toolName + " on port " + port));
         target.stop();
+        removePid(port);
     }
 
     @Override
@@ -104,16 +246,19 @@ public class DockerBackend implements ServiceBackend {
 
             if (tool.autoStart()) {
                 // Management service section
-                if (list.isEmpty()) {
+                List<ProcessSupervisor> active = list.stream()
+                    .filter(s -> s.getState() != SessionState.STOPPED)
+                    .toList();
+                if (active.isEmpty()) {
                     managementServices.add(stoppedView(tool));
                 } else {
-                    for (var s : list) managementServices.add(s.toSessionView());
+                    for (var s : active) managementServices.add(s.toSessionView((name, port) -> "http://" + accessHost + ":" + port + "/"));
                 }
             } else {
                 // Active sessions section: non-stopped instances
                 for (var s : list) {
                     if (s.getState() != SessionState.STOPPED) {
-                        activeSessions.add(s.toSessionView());
+                        activeSessions.add(s.toSessionView((name, port) -> "http://" + accessHost + ":" + port + "/"));
                     }
                 }
                 // Launch tools section: always show tile
@@ -160,12 +305,15 @@ public class DockerBackend implements ServiceBackend {
     }
 
     private boolean isTcpPortOpen(int port) {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress("localhost", port), 200);
-            return true;
+        try (java.net.ServerSocket ss = new java.net.ServerSocket(port)) {
+            return false; // successfully bound → port is free
         } catch (Exception e) {
-            return false;
+            return true; // bind failed → port is in use
         }
+    }
+
+    private boolean isPortAvailable(int port) {
+        return !isTcpPortOpen(port);
     }
 
     private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {

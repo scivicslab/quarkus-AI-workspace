@@ -64,10 +64,8 @@ class ChatUiProviderIT {
         String override = System.getProperty("test.jars.dir");
         if (override != null) return Path.of(override);
 
-        // Use SCIVICSLAB_HOME (deployed JARs) if quarkus-chat-ui.jar is there
-        String scivicsHome = System.getenv("SCIVICSLAB_HOME");
-        if (scivicsHome == null) scivicsHome = System.getProperty("user.home") + "/works";
-        Path deployed = Path.of(scivicsHome, "quarkus-chat-ui.jar");
+        // Use ~/works if quarkus-chat-ui.jar is deployed there
+        Path deployed = Path.of(System.getProperty("user.home"), "works", "quarkus-chat-ui.jar");
         if (Files.exists(deployed)) return deployed.getParent();
 
         // Fall back: auto-discover from source target and copy with non-versioned name

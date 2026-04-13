@@ -63,6 +63,13 @@
             <version>3.0.1</version>
         </dependency>
 
+        <!-- pluggable-cli: reflection-free CLI parsing (no-reflection, no picocli) -->
+        <dependency>
+            <groupId>com.scivicslab</groupId>
+            <artifactId>pluggable-cli</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>io.quarkus</groupId>

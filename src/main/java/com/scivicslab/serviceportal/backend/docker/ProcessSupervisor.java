@@ -40,6 +40,7 @@ public class ProcessSupervisor {
     private String memo = "";
 
     private volatile Process process;
+    private volatile ProcessHandle adoptedHandle;
     private volatile SessionState state = SessionState.STOPPED;
     private volatile boolean stopping = false;
 
@@ -61,6 +62,27 @@ public class ProcessSupervisor {
 
     public SessionState getState() {
         return state;
+    }
+
+    public long getPid() {
+        Process p = process;
+        if (p != null) return p.pid();
+        ProcessHandle h = adoptedHandle;
+        return h != null ? h.pid() : -1;
+    }
+
+    /**
+     * Creates a supervisor that wraps an already-running OS process.
+     * Used when Service Portal restarts and re-adopts processes it previously started.
+     * The supervisor starts in READY state without spawning a new process.
+     */
+    public static ProcessSupervisor adopt(ServicePortalConfig.ToolDefinition config, int port, long pid) {
+        ProcessSupervisor supervisor = new ProcessSupervisor(config, port, Map.of());
+        supervisor.adoptedHandle = ProcessHandle.of(pid).orElse(null);
+        supervisor.state = SessionState.READY;
+        supervisor.registerWithGateway();
+        logger.info("Adopted " + config.name() + ":" + port + " (PID " + pid + ")");
+        return supervisor;
     }
 
     public void setMemo(String memo) {
@@ -100,30 +122,36 @@ public class ProcessSupervisor {
     }
 
     public synchronized void stop() {
-        if (process == null || !process.isAlive()) {
-            logger.info(config.name() + ":" + port + " is not running");
-            return;
-        }
-
         unregisterFromGateway();
-
         stopping = true;
-        process.destroy();
-        try {
-            if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                process.destroyForcibly();
+
+        if (process != null && process.isAlive()) {
+            process.destroy();
+            try {
+                if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } else if (adoptedHandle != null && adoptedHandle.isAlive()) {
+            adoptedHandle.destroy();
+            try {
+                adoptedHandle.onExit().get(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                adoptedHandle.destroyForcibly();
+            }
+        } else {
+            logger.info(config.name() + ":" + port + " is not running");
         }
 
         state = SessionState.STOPPED;
         logger.info("Stopped " + config.name() + ":" + port);
     }
 
-    public SessionView toSessionView() {
+    public SessionView toSessionView(java.util.function.BiFunction<String, Integer, String> urlBuilder) {
         String accessUrl = (state == SessionState.READY)
-            ? "/proxy/" + config.name() + "/" + port
+            ? urlBuilder.apply(config.name(), port)
             : null;
 
         return new SessionView(
@@ -170,7 +198,7 @@ public class ProcessSupervisor {
 
     private List<String> buildCommand() {
         List<String> command = new ArrayList<>();
-        String exec = expandEnvVars(config.jar());
+        String exec = resolveJarPath(expandEnvVars(config.jar()));
         boolean isNative = !exec.endsWith(".jar");
         boolean hasPositionalArgs = config.args() != null && !config.args().isEmpty();
 
@@ -201,7 +229,7 @@ public class ProcessSupervisor {
             }
             List<String> args = config.args();
             for (int i = 0; i < args.size(); i++) {
-                String arg = expandEnvVars(args.get(i));
+                String arg = expandEnvVars(args.get(i).replace("${PORT}", String.valueOf(port)));
                 if (config.params() != null) {
                     int fi = i;
                     var paramAtPos = config.params().stream()
@@ -289,6 +317,19 @@ public class ProcessSupervisor {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Resolves a jar path. If the path is already absolute, returns it as-is.
+     * Otherwise resolves relative to the directory containing service-portal.jar
+     * (i.e. user.dir at startup), so yaml entries like "quarkus-mcp-gateway.jar"
+     * work without any path prefix or environment variable.
+     */
+    private static String resolveJarPath(String path) {
+        if (path == null || path.isBlank()) return path;
+        java.io.File f = new java.io.File(path);
+        if (f.isAbsolute()) return path;
+        return new java.io.File(System.getProperty("user.dir"), path).getAbsolutePath();
     }
 
     // ---------------------------------------------------------------

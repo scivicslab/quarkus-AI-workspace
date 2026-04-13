@@ -4,13 +4,13 @@ jvm:
   tools:
     # MCP Gateway: auto-start
     - name: quarkus-mcp-gateway
-      jar: ${SCIVICSLAB_HOME}/quarkus-mcp-gateway.jar
+      jar: quarkus-mcp-gateway.jar
       port: 28081
       autoStart: true
 
     # Chat UI (on-demand)
     - name: quarkus-chat-ui
-      jar: ${SCIVICSLAB_HOME}/quarkus-chat-ui.jar
+      jar: quarkus-chat-ui.jar
       port: 28100
       autoStart: false
       params:
@@ -36,7 +36,7 @@ jvm:
 
     # Document portal (on-demand)
     - name: html-saurus
-      jar: ${SCIVICSLAB_HOME}/html-saurus.jar
+      jar: html-saurus.jar
       port: 28110
       autoStart: false
       args:
@@ -44,7 +44,7 @@ jvm:
         - --portal-mode
         - --serve
         - --port
-        - "28110"
+        - "${PORT}"
       params:
         - key: dir
           label: Document Root
@@ -54,7 +54,7 @@ jvm:
 
     # Turing Workflow Editor (on-demand)
     - name: turing-workflow-editor
-      jar: ${SCIVICSLAB_HOME}/turing-workflow-editor.jar
+      jar: turing-workflow-editor.jar
       port: 28120
       autoStart: false
       params:
