@@ -1,17 +1,14 @@
 package com.scivicslab.serviceportal.config;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * Service portal configuration loaded from service-portal.yaml.
+ * Service portal configuration loaded from service-portal-jvm.yaml.
  */
 public record ServicePortalConfig(
-    String backend,     // "auto", "jvm", "multi-docker", or "lxd"
+    String backend,     // "auto", "jvm", or "docker" (all map to DockerBackend)
     String accessHost,  // hostname used in dashboard URLs (default: "localhost")
-    DockerConfig jvm,
-    MultiDockerConfig multiDocker,
-    LxdConfig lxd
+    DockerConfig jvm
 ) {
     /**
      * Docker backend configuration.
@@ -53,42 +50,9 @@ public record ServicePortalConfig(
     public record ParamOption(String value, String label) {}
 
     /**
-     * Multi-Docker backend configuration (multiple ai-toolkit containers).
-     */
-    public record MultiDockerConfig(
-        String image,           // ai-toolkit Docker image tag
-        String vllmEndpoint,    // vLLM server URL (env-var expansion supported)
-        String defaultWorkdir   // default working directory for new AI teams
-    ) {}
-
-    /**
-     * LXD backend configuration.
-     */
-    public record LxdConfig(
-        List<ManagementService> management,
-        List<ContainerConfig> containers
-    ) {}
-
-    /**
-     * Management service (systemd) configuration.
-     */
-    public record ManagementService(
-        String unit,
-        int port
-    ) {}
-
-    /**
-     * Container configuration.
-     */
-    public record ContainerConfig(
-        String name,
-        String template
-    ) {}
-
-    /**
      * Create default configuration.
      */
     public static ServicePortalConfig defaultConfig() {
-        return new ServicePortalConfig("auto", null, null, null, null);
+        return new ServicePortalConfig("auto", null, null);
     }
 }

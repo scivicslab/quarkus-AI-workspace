@@ -4,8 +4,8 @@ import com.scivicslab.serviceportal.config.ServicePortalConfig;
 import com.scivicslab.serviceportal.model.SessionState;
 import com.scivicslab.serviceportal.model.SessionView;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.File;
+import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
@@ -25,6 +25,10 @@ import java.util.logging.Logger;
  *
  * After start(), a background thread polls the TCP port until it opens,
  * then transitions state from STARTING to READY.
+ *
+ * Child process stdout/stderr is redirected to a log file rather than a pipe.
+ * This ensures that when the portal JVM exits, the child process is NOT killed
+ * by SIGPIPE — the child continues writing to the file independently.
  */
 public class ProcessSupervisor {
 
@@ -32,6 +36,10 @@ public class ProcessSupervisor {
     private static final int LOG_BUFFER_SIZE = 500;
     private static final int PORT_CHECK_INTERVAL_MS = 2000;
     private static final int PORT_CHECK_MAX_ATTEMPTS = 30; // 60 seconds total
+
+    /** Directory where per-process log files are written. */
+    private static final File LOG_DIR = new File(
+        System.getProperty("user.home"), ".local/share/service-portal/logs");
 
     private final ServicePortalConfig.ToolDefinition config;
     private final int port;
@@ -43,6 +51,12 @@ public class ProcessSupervisor {
     private volatile ProcessHandle adoptedHandle;
     private volatile SessionState state = SessionState.STOPPED;
     private volatile boolean stopping = false;
+
+    /**
+     * Log file for this instance. stdout+stderr of the child process are written here.
+     * Using a file (not a pipe) means the child survives when the portal exits.
+     */
+    private volatile File logFile;
 
     public ProcessSupervisor(ServicePortalConfig.ToolDefinition config,
                              int port,
@@ -72,15 +86,26 @@ public class ProcessSupervisor {
     }
 
     /**
+     * Returns the log file path for a given tool/port combination.
+     * Deterministic name so it can be located after portal restart.
+     */
+    static File logFileFor(String toolName, int port) {
+        return new File(LOG_DIR, toolName + "-" + port + ".log");
+    }
+
+    /**
      * Creates a supervisor that wraps an already-running OS process.
      * Used when Service Portal restarts and re-adopts processes it previously started.
      * The supervisor starts in READY state without spawning a new process.
+     * Tailing the existing log file resumes so the UI can show recent output.
      */
     public static ProcessSupervisor adopt(ServicePortalConfig.ToolDefinition config, int port, long pid) {
         ProcessSupervisor supervisor = new ProcessSupervisor(config, port, Map.of());
         supervisor.adoptedHandle = ProcessHandle.of(pid).orElse(null);
         supervisor.state = SessionState.READY;
+        supervisor.logFile = logFileFor(config.name(), port);
         supervisor.registerWithGateway();
+        Thread.ofVirtual().start(supervisor::tailLogFile);
         logger.info("Adopted " + config.name() + ":" + port + " (PID " + pid + ")");
         return supervisor;
     }
@@ -99,7 +124,16 @@ public class ProcessSupervisor {
             List<String> command = buildCommand();
             logger.info("Executing: " + String.join(" ", command));
             ProcessBuilder pb = new ProcessBuilder(command);
+
+            // Redirect stdout+stderr to a log file instead of a pipe.
+            // This is critical: if we used a pipe, the child process would receive
+            // SIGPIPE and die when the portal JVM exits (closing the pipe read end).
+            // With a file redirect, the child writes to its own fd independently
+            // of the portal's lifecycle.
+            logFile = logFileFor(config.name(), port);
+            LOG_DIR.mkdirs();
             pb.redirectErrorStream(true);
+            pb.redirectOutput(logFile); // truncates existing file for fresh log
 
             java.io.File workingDir = resolveWorkingDir();
             if (workingDir != null) {
@@ -109,7 +143,7 @@ public class ProcessSupervisor {
             process = pb.start();
             state = SessionState.STARTING;
 
-            Thread.ofVirtual().start(this::readLogs);
+            Thread.ofVirtual().start(this::tailLogFile);
             Thread.ofVirtual().start(this::waitForPort);
 
             logger.info("Started " + config.name() + " on port " + port
@@ -274,6 +308,8 @@ public class ProcessSupervisor {
             if (stopping) return;
             if (process == null || !process.isAlive()) {
                 state = SessionState.FAILED;
+                logger.warning(config.name() + ":" + port + " process died before port opened"
+                    + (logFile != null ? " — see log: " + logFile : ""));
                 return;
             }
             if (isTcpPortOpen(port)) {
@@ -290,8 +326,72 @@ public class ProcessSupervisor {
                 return;
             }
         }
-        logger.warning(config.name() + ":" + port + " timed out waiting for port");
+        logger.warning(config.name() + ":" + port + " timed out waiting for port"
+            + (logFile != null ? " — see log: " + logFile : ""));
         state = SessionState.FAILED;
+    }
+
+    /**
+     * Tails the log file, adding lines to the log buffer.
+     *
+     * Uses RandomAccessFile so that when readLine() returns null (EOF on a
+     * growing file), the next call will pick up newly written bytes once
+     * the child process has written more. This is the standard "tail -f" pattern.
+     *
+     * This method runs in a virtual thread and exits when:
+     * - stopping is true (explicit stop requested), OR
+     * - the process is no longer alive and no new data appears in the file
+     */
+    private void tailLogFile() {
+        if (logFile == null) return;
+
+        // Wait for the log file to be created by the child process
+        for (int i = 0; i < 100 && !logFile.exists(); i++) {
+            if (stopping) return;
+            try { Thread.sleep(100); } catch (InterruptedException e) { return; }
+        }
+        if (!logFile.exists()) return;
+
+        try (RandomAccessFile raf = new RandomAccessFile(logFile, "r")) {
+            while (true) {
+                String line = raf.readLine();
+                if (line != null) {
+                    addToLogBuffer(line);
+                } else {
+                    // EOF on the current file content
+                    if (stopping) break;
+                    boolean alive = isProcessAlive();
+                    if (!alive) {
+                        // Process has exited — drain any remaining lines
+                        Thread.sleep(300);
+                        while ((line = raf.readLine()) != null) addToLogBuffer(line);
+                        break;
+                    }
+                    try { Thread.sleep(200); } catch (InterruptedException e) { break; }
+                }
+            }
+        } catch (Exception e) {
+            if (!stopping) {
+                logger.fine("Log tailing ended for " + config.name() + ":" + port
+                    + " (" + e.getMessage() + ")");
+            }
+        }
+    }
+
+    private boolean isProcessAlive() {
+        if (process != null) return process.isAlive();
+        if (adoptedHandle != null) return adoptedHandle.isAlive();
+        return false;
+    }
+
+    private void addToLogBuffer(String line) {
+        if (line == null || line.isBlank()) return;
+        // Skip stack trace noise but keep error lines
+        if (line.startsWith("\tat ") || line.startsWith("\t...")) return;
+        logBuffer.add(line);
+        while (logBuffer.size() > LOG_BUFFER_SIZE) {
+            logBuffer.remove(0);
+        }
     }
 
     /**
@@ -325,7 +425,7 @@ public class ProcessSupervisor {
      * (i.e. user.dir at startup), so yaml entries like "quarkus-mcp-gateway.jar"
      * work without any path prefix or environment variable.
      */
-    private static String resolveJarPath(String path) {
+    static String resolveJarPath(String path) {
         if (path == null || path.isBlank()) return path;
         java.io.File f = new java.io.File(path);
         if (f.isAbsolute()) return path;
@@ -350,7 +450,7 @@ public class ProcessSupervisor {
         if (gwUrl == null) return;
 
         String name = config.name() + "-" + port;
-        String url  = "http://localhost:" + port;
+        String url  = "http://localhost:" + externalPort();
         String body = "{\"name\":\"" + name + "\","
             + "\"url\":\"" + url + "\","
             + "\"description\":\"" + config.name() + " on port " + port + "\"}";
@@ -385,25 +485,6 @@ public class ProcessSupervisor {
                 .exceptionally(e -> { logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage()); return null; });
         } catch (Exception e) {
             logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage());
-        }
-    }
-
-    private void readLogs() {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                // Skip stack trace lines and blank lines to keep progressLog clean
-                if (line.isBlank() || line.startsWith("\tat ") || line.startsWith("\t...")) {
-                    continue;
-                }
-                logBuffer.add(line);
-                while (logBuffer.size() > LOG_BUFFER_SIZE) {
-                    logBuffer.remove(0);
-                }
-            }
-        } catch (Exception e) {
-            logger.warning("Log reading error for " + config.name() + ": " + e.getMessage());
         }
     }
 }

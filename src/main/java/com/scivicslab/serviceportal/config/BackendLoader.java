@@ -1,86 +1,51 @@
 package com.scivicslab.serviceportal.config;
 
+import com.scivicslab.serviceportal.backend.docker.DockerBackend;
 import com.scivicslab.serviceportal.spi.ServiceBackend;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Loads the appropriate ServiceBackend implementation based on configuration and environment.
+ * Loads the ServiceBackend implementation based on configuration.
+ *
+ * Only one backend is supported: DockerBackend (jvm mode), which manages
+ * java -jar child processes for the tools of a single AI team.
  */
 public class BackendLoader {
 
     private static final Logger logger = Logger.getLogger(BackendLoader.class.getName());
 
-    private static final Map<String, String> BACKEND_CLASSES = Map.of(
-        "jvm",          "com.scivicslab.serviceportal.backend.docker.DockerBackend",
-        "docker",       "com.scivicslab.serviceportal.backend.docker.DockerBackend",
-        "multi-docker", "com.scivicslab.serviceportal.backend.docker.MultiDockerBackend"
-    );
-
     /**
-     * Load backend based on configuration.
+     * Load and initialize the backend from configuration.
      */
     public static ServiceBackend loadBackend(ServicePortalConfig config) {
         String backendType = detectBackendType(config);
         logger.info("Selected backend: " + backendType);
 
-        String className = BACKEND_CLASSES.get(backendType);
-        if (className == null) {
-            throw new IllegalStateException("No backend found for type: " + backendType);
-        }
-        try {
-            ServiceBackend backend = (ServiceBackend) Class.forName(className)
-                .getDeclaredConstructor()
-                .newInstance();
-            backend.initialize(config);
-            return backend;
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to instantiate backend: " + className, e);
-        }
+        ServiceBackend backend = new DockerBackend();
+        backend.initialize(config);
+        return backend;
     }
 
     /**
-     * Detect backend type from config or environment.
+     * Detect backend type. Currently always returns "jvm".
+     * The "jvm" and "docker" aliases both map to DockerBackend.
      */
     private static String detectBackendType(ServicePortalConfig config) {
-        // 設定ファイルで明示的に指定されている場合
         if (config.backend() != null && !config.backend().equals("auto")) {
-            return config.backend();
+            String b = config.backend();
+            if (!b.equals("jvm") && !b.equals("docker")) {
+                logger.warning("Unknown backend type '" + b + "', falling back to jvm");
+            }
+            return "jvm";
         }
 
-        // Docker コンテナ内かチェック
         if (Files.exists(Path.of("/.dockerenv"))) {
             logger.info("Detected Docker container environment");
-            return "docker";
         }
 
-        // lxc コマンドが使えるかチェック
-        if (isCommandAvailable("lxc")) {
-            logger.info("Detected LXC/LXD environment");
-            return "lxd";
-        }
-
-        // デフォルト
-        logger.info("No specific environment detected, defaulting to docker");
-        return "docker";
-    }
-
-    /**
-     * Check if a command is available in PATH.
-     */
-    private static boolean isCommandAvailable(String command) {
-        try {
-            Process process = new ProcessBuilder("which", command)
-                .redirectErrorStream(true)
-                .start();
-
-            int exitCode = process.waitFor();
-            return exitCode == 0;
-        } catch (Exception e) {
-            return false;
-        }
+        return "jvm";
     }
 }

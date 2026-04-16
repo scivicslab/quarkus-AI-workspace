@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Loads service-portal configuration.
+ * Loads service-portal configuration from YAML.
  *
  * <p>Search order:
  * <ol>
@@ -21,8 +21,6 @@ import java.util.logging.Logger;
  *   <li>{@code /app/service-portal.yaml}</li>
  *   <li>Classpath {@code service-portal.yaml}</li>
  * </ol>
- *
- * <p>Valid backend modes: {@code jvm}, {@code multi-docker}, {@code lxd}
  */
 public class ServicePortalConfigLoader {
 
@@ -159,46 +157,6 @@ public class ServicePortalConfigLoader {
             dockerConfig = new ServicePortalConfig.DockerConfig(toolDefs);
         }
 
-        ServicePortalConfig.MultiDockerConfig multiDockerConfig = null;
-        if (root.containsKey("multi-docker")) {
-            Map<String, Object> md = (Map<String, Object>) root.get("multi-docker");
-            multiDockerConfig = new ServicePortalConfig.MultiDockerConfig(
-                (String) md.get("image"),
-                (String) md.get("vllmEndpoint"),
-                (String) md.get("defaultWorkdir")
-            );
-        }
-
-        ServicePortalConfig.LxdConfig lxdConfig = null;
-        if (root.containsKey("lxd")) {
-            Map<String, Object> lxd = (Map<String, Object>) root.get("lxd");
-
-            List<ServicePortalConfig.ManagementService> management = List.of();
-            if (lxd.containsKey("management")) {
-                List<Map<String, Object>> mgmt = (List<Map<String, Object>>) lxd.get("management");
-                management = mgmt.stream()
-                    .map(m -> new ServicePortalConfig.ManagementService(
-                        (String) m.get("unit"),
-                        (Integer) m.get("port")
-                    ))
-                    .toList();
-            }
-
-            List<ServicePortalConfig.ContainerConfig> containers = List.of();
-            if (lxd.containsKey("containers")) {
-                List<Map<String, Object>> cnts = (List<Map<String, Object>>) lxd.get("containers");
-                containers = cnts.stream()
-                    .map(c -> new ServicePortalConfig.ContainerConfig(
-                        (String) c.get("name"),
-                        (String) c.get("template")
-                    ))
-                    .toList();
-            }
-
-            lxdConfig = new ServicePortalConfig.LxdConfig(management, containers);
-        }
-
-        return new ServicePortalConfig(backend, accessHost,
-            dockerConfig, multiDockerConfig, lxdConfig);
+        return new ServicePortalConfig(backend, accessHost, dockerConfig);
     }
 }

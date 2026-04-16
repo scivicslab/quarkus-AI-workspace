@@ -9,9 +9,8 @@ import java.util.Map;
 /**
  * Service management backend abstraction.
  *
- * Implementations:
- * - DockerBackend: manages java processes inside a Docker/k8s container
- * - LxdBackend:    manages LXC containers and systemd services on an LXD host
+ * Current implementation: DockerBackend — manages java -jar child processes
+ * for the tools of a single AI team (jvm mode).
  */
 public interface ServiceBackend {
 

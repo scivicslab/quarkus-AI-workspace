@@ -1,245 +1,186 @@
 # quarkus-service-portal
 
-Unified service management portal with pluggable backends for Docker containers and LXD hosts.
+A launcher and dashboard for the AI toolkit. Manages a set of Java tools as local processes — start, stop, and monitor everything from one web UI.
 
-## Overview
+## The AI Toolkit
 
-`lxd-pups-portal` and `toolkit-launcher` share the same architectural pattern — read a YAML config, start and monitor services, expose status via REST API, manage via a web dashboard — yet were implemented separately. This project unifies the common parts and extracts environment-specific logic as pluggable backends.
+| Tool | Description | Port (default) |
+|------|-------------|----------------|
+| **quarkus-mcp-gateway** | MCP server hub — connects LLM clients to external tools and services | 28081 |
+| **quarkus-chat-ui** | Web UI for LLMs (Claude, Codex, local vLLM) with skill commands and agent support | 28100+ |
+| **turing-workflow-editor** | Visual editor for Turing Workflow YAML definitions | 28120+ |
+| **html-saurus** | Local document portal — browse Markdown and Docusaurus docs in a browser | 28110+ |
 
-The design follows the same plugin architecture as `quarkus-chat-ui`, which pluggable LLM providers.
-
-## Architecture
-
-```
-quarkus-service-portal/
-├── service-portal-core/      # Shared core
-│   ├── ServiceBackend SPI    # Backend abstraction interface
-│   ├── REST API              # /api/* endpoints
-│   ├── Dashboard UI          # Qute templates (lxd-pups orange theme)
-│   └── Data models           # HostService, ToolInstance, Container...
-│
-├── backend-docker/           # Docker container mode
-│   ├── ProcessSupervisor     # Java process lifecycle management
-│   └── tools.yaml support    # Tool launch configuration
-│
-└── backend-lxd/              # LXD host mode
-    ├── LXC container mgmt    # lxc start/stop/exec
-    ├── systemd service mgmt  # systemctl start/stop
-    └── portal.yaml support   # Host configuration
-```
-
-### Backend Selection
-
-The backend is auto-detected at startup. If `/.dockerenv` exists, `backend-docker` is selected; if the `lxc` command is available, `backend-lxd` is selected.
-
-```bash
-# Auto-detect
-java -jar service-portal-core/target/quarkus-app/quarkus-run.jar
-
-# Explicit selection
-java -jar ... -Dbackend=docker
-java -jar ... -Dbackend=lxd
-```
-
-## Dashboard UI
-
-Web dashboard styled with the lxd-pups orange theme. The sections displayed switch based on the active backend.
-
-### Container Mode (`backend-docker`)
-
-For AI toolkit Docker containers managing Java tool processes:
-
-```
-┌─────────────────────────────────┐
-│  Management Services            │  Always-on services (mcp-gateway, etc.)
-│  · mcp-gateway  :8888  ACTIVE   │  Start / Stop buttons
-│  · predict-ja   :8190  ACTIVE   │
-├─────────────────────────────────┤
-│  Running Services               │  Active tool instances
-│  🗨️ Quarkus Chat UI  :8200      │  Stop button, memo field
-├─────────────────────────────────┤
-│  Available Tools                │  Launchable tools (grid view)
-│  [🗨️ Chat UI]  [📊 Editor]      │  + New / Open buttons
-└─────────────────────────────────┘
-```
-
-### Host Mode (`backend-lxd`)
-
-For LXD hosts managing multiple worker containers:
-
-```
-┌─────────────────────────────────┐
-│  Management Services            │  Host services (systemd units)
-│  · mcp-gateway  :8888  ACTIVE   │  Start / Stop buttons
-├─────────────────────────────────┤
-│  Worker Containers              │  LXC worker containers
-│  [bioinfo  Running]             │  Services running inside container
-│  [web-dev  Stopped]             │  Start / Stop buttons
-├─────────────────────────────────┤
-│  Tools                          │  Host tools (external links)
-│  [📚 Docs]  [🔧 Monitor]        │
-├─────────────────────────────────┤
-│  Administration                 │  Link to LXC Manager
-└─────────────────────────────────┘
-```
-
-## Module Structure
-
-### service-portal-core
-
-Common code independent of any backend.
-
-```
-service-portal-core/
-├── src/main/java/com/scivicslab/serviceportal/
-│   ├── spi/
-│   │   ├── ServiceBackend.java     # Backend SPI interface
-│   │   └── ServiceException.java
-│   ├── model/
-│   │   ├── DashboardModel.java     # Full dashboard model
-│   │   ├── HostService.java        # Management service
-│   │   ├── ToolInstance.java       # Running tool instance
-│   │   ├── ToolDefinition.java     # Available tool definition
-│   │   ├── Container.java          # LXC container
-│   │   ├── HostTool.java           # Host tool (external link)
-│   │   └── ServiceStatusEnum.java  # ACTIVE / INACTIVE / STARTING / FAILED / UNKNOWN
-│   ├── rest/
-│   │   ├── DashboardResource.java  # GET /
-│   │   └── ServiceResource.java    # GET/POST /api/*
-│   └── config/
-│       ├── ServicePortalConfig.java
-│       ├── ServicePortalConfigLoader.java
-│       ├── BackendLoader.java
-│       └── BackendProducer.java
-└── src/main/resources/
-    └── templates/
-        └── dashboard.html          # Qute template
-```
-
-### backend-docker
-
-Manages Java processes inside a Docker container. Registered via Java SPI (`ServiceLoader`).
-
-- `DockerBackend` — `ServiceBackend` implementation
-- `ProcessSupervisor` — starts, monitors, and collects logs from `java -jar` processes
-
-### backend-lxd
-
-Manages LXC containers and systemd services on an LXD host.
-
-- `LxdBackend` — `ServiceBackend` implementation
-- `CommandRunner` — executes `lxc` and `systemctl` commands
-- POJO-actor based actor system (`ContainerSupervisorActor`, etc.)
-
-## ServiceBackend SPI
-
-Backends are registered as Java SPI providers.
-
-```java
-public interface ServiceBackend {
-    void initialize(ServicePortalConfig config);
-    void startService(String serviceId) throws ServiceException;
-    void stopService(String serviceId) throws ServiceException;
-    List<ServiceStatus> getServiceStatuses();
-    List<String> getServiceLogs(String serviceId, int lines);
-    String getBackendType();        // "docker" or "lxd"
-    DashboardModel getDashboardModel();
-}
-```
-
-SPI registration file: `META-INF/services/com.scivicslab.serviceportal.spi.ServiceBackend`
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Dashboard UI (HTML) |
-| `GET` | `/api/status` | Full dashboard status (JSON) |
-| `POST` | `/api/mgmt/{name}/start` | Start a management service |
-| `POST` | `/api/mgmt/{name}/stop` | Stop a management service |
-| `GET` | `/api/mgmt/{name}/progress` | Get startup progress |
-| `POST` | `/api/tool/{name}/launch` | Launch a new tool instance |
-| `POST` | `/api/tool/{name}/{port}/stop` | Stop a tool instance |
-| `POST` | `/api/tool/{name}/{port}/memo` | Update tool instance memo |
-| `POST` | `/api/container/{name}/start` | Start a container |
-| `POST` | `/api/container/{name}/stop` | Stop a container |
-| `POST` | `/api/container/{name}/snapshot` | Create a container snapshot |
-
-## Configuration
-
-Configure via `service-portal.yaml`:
-
-```yaml
-backend: auto   # auto | docker | lxd
-
-# backend-docker settings
-docker:
-  tools:
-    - name: quarkus-chat-ui
-      jar: /opt/tools/quarkus-chat-ui.jar
-      port: 8200
-      icon: "🗨️"
-      autoStart: false
-    - name: mcp-gateway
-      jar: /opt/tools/mcp-gateway.jar
-      port: 8888
-      autoStart: true
-
-# backend-lxd settings
-lxd:
-  management:
-    - name: mcp-gateway
-      unit: mcp-gateway.service
-      port: 8888
-  containers:
-    - name: bioinfo
-      template: worker
-```
-
-## Build
-
-```bash
-mvn install
-```
-
-Unit tests only:
-
-```bash
-mvn test
-```
-
-Integration tests (requires a running k8s/LXD environment):
-
-```bash
-mvn verify
-```
+All tools are standard Java uber-jars. Installation is: copy jars to a directory, write one config file, run `java -jar`.
 
 ## Prerequisites
 
-- Java 21
-- Maven 3.9+
+- Java 21+
 
-**For backend-lxd:**
-- LXD (`sudo snap install lxd && lxd init --minimal`)
-- User must be in the `lxd` group
+That's it. No Docker, no databases, no daemons.
 
-## Relationship to Other Projects
+## Installation
 
-| Project | Role |
-|---------|------|
-| `quarkus-chat-ui` | Predecessor using the same plugin architecture (SPI-pluggable LLM providers) |
-| `lxd-pups` | Runs `quarkus-service-portal` in `backend=lxd` mode on an LXD host |
-| `toolkit-launcher` | Predecessor of `backend-docker`; managed Java tool processes inside Docker containers |
-| `quarkus-mcp-gateway` | One of the primary services managed by this portal |
+### 1. Download the jars
 
-### Deployment Hierarchy
+Download the latest uber-jar from each project's GitHub Releases page and place them all in one directory.
 
+| Tool | Releases page |
+|------|--------------|
+| quarkus-service-portal | https://github.com/scivicslab/quarkus-service-portal/releases |
+| quarkus-mcp-gateway | https://github.com/scivicslab/quarkus-mcp-gateway/releases |
+| quarkus-chat-ui | https://github.com/scivicslab/quarkus-chat-ui/releases |
+| Turing-workflow-editor | https://github.com/scivicslab/Turing-workflow-editor/releases |
+| html-saurus | https://github.com/scivicslab/html-saurus/releases |
+
+```bash
+mkdir ~/ai-toolkit
+cd ~/ai-toolkit
+
+# Download latest releases (adjust filenames to the actual version)
+curl -L -o quarkus-service-portal.jar \
+  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/service-portal-1.2.0-runner.jar
+curl -L -o quarkus-mcp-gateway.jar \
+  https://github.com/scivicslab/quarkus-mcp-gateway/releases/latest/download/quarkus-mcp-gateway-v1.1.0.jar
+curl -L -o quarkus-chat-ui.jar \
+  https://github.com/scivicslab/quarkus-chat-ui/releases/latest/download/quarkus-chat-ui-v1.5.0.jar
+curl -L -o turing-workflow-editor.jar \
+  https://github.com/scivicslab/Turing-workflow-editor/releases/latest/download/turing-workflow-editor-v2.1.0.jar
+curl -L -o html-saurus.jar \
+  https://github.com/scivicslab/html-saurus/releases/latest/download/html-saurus-v1.6.0.jar
 ```
-docker run (ai-toolkit)  ← backend=docker mode  (easiest entry point)
-        ↓
-LXD-pups                 ← backend=lxd mode     (personal dev environment)
-        ↓
-k8s-pups                 ← Kubernetes            (multi-user shared environment)
+
+### 2. Write `service-portal.yaml`
+
+Create `service-portal.yaml` in the same directory. Use the example below as a starting point (also available as `service-portal-jvm.example.yaml` in this repository):
+
+```yaml
+backend: jvm
+
+jvm:
+  tools:
+    # MCP Gateway: starts automatically
+    - name: quarkus-mcp-gateway
+      jar: quarkus-mcp-gateway.jar
+      port: 28081
+      autoStart: true
+
+    # Chat UI: launched on demand from the dashboard
+    - name: quarkus-chat-ui
+      jar: quarkus-chat-ui.jar
+      port: 28100
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
+        - key: provider
+          label: LLM Provider
+          type: select
+          default: claude
+          jvmProp: chat-ui.provider
+          options:
+            - { value: claude,        label: Claude }
+            - { value: codex,         label: Codex (OpenAI) }
+            - { value: openai-compat, label: Local LLM (vLLM) }
+        - key: servers
+          label: vLLM Endpoint (Local LLM only)
+          type: text
+          default: ${VLLM_ENDPOINT}
+          jvmProp: chat-ui.servers
+
+    # Document portal: launched on demand
+    - name: html-saurus
+      jar: html-saurus.jar
+      port: 28110
+      autoStart: false
+      args:
+        - ${HOME}/works
+        - --portal-mode
+        - --serve
+        - --port
+        - "${PORT}"
+      params:
+        - key: dir
+          label: Document Root
+          type: dir
+          default: ${HOME}/works
+          argPos: 0
+
+    # Turing Workflow Editor: launched on demand
+    - name: turing-workflow-editor
+      jar: turing-workflow-editor.jar
+      port: 28120
+      autoStart: false
+      params:
+        - key: workdir
+          label: Working Directory
+          type: dir
+          default: ${HOME}/works
+          workingDir: true
 ```
 
-The same `quarkus-service-portal` binary runs in different modes, allowing users to migrate incrementally.
+### 3. Start the portal
+
+```bash
+cd ~/ai-toolkit
+java -jar quarkus-service-portal.jar
+```
+
+Open `http://localhost:8080` in your browser. The dashboard shows:
+
+- **Management Services** — always-on tools (e.g. mcp-gateway). Start/Stop buttons.
+- **Active Sessions** — tools currently running. Stop button and memo field per instance.
+- **Launch Tools** — on-demand tools with configurable parameters. Click Launch to start a new instance.
+
+`quarkus-mcp-gateway` starts automatically. Launch `quarkus-chat-ui` from the dashboard when you need it.
+
+## Configuration reference
+
+### Top-level
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `backend` | `jvm` (or `docker`, `auto`) | All map to the same JVM process manager |
+| `accessHost` | hostname or IP | Used in dashboard links. Defaults to `localhost` |
+
+### Tool definition
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier shown in the dashboard |
+| `jar` | Path to the uber-jar. Relative paths are resolved from the working directory |
+| `port` | Default port. The portal scans for a free port starting here |
+| `autoStart` | If `true`, the tool starts when the portal starts |
+| `fixedPort` | If `true`, always use `port` exactly — no scanning |
+| `args` | Argument list passed to the jar (overrides the default Quarkus port argument) |
+| `params` | User-configurable parameters shown in the Launch tile (see below) |
+
+### Param types
+
+| Type | Description |
+|------|-------------|
+| `dir` | Directory picker. Set `workingDir: true` to use as the process working directory |
+| `select` | Dropdown. Define `options` as a list of `{value, label}` pairs |
+| `text` | Free-text input |
+
+Use `jvmProp: some.property` to pass the value as `-Dsome.property=<value>` on the command line.
+Use `argPos: N` to substitute the value into position N of the `args` list.
+
+## Building from source
+
+```bash
+cd quarkus-service-portal
+mvn package
+# Output: target/service-portal-<version>-runner.jar
+```
+
+## Related projects
+
+| Project | Repository |
+|---------|------------|
+| quarkus-chat-ui | https://github.com/scivicslab/quarkus-chat-ui |
+| quarkus-mcp-gateway | https://github.com/scivicslab/quarkus-mcp-gateway |
+| POJO-actor | https://github.com/scivicslab/POJO-actor |
