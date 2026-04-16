@@ -50,9 +50,18 @@ curl -L -o html-saurus.jar \
   https://github.com/scivicslab/html-saurus/releases/latest/download/html-saurus-v1.6.0.jar
 ```
 
-### 2. Write `service-portal.yaml`
+### 2. Start the portal
 
-Create `service-portal.yaml` in the same directory. Use the example below as a starting point (also available as `service-portal-jvm.example.yaml` in this repository):
+```bash
+cd ~/ai-toolkit
+java -jar quarkus-service-portal.jar
+```
+
+Open `http://localhost:8080` in your browser. If the jar names match the defaults above, no config file is needed — the portal starts with a built-in configuration.
+
+### 3. (Optional) Customize with `service-portal.yaml`
+
+To override the defaults — different jar paths, ports, or extra tools — create `service-portal.yaml` in the same directory:
 
 ```yaml
 backend: jvm
@@ -120,13 +129,6 @@ jvm:
           type: dir
           default: ${HOME}/works
           workingDir: true
-```
-
-### 3. Start the portal
-
-```bash
-cd ~/ai-toolkit
-java -jar quarkus-service-portal.jar
 ```
 
 Open `http://localhost:8080` in your browser. The dashboard shows:

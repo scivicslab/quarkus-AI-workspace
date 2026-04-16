@@ -73,15 +73,16 @@ public class ServicePortalConfigLoader {
             return loadFromFile(containerConfig);
         }
 
-        // 5. Classpath fallback
+        // 5. Bundled default config (classpath)
         try (InputStream in = ServicePortalConfigLoader.class.getClassLoader()
-                .getResourceAsStream(CONFIG_FILE)) {
+                .getResourceAsStream("service-portal-default.yaml")) {
             if (in != null) {
-                logger.info("Loading config from classpath");
+                logger.info("No service-portal.yaml found — using built-in default config");
+                lastLoadedPath = "(built-in default)";
                 return parse(in);
             }
         } catch (Exception e) {
-            logger.warning("Failed to load classpath config: " + e.getMessage());
+            logger.warning("Failed to load built-in default config: " + e.getMessage());
         }
 
         logger.info("No config found, using defaults");
