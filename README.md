@@ -39,7 +39,7 @@ cd ~/ai-toolkit
 
 # Download latest releases (adjust filenames to the actual version)
 curl -L -o quarkus-service-portal.jar \
-  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/service-portal-1.2.0-runner.jar
+  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/quarkus-service-portal-v1.2.0.jar
 curl -L -o quarkus-mcp-gateway.jar \
   https://github.com/scivicslab/quarkus-mcp-gateway/releases/latest/download/quarkus-mcp-gateway-v1.1.0.jar
 curl -L -o quarkus-chat-ui.jar \

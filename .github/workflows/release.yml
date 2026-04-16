@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-uber-jar:
+    runs-on: ubuntu-latest
+    name: Build uber-JAR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build uber-JAR
+        run: mvn package -Dquarkus.package.type=uber-jar -DskipTests
+
+      - name: Rename artifact
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          SRC=$(ls target/service-portal-*-runner.jar 2>/dev/null || echo "")
+          if [ -z "$SRC" ]; then
+            echo "::error::uber-JAR not found in target/"
+            ls -la target/
+            exit 1
+          fi
+          cp "${SRC}" "quarkus-service-portal-${TAG}.jar"
+          echo "ARTIFACT=quarkus-service-portal-${TAG}.jar" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uber-jar
+          path: ${{ env.ARTIFACT }}
+
+  release:
+    needs: build-uber-jar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
