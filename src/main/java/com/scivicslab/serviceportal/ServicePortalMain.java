@@ -24,8 +24,7 @@ import org.apache.commons.cli.Options;
 public class ServicePortalMain implements QuarkusApplication {
 
     private static final String SYNOPSIS =
-        "java [JVM_OPTIONS] -Dservice.portal.backend=<mode>"
-        + " -Dquarkus.http.port=<port>"
+        "java [JVM_OPTIONS] -Dquarkus.http.port=<port>"
         + " -jar service-portal.jar [--help]";
 
     public static void main(String... args) {
@@ -47,10 +46,6 @@ public class ServicePortalMain implements QuarkusApplication {
     private static final String HELP_DETAILS =
         "Startup options (passed as -D JVM system properties):\n"
         + "\n"
-        + "  -Dservice.portal.backend=<mode>\n"
-        + "      Backend mode. One of: jvm, docker, multi-docker\n"
-        + "      Default: auto-detect\n"
-        + "\n"
         + "  -Dservice.portal.access.host=<host>\n"
         + "      Hostname used in dashboard tool links.\n"
         + "      Default: localhost\n"
@@ -59,11 +54,11 @@ public class ServicePortalMain implements QuarkusApplication {
         + "      Dashboard HTTP port.\n"
         + "      Default: 8080\n"
         + "\n"
-        + "Config file (jvm mode, loaded from CWD):\n"
-        + "  service-portal-jvm.yaml\n"
+        + "Config file (loaded from CWD):\n"
+        + "  service-portal.yaml\n"
         + "\n"
         + "Example:\n"
-        + "  java -Dservice.portal.backend=jvm -Dquarkus.http.port=28080 -jar service-portal.jar";
+        + "  java -Dquarkus.http.port=28080 -jar service-portal.jar";
 
     private static void printHelp() {
         CommandRepository cmds = new CommandRepository();

@@ -4,8 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Starts the service-portal uber-JAR as a child process for integration tests.
@@ -17,12 +21,27 @@ import java.util.Map;
  *
  * System properties:
  *   service.portal.jar  — path to the service-portal uber-JAR
- *                         (default: target/service-portal-1.0.0-runner.jar)
+ *                         (default: auto-detected from target/service-portal-*-runner.jar)
  */
 public class ServicePortalProcess {
 
-    private static final String JAR_PROP    = "service.portal.jar";
-    private static final String DEFAULT_JAR = "target/service-portal-1.1.0-runner.jar";
+    private static final String JAR_PROP = "service.portal.jar";
+
+    private static String resolveDefaultJar() {
+        String explicit = System.getProperty(JAR_PROP);
+        if (explicit != null) return explicit;
+        try {
+            Optional<Path> found = Files.list(Paths.get("target"))
+                .filter(p -> {
+                    String n = p.getFileName().toString();
+                    return n.startsWith("service-portal-") && n.endsWith("-runner.jar");
+                })
+                .max(Comparator.comparing(p -> p.getFileName().toString()));
+            if (found.isPresent()) return found.get().toString();
+        } catch (IOException ignored) {
+        }
+        return "target/service-portal-runner.jar";
+    }
 
     private final Process process;
     private final int     port;
@@ -40,7 +59,7 @@ public class ServicePortalProcess {
      */
     public static ServicePortalProcess start(Path configYaml, int port,
                                              Map<String, String> extraEnv) throws Exception {
-        String jarPath = System.getProperty(JAR_PROP, DEFAULT_JAR);
+        String jarPath = resolveDefaultJar();
         File   jarFile = new File(jarPath);
         if (!jarFile.exists()) {
             throw new IllegalStateException(
@@ -71,7 +90,7 @@ public class ServicePortalProcess {
     public static ServicePortalProcess start(Path configYaml, int port) throws Exception {
         requireEnv("TEST_JARS_DIR");
 
-        String jarPath = System.getProperty(JAR_PROP, DEFAULT_JAR);
+        String jarPath = resolveDefaultJar();
         File   jarFile = new File(jarPath);
         if (!jarFile.exists()) {
             throw new IllegalStateException(

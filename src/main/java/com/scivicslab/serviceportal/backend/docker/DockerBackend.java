@@ -22,8 +22,16 @@ import java.util.logging.Logger;
  * ServiceBackend implementation for Docker/k8s environments.
  * Manages java -jar child processes inside the container.
  *
- * Multiple instances of the same tool can run simultaneously on different ports.
- * Port allocation: base port + number of existing active instances for that tool.
+ * <h2>Port allocation</h2>
+ * <p><b>Port-range mode</b> (recommended for multi-team deployments):</p>
+ * <pre>
+ *   -Dservice.portal.port-range=28000-28019
+ *       28000 → service-portal dashboard
+ *       28001 → first autoStart+fixedPort tool (mcp-gateway)
+ *       28002-28019 → dynamic pool for on-demand tools
+ * </pre>
+ * <p><b>Legacy mode</b>: no port-range property; each tool uses its configured port
+ * from the YAML with a 100-port scan window.</p>
  */
 @RegisterForReflection
 public class DockerBackend implements ServiceBackend {
@@ -37,10 +45,41 @@ public class DockerBackend implements ServiceBackend {
     private ServicePortalConfig config;
     private String accessHost;
 
+    /** -1 when port-range mode is inactive (legacy mode). */
+    private int rangeStart = -1;
+    private int rangeEnd   = -1;
+
     @Override
     public void initialize(ServicePortalConfig config) {
         this.config = config;
         this.accessHost = config.accessHost() != null ? config.accessHost() : "localhost";
+
+        String portRange = System.getProperty("service.portal.port-range", "").trim();
+        if (!portRange.isBlank()) {
+            try {
+                String[] parts = portRange.split("-");
+                rangeStart = Integer.parseInt(parts[0].trim());
+                rangeEnd   = Integer.parseInt(parts[1].trim());
+            } catch (Exception e) {
+                logger.warning("Invalid service.portal.port-range '" + portRange + "' — deriving from http.port");
+                rangeStart = -1;
+            }
+        }
+        if (rangeStart < 0) {
+            String httpPort = System.getProperty("quarkus.http.port", "8080").trim();
+            try {
+                rangeStart = Integer.parseInt(httpPort);
+                rangeEnd   = rangeStart + 19;
+            } catch (Exception e) {
+                logger.warning("Could not parse quarkus.http.port '" + httpPort + "' — port-range mode inactive");
+                rangeStart = -1;
+            }
+        }
+        if (rangeStart >= 0) {
+            logger.info("Port-range: " + rangeStart + "-" + rangeEnd
+                + " (gateway=" + (rangeStart + 1) + ", pool=" + (rangeStart + 2) + "-" + rangeEnd + ")");
+        }
+
         if (config.jvm() == null) return;
 
         scanAndAdoptByPort();
@@ -82,6 +121,61 @@ public class DockerBackend implements ServiceBackend {
         if (config.jvm() == null) return;
         String currentUser = System.getProperty("user.name");
 
+        if (rangeStart >= 0) {
+            scanRangeAndAdopt(rangeStart + 1, rangeEnd, currentUser);
+        } else {
+            scanLegacyAndAdopt(currentUser);
+        }
+    }
+
+    /**
+     * Port-range mode: scan the entire assigned range and match each listening
+     * port to a tool by JAR name.
+     */
+    private void scanRangeAndAdopt(int start, int end, String currentUser) {
+        // Build resolvedJar → tool map
+        java.util.Map<String, ServicePortalConfig.ToolDefinition> jarToTool = new java.util.LinkedHashMap<>();
+        for (var tool : config.jvm().tools()) {
+            String jar = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
+            if (jar != null && !jar.isBlank()) jarToTool.put(jar, tool);
+        }
+
+        for (int port = start; port <= end; port++) {
+            long pid = findPidByPort(port);
+            if (pid < 0) continue;
+
+            ProcessHandle handle = ProcessHandle.of(pid).orElse(null);
+            if (handle == null || !handle.isAlive()) continue;
+
+            if (!currentUser.equals(handle.info().user().orElse(null))) {
+                logger.info("Port " + port + " PID " + pid + " — different user, leaving alone");
+                continue;
+            }
+
+            String[] args = handle.info().arguments().orElse(new String[0]);
+            ServicePortalConfig.ToolDefinition matchedTool = null;
+            for (var entry : jarToTool.entrySet()) {
+                if (jarMatches(entry.getKey(), args)) { matchedTool = entry.getValue(); break; }
+            }
+            if (matchedTool == null) continue;
+
+            CopyOnWriteArrayList<ProcessSupervisor> list =
+                instances.computeIfAbsent(matchedTool.name(), k -> new CopyOnWriteArrayList<>());
+
+            final int p = port;
+            boolean alreadyAdopted = list.stream().anyMatch(s -> s.getPort() == p
+                && (s.getState() == SessionState.READY || s.getState() == SessionState.STARTING));
+            if (alreadyAdopted) continue;
+
+            list.add(ProcessSupervisor.adopt(matchedTool, port, pid));
+            logger.info("Range scan adopted: " + matchedTool.name() + ":" + port + " (PID " + pid + ")");
+        }
+    }
+
+    /**
+     * Legacy mode: per-tool 100-port window scan (backward compatibility).
+     */
+    private void scanLegacyAndAdopt(String currentUser) {
         for (var tool : config.jvm().tools()) {
             String resolvedJar = ProcessSupervisor.resolveJarPath(
                 ProcessSupervisor.expandEnvVars(tool.jar()));
@@ -90,11 +184,7 @@ public class DockerBackend implements ServiceBackend {
             CopyOnWriteArrayList<ProcessSupervisor> list =
                 instances.computeIfAbsent(tool.name(), k -> new CopyOnWriteArrayList<>());
 
-            // Scan basePort through basePort+99 — same range as findFreePort().
-            // This recovers all instances including those on auto-allocated ports
-            // (e.g. a second chat-ui on :28101 that was started in a previous session).
             for (int port = tool.port(); port < tool.port() + 100; port++) {
-                // Skip if already adopted on this port
                 final int p = port;
                 boolean alreadyAdopted = list.stream()
                     .anyMatch(s -> s.getPort() == p
@@ -107,26 +197,20 @@ public class DockerBackend implements ServiceBackend {
                 ProcessHandle handle = ProcessHandle.of(pid).orElse(null);
                 if (handle == null || !handle.isAlive()) continue;
 
-                // Condition 1: owned by current OS user
                 if (!currentUser.equals(handle.info().user().orElse(null))) {
-                    logger.info("Port " + port + " PID " + pid
-                        + " belongs to a different user — leaving alone");
+                    logger.info("Port " + port + " PID " + pid + " — different user, leaving alone");
                     continue;
                 }
 
-                // Condition 2: arguments contain the resolved jar full path
                 String[] args = handle.info().arguments().orElse(new String[0]);
-                boolean hasJar = Arrays.stream(args).anyMatch(a -> a.contains(resolvedJar));
-                if (!hasJar) {
+                if (!jarMatches(resolvedJar, args)) {
                     logger.info("Port " + port + " PID " + pid
-                        + " does not match jar '" + resolvedJar + "' — leaving alone");
+                        + " does not match jar '" + new java.io.File(resolvedJar).getName() + "' — leaving alone");
                     continue;
                 }
 
-                ProcessSupervisor supervisor = ProcessSupervisor.adopt(tool, port, pid);
-                list.add(supervisor);
-                logger.info("Port scan adopted: " + tool.name() + ":" + port
-                    + " (PID " + pid + ")");
+                list.add(ProcessSupervisor.adopt(tool, port, pid));
+                logger.info("Port scan adopted: " + tool.name() + ":" + port + " (PID " + pid + ")");
             }
         }
     }
@@ -170,18 +254,46 @@ public class DockerBackend implements ServiceBackend {
                         || s.getState() == SessionState.FAILED);
 
         int port;
-        if (def.fixedPort()) {
-            port = def.port();
-            if (!isPortAvailable(port)) {
-                throw new ServiceException(toolName + " requires fixed port :" + port
-                    + " but the port is already in use. Free the port before starting " + toolName + ".");
+        if (rangeStart >= 0) {
+            // Port-range mode
+            if (def.fixedPort()) {
+                port = rangeStart + 1;
+                if (!isPortAvailable(port)) {
+                    throw new ServiceException(toolName + " requires port " + port
+                        + " (range start+1) but it is already in use.");
+                }
+            } else {
+                port = findFreePortInRange(rangeStart + 2, rangeEnd);
             }
         } else {
-            port = findFreePort(def.port(), list);
+            // Legacy mode
+            if (def.fixedPort()) {
+                port = def.port();
+                if (!isPortAvailable(port)) {
+                    throw new ServiceException(toolName + " requires fixed port :" + port
+                        + " but the port is already in use. Free the port before starting " + toolName + ".");
+                }
+            } else {
+                port = findFreePort(def.port(), list);
+            }
         }
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
+        supervisor.setGatewayUrl(resolveGatewayUrl());
         list.add(supervisor);
         supervisor.start();
+    }
+
+    /** Returns the MCP Gateway base URL for this portal instance. */
+    private String resolveGatewayUrl() {
+        if (rangeStart >= 0) {
+            return "http://localhost:" + (rangeStart + 1);
+        }
+        if (config.jvm() == null) return null;
+        return config.jvm().tools().stream()
+            .filter(ServicePortalConfig.ToolDefinition::fixedPort)
+            .findFirst()
+            .map(t -> "http://localhost:" + t.port())
+            .orElse(null);
     }
 
     @Override
@@ -259,10 +371,25 @@ public class DockerBackend implements ServiceBackend {
     // ---------------------------------------------------------------
 
     /**
-     * Finds the first free TCP port starting from {@code basePort}.
-     * Skips ports already claimed by active instances and ports that have
-     * something else listening on them (occupied by another process).
-     * Searches up to 100 ports before giving up.
+     * Port-range mode: finds the first free port in [start, end] across all tool instances.
+     */
+    private int findFreePortInRange(int start, int end) throws ServiceException {
+        var usedPorts = instances.values().stream()
+            .flatMap(List::stream)
+            .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
+            .map(ProcessSupervisor::getPort)
+            .collect(java.util.stream.Collectors.toSet());
+
+        for (int port = start; port <= end; port++) {
+            if (usedPorts.contains(port)) continue;
+            if (!isTcpPortOpen(port)) return port;
+        }
+        throw new ServiceException("No free port in range " + start + "-" + end);
+    }
+
+    /**
+     * Legacy mode: finds the first free TCP port starting from {@code basePort}.
+     * Searches within the tool's own 100-port window.
      */
     private int findFreePort(int basePort, List<ProcessSupervisor> activeInstances) throws ServiceException {
         var usedPorts = activeInstances.stream()
@@ -288,6 +415,21 @@ public class DockerBackend implements ServiceBackend {
         return !isTcpPortOpen(port);
     }
 
+    /**
+     * Returns {@code true} if any element of {@code args} matches {@code resolvedJar}.
+     * Matches on full path, bare filename, or path ending with {@code /filename}.
+     * Package-private for testing.
+     *
+     * @param resolvedJar absolute or relative path of the expected jar
+     * @param args        process argument array from {@link ProcessHandle.Info#arguments()}
+     * @return {@code true} if a match is found
+     */
+    static boolean jarMatches(String resolvedJar, String[] args) {
+        String basename = new java.io.File(resolvedJar).getName();
+        return Arrays.stream(args).anyMatch(a ->
+            a.contains(resolvedJar) || a.equals(basename) || a.endsWith("/" + basename));
+    }
+
     private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {
         if (config.jvm() == null) throw new ServiceException("No docker config");
         return config.jvm().tools().stream()
@@ -297,8 +439,9 @@ public class DockerBackend implements ServiceBackend {
     }
 
     private SessionView stoppedView(ServicePortalConfig.ToolDefinition tool) {
+        int port = (rangeStart >= 0 && tool.fixedPort()) ? rangeStart + 1 : tool.port();
         return new SessionView(
-            tool.name(), tool.port(), tool.name(), "",
+            tool.name(), port, tool.name(), "",
             SessionState.STOPPED, null, Map.of(), "", List.of()
         );
     }

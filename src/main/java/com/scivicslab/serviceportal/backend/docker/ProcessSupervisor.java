@@ -58,12 +58,23 @@ public class ProcessSupervisor {
      */
     private volatile File logFile;
 
+    /**
+     * MCP Gateway URL injected by DockerBackend at launch time.
+     * Set via {@link #setGatewayUrl(String)} before calling {@link #start()}.
+     * Exposed to the child process as the {@code MCP_GATEWAY_URL} environment variable.
+     */
+    private String gatewayUrl;
+
     public ProcessSupervisor(ServicePortalConfig.ToolDefinition config,
                              int port,
                              Map<String, String> launchParams) {
         this.config = config;
         this.port = port;
         this.launchParams = Collections.unmodifiableMap(launchParams);
+    }
+
+    public void setGatewayUrl(String url) {
+        this.gatewayUrl = url;
     }
 
     public int getPort() {
@@ -134,6 +145,10 @@ public class ProcessSupervisor {
             LOG_DIR.mkdirs();
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile); // truncates existing file for fresh log
+
+            if (gatewayUrl != null && !gatewayUrl.isBlank()) {
+                pb.environment().put("MCP_GATEWAY_URL", gatewayUrl);
+            }
 
             java.io.File workingDir = resolveWorkingDir();
             if (workingDir != null) {

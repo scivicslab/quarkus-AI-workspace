@@ -6,6 +6,7 @@ jvm:
     - name: quarkus-mcp-gateway
       jar: quarkus-mcp-gateway.jar
       port: 28081
+      fixedPort: true
       autoStart: true
 
     # Chat UI: launched on demand from the dashboard
