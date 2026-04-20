@@ -1,0 +1,56 @@
+name: Build and publish Docker image
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ai-toolkit
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download uber-jars from latest releases
+        run: |
+          gh release download --repo scivicslab/quarkus-service-portal    --pattern "service-portal-*-runner.jar"    --output service-portal.jar
+          gh release download --repo scivicslab/quarkus-mcp-gateway        --pattern "quarkus-mcp-gateway-*-runner.jar" --output quarkus-mcp-gateway.jar
+          gh release download --repo scivicslab/quarkus-chat-ui            --pattern "chat-ui-app-*-runner.jar"        --output quarkus-chat-ui.jar
+          gh release download --repo scivicslab/Turing-workflow-editor     --pattern "turing-workflow-editor-*-runner.jar" --output turing-workflow-editor.jar
+          gh release download --repo scivicslab/html-saurus                --pattern "html-saurus.jar"                 --output html-saurus.jar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
