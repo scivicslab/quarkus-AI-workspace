@@ -39,15 +39,15 @@ cd ~/ai-toolkit
 
 # Download latest releases (adjust filenames to the actual version)
 curl -L -o quarkus-service-portal.jar \
-  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/quarkus-service-portal-v1.2.0.jar
+  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/service-portal-1.3.0-runner.jar
 curl -L -o quarkus-mcp-gateway.jar \
-  https://github.com/scivicslab/quarkus-mcp-gateway/releases/latest/download/quarkus-mcp-gateway-v1.1.0.jar
+  https://github.com/scivicslab/quarkus-mcp-gateway/releases/latest/download/quarkus-mcp-gateway-1.2.0-runner.jar
 curl -L -o quarkus-chat-ui.jar \
-  https://github.com/scivicslab/quarkus-chat-ui/releases/latest/download/quarkus-chat-ui-v1.5.0.jar
+  https://github.com/scivicslab/quarkus-chat-ui/releases/latest/download/chat-ui-app-2.0.0-runner.jar
 curl -L -o turing-workflow-editor.jar \
-  https://github.com/scivicslab/Turing-workflow-editor/releases/latest/download/turing-workflow-editor-v2.1.0.jar
+  https://github.com/scivicslab/Turing-workflow-editor/releases/latest/download/turing-workflow-editor-2.2.0-runner.jar
 curl -L -o html-saurus.jar \
-  https://github.com/scivicslab/html-saurus/releases/latest/download/html-saurus-v1.6.0.jar
+  https://github.com/scivicslab/html-saurus/releases/latest/download/html-saurus.jar
 ```
 
 ### 2. Start the portal
