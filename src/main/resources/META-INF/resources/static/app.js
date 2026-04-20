@@ -149,6 +149,16 @@
         }
     };
 
+    window.detachSession = async function (toolName, port) {
+        const r = await fetch('/api/tool/' + toolName + '/' + port + '/detach', { method: 'POST' });
+        if (r.ok) {
+            const card = document.getElementById('session-' + sessionKey(toolName, port));
+            if (card) card.remove();
+        } else {
+            alert('Failed to detach session');
+        }
+    };
+
     // ---------------------------------------------------------------
     // Memo update (on blur)
     // ---------------------------------------------------------------

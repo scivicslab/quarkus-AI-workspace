@@ -92,6 +92,17 @@ public class ServiceResource {
     }
 
     @POST
+    @Path("/tool/{name}/{port}/detach")
+    public Response detachTool(@PathParam("name") String name, @PathParam("port") int port) {
+        try {
+            backend.detachService(name, port);
+            return ok();
+        } catch (ServiceException e) {
+            return error(e);
+        }
+    }
+
+    @POST
     @Path("/tool/{name}/{port}/memo")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateMemo(@PathParam("name") String name,

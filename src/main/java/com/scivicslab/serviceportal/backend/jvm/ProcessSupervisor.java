@@ -1,4 +1,4 @@
-package com.scivicslab.serviceportal.backend.docker;
+package com.scivicslab.serviceportal.backend.jvm;
 
 import com.scivicslab.serviceportal.config.ServicePortalConfig;
 import com.scivicslab.serviceportal.model.SessionState;
@@ -59,7 +59,7 @@ public class ProcessSupervisor {
     private volatile File logFile;
 
     /**
-     * MCP Gateway URL injected by DockerBackend at launch time.
+     * MCP Gateway URL injected by JvmBackend at launch time.
      * Set via {@link #setGatewayUrl(String)} before calling {@link #start()}.
      * Exposed to the child process as the {@code MCP_GATEWAY_URL} environment variable.
      */
@@ -117,8 +117,24 @@ public class ProcessSupervisor {
         supervisor.logFile = logFileFor(config.name(), port);
         supervisor.registerWithGateway();
         Thread.ofVirtual().start(supervisor::tailLogFile);
+        Thread.ofVirtual().start(supervisor::watchAdoptedProcess);
         logger.info("Adopted " + config.name() + ":" + port + " (PID " + pid + ")");
         return supervisor;
+    }
+
+    private void watchAdoptedProcess() {
+        ProcessHandle handle = adoptedHandle;
+        if (handle == null) return;
+        try {
+            handle.onExit().get();
+        } catch (Exception e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        if (!stopping && state == SessionState.READY) {
+            state = SessionState.FAILED;
+            logger.warning(config.name() + ":" + port + " (adopted, PID " + handle.pid() + ") exited unexpectedly");
+        }
     }
 
     public void setMemo(String memo) {
@@ -133,6 +149,11 @@ public class ProcessSupervisor {
 
         try {
             List<String> command = buildCommand();
+            // Wrap with setsid to detach from the portal's process group.
+            // Without this, Ctrl+C or SIGINT sent to the terminal kills the entire
+            // process group (portal + all children). setsid starts the child in a
+            // new session so it survives portal restarts.
+            command.addAll(0, List.of("setsid", "--wait"));
             logger.info("Executing: " + String.join(" ", command));
             ProcessBuilder pb = new ProcessBuilder(command);
 
@@ -175,9 +196,13 @@ public class ProcessSupervisor {
         stopping = true;
 
         if (process != null && process.isAlive()) {
+            // Destroy descendants first (java child under setsid --wait does not
+            // receive signals sent to setsid itself).
+            process.toHandle().descendants().forEach(ProcessHandle::destroy);
             process.destroy();
             try {
                 if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.toHandle().descendants().forEach(ProcessHandle::destroyForcibly);
                     process.destroyForcibly();
                 }
             } catch (InterruptedException e) {
@@ -227,13 +252,17 @@ public class ProcessSupervisor {
      *  blank-check can skip the parameter rather than passing an unresolvable
      *  expression to the child JVM. */
     static String expandEnvVars(String value) {
+        return expandEnvVars(value, Map.of());
+    }
+
+    static String expandEnvVars(String value, Map<String, String> overrides) {
         if (value == null) return null;
         java.util.regex.Matcher m = java.util.regex.Pattern
             .compile("\\$\\{([^}]+)\\}|\\$([A-Za-z_][A-Za-z0-9_]*)").matcher(value);
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
             String varName = m.group(1) != null ? m.group(1) : m.group(2);
-            String envVal = System.getenv(varName);
+            String envVal = overrides.containsKey(varName) ? overrides.get(varName) : System.getenv(varName);
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
                 envVal != null ? envVal : ""));
         }
@@ -268,6 +297,15 @@ public class ProcessSupervisor {
                     command.add("-D" + param.jvmProp() + "=" + value);
                 }
             }
+        }
+
+        // Inject MCP endpoints: self + gateway aggregate (comma-separated for multi-server support)
+        if (config.gatewayMcpProp() != null && !config.gatewayMcpProp().isBlank()) {
+            String selfMcp = "http://localhost:" + port + "/mcp";
+            String mcpUrls = (gatewayUrl != null && !gatewayUrl.isBlank())
+                ? selfMcp + "," + gatewayUrl + "/mcp/_all"
+                : selfMcp;
+            command.add("-D" + config.gatewayMcpProp() + "=" + mcpUrls);
         }
 
         if (hasPositionalArgs) {

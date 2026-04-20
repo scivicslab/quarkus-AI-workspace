@@ -1,4 +1,4 @@
-package com.scivicslab.serviceportal.backend.docker;
+package com.scivicslab.serviceportal.backend.jvm;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

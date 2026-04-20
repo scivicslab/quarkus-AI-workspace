@@ -52,7 +52,7 @@ public class ServicePortalConfigLoader {
         String propHost = System.getProperty("service.portal.access.host");
         if (propHost != null && !propHost.isBlank()) accessHost = propHost;
 
-        ServicePortalConfig.DockerConfig dockerConfig = null;
+        ServicePortalConfig.JvmConfig jvmConfig = null;
         if (root.containsKey("jvm")) {
             Map<String, Object> jvm = (Map<String, Object>) root.get("jvm");
             List<Map<String, Object>> tools = (List<Map<String, Object>>) jvm.get("tools");
@@ -90,14 +90,15 @@ public class ServicePortalConfigLoader {
                         (Boolean) t.getOrDefault("autoStart", false),
                         (Boolean) t.getOrDefault("fixedPort", false),
                         args,
-                        params
+                        params,
+                        (String) t.get("gatewayMcpProp")
                     );
                 })
                 .toList();
 
-            dockerConfig = new ServicePortalConfig.DockerConfig(toolDefs);
+            jvmConfig = new ServicePortalConfig.JvmConfig(toolDefs);
         }
 
-        return new ServicePortalConfig(backend, accessHost, dockerConfig);
+        return new ServicePortalConfig(backend, accessHost, jvmConfig);
     }
 }

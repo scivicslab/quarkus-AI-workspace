@@ -6,19 +6,19 @@ import java.util.List;
  * Service portal configuration loaded from service-portal-jvm.yaml.
  */
 public record ServicePortalConfig(
-    String backend,     // "auto", "jvm", or "docker" (all map to DockerBackend)
+    String backend,     // "auto" or "jvm"
     String accessHost,  // hostname used in dashboard URLs (default: "localhost")
-    DockerConfig jvm
+    JvmConfig jvm
 ) {
     /**
-     * Docker backend configuration.
+     * JVM backend configuration.
      */
-    public record DockerConfig(
+    public record JvmConfig(
         List<ToolDefinition> tools
     ) {}
 
     /**
-     * Tool definition for Docker backend.
+     * Tool definition.
      * If args is non-null and non-empty, the process is launched as:
      *   java -jar <jar> <args...>
      * Otherwise the default Quarkus launch is used:
@@ -31,7 +31,8 @@ public record ServicePortalConfig(
         boolean autoStart,
         boolean fixedPort,
         java.util.List<String> args,
-        java.util.List<ParamDefinition> params
+        java.util.List<ParamDefinition> params,
+        String gatewayMcpProp   // if set, -D{gatewayMcpProp}={gatewayUrl}/mcp/_all is injected at launch
     ) {}
 
     /** A user-configurable parameter shown in the tool launch tile. */

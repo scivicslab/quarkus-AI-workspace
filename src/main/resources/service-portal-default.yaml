@@ -14,6 +14,7 @@ jvm:
       jar: quarkus-chat-ui.jar
       port: 28100
       autoStart: false
+      gatewayMcpProp: chat-ui.agent-loop.mcp-urls
       params:
         - key: workdir
           label: Working Directory
@@ -34,6 +35,11 @@ jvm:
           type: text
           default: ${VLLM_ENDPOINT}
           jvmProp: chat-ui.servers
+        - key: allowed-dirs
+          label: Allowed Directories (comma-separated)
+          type: text
+          default: ${HOME}/works
+          jvmProp: chat-ui.filesystem.allowed-dirs
 
     # Document portal: launched on demand
     - name: html-saurus

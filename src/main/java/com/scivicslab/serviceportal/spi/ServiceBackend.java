@@ -9,8 +9,8 @@ import java.util.Map;
 /**
  * Service management backend abstraction.
  *
- * Current implementation: DockerBackend — manages java -jar child processes
- * for the tools of a single AI team (jvm mode).
+ * Current implementation: JvmBackend — manages java -jar child processes
+ * for the tools of a single AI team.
  */
 public interface ServiceBackend {
 
@@ -30,6 +30,12 @@ public interface ServiceBackend {
     void stopService(String toolName, int port) throws ServiceException;
 
     /**
+     * Remove the instance from the portal's tracking list without stopping the process.
+     * Useful for dismissing re-adopted stale entries that the user no longer wants to manage.
+     */
+    default void detachService(String toolName, int port) throws ServiceException {}
+
+    /**
      * Return recent log lines for a specific instance.
      */
     List<String> getServiceLogs(String toolName, int port, int lines);
@@ -43,6 +49,6 @@ public interface ServiceBackend {
     /** Update the memo for a specific instance. No-op if instance not found. */
     default void updateMemo(String toolName, int port, String memo) {}
 
-    /** Returns "docker" or "lxd". Used by BackendLoader. */
+    /** Returns the backend type string (e.g. "jvm"). */
     String getBackendType();
 }

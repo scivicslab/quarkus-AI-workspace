@@ -1,4 +1,4 @@
-package com.scivicslab.serviceportal.backend.docker;
+package com.scivicslab.serviceportal.backend.jvm;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit tests for DockerBackend helper methods.
+ * Unit tests for JvmBackend helper methods.
  */
-class DockerBackendTest {
+class JvmBackendTest {
 
     // ---------------------------------------------------------------
     // jarMatches
@@ -23,7 +23,7 @@ class DockerBackendTest {
         @DisplayName("full absolute path in args matches")
         void fullAbsolutePath_matches() {
             String[] args = {"-Dquarkus.http.port=28081", "-jar", "/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar"};
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
         }
 
         @Test
@@ -31,27 +31,27 @@ class DockerBackendTest {
         void bareFilename_matchesAbsoluteResolvedJar() {
             // Gateway started with relative path; service-portal resolves to absolute
             String[] args = {"-Dquarkus.http.port=28081", "-jar", "quarkus-mcp-gateway.jar"};
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
         }
 
         @Test
         @DisplayName("path ending with /filename in args matches")
         void relativeSubdir_matches() {
             String[] args = {"-jar", "toolkit/quarkus-mcp-gateway.jar"};
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
         }
 
         @Test
         @DisplayName("different jar name does not match")
         void differentJar_noMatch() {
             String[] args = {"-jar", "quarkus-chat-ui.jar"};
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
         }
 
         @Test
         @DisplayName("empty args array does not match")
         void emptyArgs_noMatch() {
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", new String[0])).isFalse();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", new String[0])).isFalse();
         }
 
         @Test
@@ -59,14 +59,14 @@ class DockerBackendTest {
         void partialFilename_noMatch() {
             // "gateway.jar" should not match "quarkus-mcp-gateway.jar"
             String[] args = {"-jar", "gateway.jar"};
-            assertThat(DockerBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
         }
 
         @Test
         @DisplayName("resolvedJar is a bare filename — full path in args matches via contains")
         void resolvedJarBareFilename_fullPathInArgs_matches() {
             String[] args = {"-jar", "/some/path/quarkus-mcp-gateway.jar"};
-            assertThat(DockerBackend.jarMatches("quarkus-mcp-gateway.jar", args)).isTrue();
+            assertThat(JvmBackend.jarMatches("quarkus-mcp-gateway.jar", args)).isTrue();
         }
     }
 

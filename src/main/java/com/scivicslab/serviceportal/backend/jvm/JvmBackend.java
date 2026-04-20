@@ -1,4 +1,4 @@
-package com.scivicslab.serviceportal.backend.docker;
+package com.scivicslab.serviceportal.backend.jvm;
 
 import com.scivicslab.serviceportal.config.ServicePortalConfig;
 import com.scivicslab.serviceportal.model.DashboardModel;
@@ -19,8 +19,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
 /**
- * ServiceBackend implementation for Docker/k8s environments.
- * Manages java -jar child processes inside the container.
+ * ServiceBackend implementation that manages java -jar child processes.
  *
  * <h2>Port allocation</h2>
  * <p><b>Port-range mode</b> (recommended for multi-team deployments):</p>
@@ -34,9 +33,9 @@ import java.util.logging.Logger;
  * from the YAML with a 100-port scan window.</p>
  */
 @RegisterForReflection
-public class DockerBackend implements ServiceBackend {
+public class JvmBackend implements ServiceBackend {
 
-    private static final Logger logger = Logger.getLogger(DockerBackend.class.getName());
+    private static final Logger logger = Logger.getLogger(JvmBackend.class.getName());
 
     /** toolName -> list of instances (may have multiple per tool) */
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<ProcessSupervisor>> instances
@@ -102,7 +101,7 @@ public class DockerBackend implements ServiceBackend {
                 }
             }
         }
-        logger.info("Docker backend initialized");
+        logger.info("JVM backend initialized");
     }
 
     /**
@@ -307,6 +306,17 @@ public class DockerBackend implements ServiceBackend {
     }
 
     @Override
+    public void detachService(String toolName, int port) throws ServiceException {
+        CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(toolName, new CopyOnWriteArrayList<>());
+        ProcessSupervisor target = list.stream()
+            .filter(s -> s.getPort() == port)
+            .findFirst()
+            .orElseThrow(() -> new ServiceException("No instance of " + toolName + " on port " + port));
+        list.remove(target);
+        logger.info("Detached " + toolName + ":" + port + " from portal (process left running)");
+    }
+
+    @Override
     public List<String> getServiceLogs(String toolName, int port, int lines) {
         return instances.getOrDefault(toolName, new CopyOnWriteArrayList<>()).stream()
             .filter(s -> s.getPort() == port)
@@ -331,7 +341,7 @@ public class DockerBackend implements ServiceBackend {
             if (tool.autoStart()) {
                 // Management service section
                 List<ProcessSupervisor> active = list.stream()
-                    .filter(s -> s.getState() != SessionState.STOPPED)
+                    .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
                     .toList();
                 if (active.isEmpty()) {
                     managementServices.add(stoppedView(tool));
@@ -382,7 +392,7 @@ public class DockerBackend implements ServiceBackend {
 
         for (int port = start; port <= end; port++) {
             if (usedPorts.contains(port)) continue;
-            if (!isTcpPortOpen(port)) return port;
+            if (findPidByPort(port) < 0) return port;
         }
         throw new ServiceException("No free port in range " + start + "-" + end);
     }
@@ -398,21 +408,13 @@ public class DockerBackend implements ServiceBackend {
 
         for (int port = basePort; port < basePort + 100; port++) {
             if (usedPorts.contains(port)) continue;
-            if (!isTcpPortOpen(port)) return port;
+            if (findPidByPort(port) < 0) return port;
         }
         throw new ServiceException("No free port found in range " + basePort + "-" + (basePort + 99));
     }
 
-    private boolean isTcpPortOpen(int port) {
-        try (java.net.ServerSocket ss = new java.net.ServerSocket(port)) {
-            return false; // successfully bound → port is free
-        } catch (Exception e) {
-            return true; // bind failed → port is in use
-        }
-    }
-
     private boolean isPortAvailable(int port) {
-        return !isTcpPortOpen(port);
+        return findPidByPort(port) < 0;
     }
 
     /**
@@ -431,7 +433,7 @@ public class DockerBackend implements ServiceBackend {
     }
 
     private ServicePortalConfig.ToolDefinition findTool(String name) throws ServiceException {
-        if (config.jvm() == null) throw new ServiceException("No docker config");
+        if (config.jvm() == null) throw new ServiceException("No JVM config");
         return config.jvm().tools().stream()
             .filter(t -> t.name().equals(name))
             .findFirst()
