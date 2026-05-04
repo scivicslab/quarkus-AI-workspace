@@ -219,14 +219,20 @@ public class ServiceResource {
      * @return [assetName, browser_download_url], or null if not found
      */
     private static String[] findJarAsset(String json) {
-        Pattern assetPat = Pattern.compile(
-            "\"name\"\\s*:\\s*\"([^\"]+)\"[^}]*?\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"",
-            Pattern.DOTALL);
-        Matcher m = assetPat.matcher(json);
-        while (m.find()) {
-            String assetName = m.group(1);
-            String url = m.group(2);
-            if (assetName.endsWith(".jar")
+        // Locate each browser_download_url ending in .jar, then find the nearest
+        // preceding "name" field. This avoids [^}]* breaking on nested objects
+        // (e.g. the "uploader" sub-object inside each asset entry).
+        Pattern urlPat = Pattern.compile("\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.jar)\"");
+        Pattern namePat = Pattern.compile("\"name\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher urlM = urlPat.matcher(json);
+        while (urlM.find()) {
+            String url = urlM.group(1);
+            String preceding = json.substring(0, urlM.start());
+            Matcher nameM = namePat.matcher(preceding);
+            String assetName = null;
+            while (nameM.find()) assetName = nameM.group(1);
+            if (assetName != null
+                    && assetName.endsWith(".jar")
                     && !assetName.endsWith("-javadoc.jar")
                     && !assetName.endsWith("-sources.jar")) {
                 return new String[]{assetName, url};
