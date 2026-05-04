@@ -12,6 +12,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,6 +54,7 @@ public class ProcessSupervisor {
     private volatile ProcessHandle adoptedHandle;
     private volatile SessionState state = SessionState.STOPPED;
     private volatile boolean stopping = false;
+    private volatile String cachedAccessUrl;
 
     /**
      * Log file for this instance. stdout+stderr of the child process are written here.
@@ -64,6 +68,7 @@ public class ProcessSupervisor {
      * Exposed to the child process as the {@code MCP_GATEWAY_URL} environment variable.
      */
     private String gatewayUrl;
+    private volatile String registeredGatewayName;
 
     public ProcessSupervisor(ServicePortalConfig.ToolDefinition config,
                              int port,
@@ -87,6 +92,10 @@ public class ProcessSupervisor {
 
     public SessionState getState() {
         return state;
+    }
+
+    public String getCachedAccessUrl() {
+        return cachedAccessUrl;
     }
 
     public long getPid() {
@@ -115,6 +124,11 @@ public class ProcessSupervisor {
         supervisor.adoptedHandle = ProcessHandle.of(pid).orElse(null);
         supervisor.state = SessionState.READY;
         supervisor.logFile = logFileFor(config.name(), port);
+        // Reconstruct access URL locally — k8s-pups resources still exist from before restart
+        String adoptSessionId = System.getenv("PUPS_SESSION_ID");
+        if (adoptSessionId != null && !adoptSessionId.isBlank()) {
+            supervisor.cachedAccessUrl = "/session/" + adoptSessionId + "-" + config.name() + "-" + port + "/";
+        }
         supervisor.registerWithGateway();
         Thread.ofVirtual().start(supervisor::tailLogFile);
         Thread.ofVirtual().start(supervisor::watchAdoptedProcess);
@@ -192,6 +206,7 @@ public class ProcessSupervisor {
     }
 
     public synchronized void stop() {
+        deregisterFromK8sPups();
         unregisterFromGateway();
         stopping = true;
 
@@ -224,9 +239,10 @@ public class ProcessSupervisor {
     }
 
     public SessionView toSessionView(java.util.function.BiFunction<String, Integer, String> urlBuilder) {
-        String accessUrl = (state == SessionState.READY)
-            ? urlBuilder.apply(config.name(), port)
-            : null;
+        String accessUrl = null;
+        if (state == SessionState.READY) {
+            accessUrl = cachedAccessUrl != null ? cachedAccessUrl : urlBuilder.apply(config.name(), port);
+        }
 
         return new SessionView(
             config.name(),
@@ -302,8 +318,11 @@ public class ProcessSupervisor {
         // Inject MCP endpoints: self + gateway aggregate (comma-separated for multi-server support)
         if (config.gatewayMcpProp() != null && !config.gatewayMcpProp().isBlank()) {
             String selfMcp = "http://localhost:" + port + "/mcp";
+            // gatewayUrl is the base URL (no path). The agent loop appends /mcp to reach
+            // POST /mcp — the top-level aggregate endpoint that serves ALL registered
+            // servers (HTTP + stdio). Using /mcp/_all would hit the stdio-only bridge.
             String mcpUrls = (gatewayUrl != null && !gatewayUrl.isBlank())
-                ? selfMcp + "," + gatewayUrl + "/mcp/_all"
+                ? selfMcp + "," + gatewayUrl
                 : selfMcp;
             command.add("-D" + config.gatewayMcpProp() + "=" + mcpUrls);
         }
@@ -370,6 +389,7 @@ public class ProcessSupervisor {
                 state = SessionState.READY;
                 logger.info(config.name() + ":" + port + " is READY");
                 registerWithGateway();
+                registerWithK8sPups();
                 return;
             }
             try {
@@ -502,11 +522,12 @@ public class ProcessSupervisor {
         String gwUrl = gatewayUrl();
         if (gwUrl == null) return;
 
-        String name = config.name() + "-" + port;
+        String name = resolveMcpServerName();
+        registeredGatewayName = name;
         String url  = "http://localhost:" + externalPort();
         String body = "{\"name\":\"" + name + "\","
             + "\"url\":\"" + url + "\","
-            + "\"description\":\"" + config.name() + " on port " + port + "\"}";
+            + "\"description\":\"" + name + "\"}";
 
         try {
             HttpRequest req = HttpRequest.newBuilder()
@@ -526,7 +547,7 @@ public class ProcessSupervisor {
         String gwUrl = gatewayUrl();
         if (gwUrl == null) return;
 
-        String name = config.name() + "-" + port;
+        String name = registeredGatewayName != null ? registeredGatewayName : config.name() + "-" + port;
 
         try {
             HttpRequest req = HttpRequest.newBuilder()
@@ -538,6 +559,119 @@ public class ProcessSupervisor {
                 .exceptionally(e -> { logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage()); return null; });
         } catch (Exception e) {
             logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage());
+        }
+    }
+
+    private static final Pattern SERVER_NAME_PATTERN =
+        Pattern.compile("\"serverInfo\"\\s*:\\s*\\{[^}]*\"name\"\\s*:\\s*\"([^\"]+)\"");
+
+    private String resolveMcpServerName() {
+        String mcpUrl = "http://localhost:" + externalPort() + "/mcp";
+        String initBody = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
+            + "\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},"
+            + "\"clientInfo\":{\"name\":\"service-portal\",\"version\":\"1.0\"}}}";
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(mcpUrl))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(initBody))
+                .timeout(Duration.ofSeconds(3))
+                .build();
+            HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                Matcher m = SERVER_NAME_PATTERN.matcher(resp.body());
+                if (m.find()) {
+                    String baseName = m.group(1);
+                    String portSuffix = "-" + port;
+                    return baseName.endsWith(portSuffix) ? baseName : baseName + portSuffix;
+                }
+            }
+        } catch (Exception e) {
+            logger.fine("Could not probe MCP name for " + config.name() + ":" + port + ", using fallback");
+        }
+        return config.name() + "-" + port;
+    }
+
+    // ---------------------------------------------------------------
+    // k8s-pups sub-tool registration
+    // ---------------------------------------------------------------
+
+    private String pupsControllerUrl() {
+        String url = System.getenv("PUPS_CONTROLLER_URL");
+        return (url != null && !url.isBlank()) ? url : null;
+    }
+
+    private String pupsSessionId() {
+        String id = System.getenv("PUPS_SESSION_ID");
+        return (id != null && !id.isBlank()) ? id : null;
+    }
+
+    private void registerWithK8sPups() {
+        String controllerUrl = pupsControllerUrl();
+        String sessionId = pupsSessionId();
+        if (controllerUrl == null || sessionId == null) return;
+
+        String body = "{\"toolName\":\"" + config.name() + "\",\"port\":" + port + "}";
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(controllerUrl + "/api/sub-tool/" + sessionId))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.ofString())
+                .thenAccept(r -> {
+                    if (r.statusCode() == 200) {
+                        String responseBody = r.body();
+                        int idx = responseBody.indexOf("\"accessUrl\"");
+                        if (idx >= 0) {
+                            int start = responseBody.indexOf("\"", idx + 11) + 1;
+                            int end = responseBody.indexOf("\"", start);
+                            if (start > 0 && end > start) {
+                                cachedAccessUrl = responseBody.substring(start, end);
+                            }
+                        }
+                        logger.info("K8sPups registered: " + config.name() + ":" + port
+                            + " → " + cachedAccessUrl);
+                    } else {
+                        logger.warning("K8sPups registration returned HTTP " + r.statusCode()
+                            + " for " + config.name() + ":" + port);
+                    }
+                })
+                .exceptionally(e -> {
+                    logger.warning("K8sPups registration failed for " + config.name()
+                        + ":" + port + ": " + e.getMessage());
+                    return null;
+                });
+        } catch (Exception e) {
+            logger.warning("K8sPups registration failed for " + config.name()
+                + ":" + port + ": " + e.getMessage());
+        }
+    }
+
+    private void deregisterFromK8sPups() {
+        String controllerUrl = pupsControllerUrl();
+        String sessionId = pupsSessionId();
+        if (controllerUrl == null || sessionId == null) return;
+
+        cachedAccessUrl = null;
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(controllerUrl + "/api/sub-tool/" + sessionId
+                    + "/" + config.name() + "/" + port))
+                .DELETE()
+                .build();
+            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+                .thenAccept(r -> logger.info("K8sPups deregistered: " + config.name()
+                    + ":" + port + " (HTTP " + r.statusCode() + ")"))
+                .exceptionally(e -> {
+                    logger.warning("K8sPups deregistration failed for " + config.name()
+                        + ":" + port + ": " + e.getMessage());
+                    return null;
+                });
+        } catch (Exception e) {
+            logger.warning("K8sPups deregistration failed for " + config.name()
+                + ":" + port + ": " + e.getMessage());
         }
     }
 }

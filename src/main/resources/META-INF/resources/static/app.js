@@ -20,7 +20,7 @@
 
     async function pollStatus() {
         try {
-            const r = await fetch('/api/status');
+            const r = await fetch('api/status');
             if (!r.ok) return;
             const model = await r.json();
             applyModel(model);
@@ -94,12 +94,12 @@
     // ---------------------------------------------------------------
 
     window.mgmtStart = async function (name, port) {
-        await fetch('/api/mgmt/' + name + '/start', { method: 'POST' });
+        await fetch('api/mgmt/' + name + '/start', { method: 'POST' });
         setTimeout(pollStatus, 300);
     };
 
     window.mgmtStop = async function (name, port) {
-        await fetch('/api/mgmt/' + name + '/stop?port=' + port, { method: 'POST' });
+        await fetch('api/mgmt/' + name + '/stop?port=' + port, { method: 'POST' });
         setTimeout(pollStatus, 300);
     };
 
@@ -121,7 +121,7 @@
             if (value) body[key] = value;
         });
 
-        const r = await fetch('/api/tool/' + toolName + '/launch', {
+        const r = await fetch('api/tool/' + toolName + '/launch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -140,22 +140,12 @@
     };
 
     window.stopSession = async function (toolName, port) {
-        const r = await fetch('/api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
+        const r = await fetch('api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
         if (r.ok) {
             const card = document.getElementById('session-' + sessionKey(toolName, port));
             if (card) card.remove();
         } else {
             alert('Failed to stop session');
-        }
-    };
-
-    window.detachSession = async function (toolName, port) {
-        const r = await fetch('/api/tool/' + toolName + '/' + port + '/detach', { method: 'POST' });
-        if (r.ok) {
-            const card = document.getElementById('session-' + sessionKey(toolName, port));
-            if (card) card.remove();
-        } else {
-            alert('Failed to detach session');
         }
     };
 
@@ -168,7 +158,7 @@
             input.addEventListener('blur', async e => {
                 const toolName = e.target.dataset.toolName;
                 const port = e.target.dataset.port;
-                await fetch('/api/tool/' + toolName + '/' + port + '/memo', {
+                await fetch('api/tool/' + toolName + '/' + port + '/memo', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ memo: e.target.value })
@@ -209,7 +199,7 @@
     };
 
     async function loadDirListing(path) {
-        const r = await fetch('/api/dirs?path=' + encodeURIComponent(path));
+        const r = await fetch('api/dirs?path=' + encodeURIComponent(path));
         if (!r.ok) return;
         const data = await r.json();
 
@@ -251,5 +241,33 @@
             if (e.target === e.currentTarget) closeDirBrowser();
         });
     });
+
+    // ── Download latest jar from GitHub Releases ──────────────────
+    window.downloadTool = async function(name) {
+        const btn = document.getElementById('btn-download-' + name);
+        const status = document.getElementById('download-status-' + name);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Downloading…';
+        status.textContent = '';
+        status.style.color = '';
+        try {
+            const r = await fetch('api/tool/' + encodeURIComponent(name) + '/download', { method: 'POST' });
+            const data = await r.json();
+            if (data.success) {
+                status.textContent = '✓ ' + (data.version || 'updated');
+                status.style.color = 'var(--accent-green)';
+            } else {
+                status.textContent = '✗ ' + (data.error || 'failed');
+                status.style.color = 'var(--accent-red)';
+            }
+        } catch (e) {
+            status.textContent = '✗ ' + e.message;
+            status.style.color = 'var(--accent-red)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Download Latest';
+        }
+    };
 
 })();

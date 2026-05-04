@@ -67,21 +67,27 @@ public class ServicePortalProcess {
                 + " — run 'mvn package -DskipTests' first");
         }
 
-        File logFile = File.createTempFile("service-portal-", ".log");
-        logFile.deleteOnExit();
+        File logFile = new File(System.getProperty("java.io.tmpdir"),
+                "service-portal-" + port + ".log");
+
+        // Service-portal resolves relative tool JAR paths against its working directory.
+        // Use TEST_JARS_DIR if provided so that tools are found correctly.
+        String jarsDir = extraEnv.getOrDefault("TEST_JARS_DIR",
+                Path.of(System.getProperty("user.home"), "works").toString());
+        File workDir = new File(jarsDir);
 
         ProcessBuilder pb = new ProcessBuilder(
             "java",
             "-Dquarkus.http.port=" + port,
-            "-Dservice.portal.config=" + configYaml.toAbsolutePath(),
             "-jar", jarFile.getAbsolutePath()
         );
-        pb.directory(configYaml.getParent().toFile());
+        pb.directory(workDir);
         extraEnv.forEach((k, v) -> pb.environment().put(k, v));
         pb.redirectErrorStream(true);
         pb.redirectOutput(logFile);
 
         Process proc = pb.start();
+        System.out.println("  [service-portal:" + port + "] log → " + logFile.getAbsolutePath());
         ServicePortalProcess spp = new ServicePortalProcess(proc, port, logFile);
         spp.waitForReady(20_000);
         return spp;
@@ -89,6 +95,7 @@ public class ServicePortalProcess {
 
     public static ServicePortalProcess start(Path configYaml, int port) throws Exception {
         requireEnv("TEST_JARS_DIR");
+        String testJarsDir = System.getenv("TEST_JARS_DIR");
 
         String jarPath = resolveDefaultJar();
         File   jarFile = new File(jarPath);
@@ -98,23 +105,19 @@ public class ServicePortalProcess {
                 + " — run 'mvn package -DskipTests' first");
         }
 
-        File logFile = File.createTempFile("service-portal-", ".log");
-        logFile.deleteOnExit();
+        File logFile = new File(System.getProperty("java.io.tmpdir"),
+                "service-portal-" + port + ".log");
 
         ProcessBuilder pb = new ProcessBuilder(
             "java",
             "-Dquarkus.http.port=" + port,
-            "-Dservice.portal.config=" + configYaml.toAbsolutePath(),
             "-jar", jarFile.getAbsolutePath()
         );
-        pb.directory(configYaml.getParent().toFile());
-        // Propagate TEST_JARS_DIR so service-portal can resolve ${TEST_JARS_DIR} in the YAML
-        String testJarsDir = System.getenv("TEST_JARS_DIR");
-        if (testJarsDir != null) {
-            pb.environment().put("TEST_JARS_DIR", testJarsDir);
-        }
+        pb.directory(new File(testJarsDir));
+        pb.environment().put("TEST_JARS_DIR", testJarsDir);
         pb.redirectErrorStream(true);
         pb.redirectOutput(logFile);
+        System.out.println("  [service-portal:" + port + "] log → " + logFile.getAbsolutePath());
 
         Process proc = pb.start();
         ServicePortalProcess spp = new ServicePortalProcess(proc, port, logFile);
@@ -145,16 +148,35 @@ public class ServicePortalProcess {
 
     public int port() { return port; }
 
+    public File logFile() { return logFile; }
+
     public void stop() {
-        // Kill child processes first (tools launched by service-portal),
-        // then the service-portal itself.
         long pid = process.pid();
-        try {
-            new ProcessBuilder("pkill", "-KILL", "-P", String.valueOf(pid))
-                .start().waitFor();
-        } catch (Exception ignored) {
-        }
+        // Kill all descendants recursively, then the portal itself.
+        killDescendants(pid);
         process.destroyForcibly();
+        try { process.waitFor(); } catch (InterruptedException ignored) {}
+        // Brief pause to let the OS release bound ports.
+        try { Thread.sleep(1_500); } catch (InterruptedException ignored) {}
+    }
+
+    private static void killDescendants(long pid) {
+        // First recurse into grandchildren, then kill direct children.
+        try {
+            Process pgrep = new ProcessBuilder("pgrep", "-P", String.valueOf(pid))
+                .start();
+            String out = new String(pgrep.getInputStream().readAllBytes()).trim();
+            pgrep.waitFor();
+            if (!out.isEmpty()) {
+                for (String childPid : out.split("\\s+")) {
+                    try { killDescendants(Long.parseLong(childPid.trim())); }
+                    catch (NumberFormatException ignored) {}
+                }
+            }
+        } catch (Exception ignored) {}
+        try {
+            new ProcessBuilder("kill", "-9", String.valueOf(pid)).start().waitFor();
+        } catch (Exception ignored) {}
     }
 
     // ---------------------------------------------------------------

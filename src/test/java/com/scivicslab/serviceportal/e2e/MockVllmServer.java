@@ -44,9 +44,11 @@ class MockVllmServer {
                     + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}")
                     .getBytes(StandardCharsets.UTF_8);
 
+    private final int port;
     private final HttpServer server;
 
     MockVllmServer(int port) throws IOException {
+        this.port = port;
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/v1/models", exchange -> {
             sendJson(exchange, MODELS_RESPONSE);
@@ -57,6 +59,8 @@ class MockVllmServer {
         });
         server.setExecutor(null);
     }
+
+    int port() { return port; }
 
     void start() {
         server.start();

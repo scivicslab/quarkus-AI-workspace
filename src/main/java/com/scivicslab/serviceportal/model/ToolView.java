@@ -9,5 +9,6 @@ public record ToolView(
     String name,
     String displayName,
     String icon,
-    List<ParamDefinition> params
+    List<ParamDefinition> params,
+    String github
 ) {}

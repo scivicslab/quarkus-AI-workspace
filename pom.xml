@@ -6,7 +6,7 @@
 
     <groupId>com.scivicslab</groupId>
     <artifactId>service-portal</artifactId>
-    <version>1.3.0</version>
+    <version>1.3.1</version>
 
     <name>Service Portal</name>
     <description>Service management portal — manages JVM tool processes via uber-JAR</description>
@@ -18,6 +18,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.19.2</quarkus.platform.version>
+        <quarkus.package.output-name>quarkus-service-portal-${project.version}</quarkus.package.output-name>
     </properties>
 
     <dependencyManagement>

@@ -30,9 +30,11 @@ public record ServicePortalConfig(
         int port,
         boolean autoStart,
         boolean fixedPort,
+        boolean singleInstance,
         java.util.List<String> args,
         java.util.List<ParamDefinition> params,
-        String gatewayMcpProp   // if set, -D{gatewayMcpProp}={gatewayUrl}/mcp/_all is injected at launch
+        String gatewayMcpProp,  // if set, -D{gatewayMcpProp}={gatewayUrl}/mcp/_all is injected at launch
+        String github           // GitHub repo in "owner/repo" format for download-latest feature
     ) {}
 
     /** A user-configurable parameter shown in the tool launch tile. */

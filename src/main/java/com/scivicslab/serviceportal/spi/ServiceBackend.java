@@ -30,12 +30,6 @@ public interface ServiceBackend {
     void stopService(String toolName, int port) throws ServiceException;
 
     /**
-     * Remove the instance from the portal's tracking list without stopping the process.
-     * Useful for dismissing re-adopted stale entries that the user no longer wants to manage.
-     */
-    default void detachService(String toolName, int port) throws ServiceException {}
-
-    /**
      * Return recent log lines for a specific instance.
      */
     List<String> getServiceLogs(String toolName, int port, int lines);

@@ -2,16 +2,10 @@ backend: jvm
 
 jvm:
   tools:
-    # MCP Gateway: starts automatically
-    - name: quarkus-mcp-gateway
-      jar: quarkus-mcp-gateway.jar
-      port: 28081
-      fixedPort: true
-      autoStart: true
-
     # Chat UI: launched on demand from the dashboard
     - name: quarkus-chat-ui
       jar: quarkus-chat-ui.jar
+      github: scivicslab/quarkus-chat-ui
       port: 28100
       autoStart: false
       gatewayMcpProp: chat-ui.agent-loop.mcp-urls
@@ -24,7 +18,7 @@ jvm:
         - key: provider
           label: LLM Provider
           type: select
-          default: claude
+          default: ${DEFAULT_PROVIDER}
           jvmProp: chat-ui.provider
           options:
             - { value: claude,        label: Claude }
@@ -41,9 +35,10 @@ jvm:
           default: ${HOME}/works
           jvmProp: chat-ui.filesystem.allowed-dirs
 
-    # Document portal: launched on demand
+    # Document portal: single instance (only one can run at a time)
     - name: html-saurus
       jar: html-saurus.jar
+      github: scivicslab/html-saurus
       port: 28110
       autoStart: false
       args:
@@ -62,6 +57,7 @@ jvm:
     # Turing Workflow Editor: launched on demand
     - name: turing-workflow-editor
       jar: turing-workflow-editor.jar
+      github: scivicslab/Turing-workflow-editor
       port: 28120
       autoStart: false
       params:
@@ -70,3 +66,11 @@ jvm:
           type: dir
           default: ${HOME}/works
           workingDir: true
+
+    # MCP Gateway: starts automatically, listed last as it is rarely launched manually
+    - name: quarkus-mcp-gateway
+      jar: quarkus-mcp-gateway.jar
+      github: scivicslab/quarkus-mcp-gateway
+      port: 28081
+      fixedPort: true
+      autoStart: true

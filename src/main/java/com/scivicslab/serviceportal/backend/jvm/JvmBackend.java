@@ -252,6 +252,16 @@ public class JvmBackend implements ServiceBackend {
         list.removeIf(s -> s.getState() == SessionState.STOPPED
                         || s.getState() == SessionState.FAILED);
 
+        if (def.singleInstance() && !list.isEmpty()) {
+            throw new ServiceException(toolName + " is already running (singleInstance=true).");
+        }
+
+        // autoStart tools: stop any running instance before (re)starting
+        if (def.autoStart() && !list.isEmpty()) {
+            for (var s : List.copyOf(list)) s.stop();
+            list.clear();
+        }
+
         int port;
         if (rangeStart >= 0) {
             // Port-range mode
@@ -306,17 +316,6 @@ public class JvmBackend implements ServiceBackend {
     }
 
     @Override
-    public void detachService(String toolName, int port) throws ServiceException {
-        CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(toolName, new CopyOnWriteArrayList<>());
-        ProcessSupervisor target = list.stream()
-            .filter(s -> s.getPort() == port)
-            .findFirst()
-            .orElseThrow(() -> new ServiceException("No instance of " + toolName + " on port " + port));
-        list.remove(target);
-        logger.info("Detached " + toolName + ":" + port + " from portal (process left running)");
-    }
-
-    @Override
     public List<String> getServiceLogs(String toolName, int port, int lines) {
         return instances.getOrDefault(toolName, new CopyOnWriteArrayList<>()).stream()
             .filter(s -> s.getPort() == port)
@@ -339,20 +338,28 @@ public class JvmBackend implements ServiceBackend {
             CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(tool.name(), new CopyOnWriteArrayList<>());
 
             if (tool.autoStart()) {
-                // Management service section
+                // Management service: always visible in launchTools so user can (re)start it from one place
                 List<ProcessSupervisor> active = list.stream()
                     .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
                     .toList();
                 if (active.isEmpty()) {
                     managementServices.add(stoppedView(tool));
                 } else {
-                    for (var s : active) managementServices.add(s.toSessionView((name, p) -> "http://" + accessHost + ":" + p + "/"));
+                    for (var s : active) managementServices.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
                 }
+                launchTools.add(toToolView(tool));
+            } else if (tool.singleInstance()) {
+                // Single-instance tool: always in launchTools; also in activeSessions when running
+                List<ProcessSupervisor> active = list.stream()
+                    .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
+                    .toList();
+                for (var s : active) activeSessions.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
+                launchTools.add(toToolView(tool));
             } else {
                 // Active sessions section: non-stopped instances
                 for (var s : list) {
                     if (s.getState() != SessionState.STOPPED) {
-                        activeSessions.add(s.toSessionView((name, p) -> "http://" + accessHost + ":" + p + "/"));
+                        activeSessions.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
                     }
                 }
                 // Launch tools section: always show tile
@@ -463,6 +470,6 @@ public class JvmBackend implements ServiceBackend {
                 ));
             }
         }
-        return new ToolView(tool.name(), tool.name(), "", params);
+        return new ToolView(tool.name(), tool.name(), "", params, tool.github() != null ? tool.github() : "");
     }
 }

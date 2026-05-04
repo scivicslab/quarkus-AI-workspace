@@ -36,7 +36,7 @@ jvm:
         - --portal-mode
         - --serve
         - --port
-        - "18110"
+        - "${PORT}"
       params:
         - key: dir
           label: Document Root

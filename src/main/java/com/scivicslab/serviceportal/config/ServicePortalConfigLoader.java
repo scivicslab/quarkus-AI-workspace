@@ -89,9 +89,11 @@ public class ServicePortalConfigLoader {
                         (Integer) t.get("port"),
                         (Boolean) t.getOrDefault("autoStart", false),
                         (Boolean) t.getOrDefault("fixedPort", false),
+                        (Boolean) t.getOrDefault("singleInstance", false),
                         args,
                         params,
-                        (String) t.get("gatewayMcpProp")
+                        (String) t.get("gatewayMcpProp"),
+                        (String) t.get("github")
                     );
                 })
                 .toList();

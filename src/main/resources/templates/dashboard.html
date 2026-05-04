@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Portal</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <style>
         /* ── Themes (same variable set as MCP Gateway) ─────── */
         :root, [data-theme="dark-catppuccin"] {
@@ -340,13 +340,15 @@
             border-color: var(--accent-red);
         }
         .btn-stop:hover { background: color-mix(in srgb, var(--accent-red) 12%, transparent); opacity: 1; }
-        .btn-detach {
+        .btn-download {
             background: none;
-            border: 1px solid var(--border-color);
-            color: var(--muted);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
         }
-        .btn-detach:hover { background: color-mix(in srgb, var(--muted) 12%, transparent); opacity: 1; }
-
+        .btn-download:hover { background: color-mix(in srgb, var(--accent-green) 12%, transparent); opacity: 1; }
+        .download-status { font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.3rem; }
         /* ── Tool grid ───────────────────────────────────────── */
         .tool-grid {
             display: grid;
@@ -560,7 +562,6 @@
             <span class="session-port">:{svc.port}</span>
             <span class="badge badge-{svc.state}">{svc.state}</span>
             <div style="margin-left:auto; display:flex; gap:6px;">
-                <button class="btn btn-detach" onclick="detachSession('{svc.toolName}', {svc.port})">Detach</button>
                 <button class="btn btn-stop" onclick="stopSession('{svc.toolName}', {svc.port})">Stop</button>
             </div>
         </div>
@@ -614,7 +615,14 @@
                 {/if}
             </div>
             {/for}
-            <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Launch</button>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
+                <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Launch</button>
+                {#if tool.github}
+                <button class="btn btn-download" id="btn-download-{tool.name}"
+                        onclick="downloadTool('{tool.name}')">Download Latest</button>
+                <span class="download-status" id="download-status-{tool.name}"></span>
+                {/if}
+            </div>
         </div>
         {/for}
     </div>
@@ -650,6 +658,6 @@
         });
     })();
 </script>
-<script src="/static/app.js"></script>
+<script src="static/app.js"></script>
 </body>
 </html>
