@@ -16,3 +16,4 @@ docs/
 search-index/
 static-html/
 workflows.old/
+*.jar
