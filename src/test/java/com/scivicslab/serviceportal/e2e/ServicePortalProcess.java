@@ -34,13 +34,13 @@ public class ServicePortalProcess {
             Optional<Path> found = Files.list(Paths.get("target"))
                 .filter(p -> {
                     String n = p.getFileName().toString();
-                    return n.startsWith("service-portal-") && n.endsWith("-runner.jar");
+                    return n.startsWith("quarkus-AI-workspace-") && n.endsWith(".jar");
                 })
                 .max(Comparator.comparing(p -> p.getFileName().toString()));
             if (found.isPresent()) return found.get().toString();
         } catch (IOException ignored) {
         }
-        return "target/service-portal-runner.jar";
+        return "target/quarkus-AI-workspace-runner.jar";
     }
 
     private final Process process;

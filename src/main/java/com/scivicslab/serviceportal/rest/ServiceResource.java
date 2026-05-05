@@ -153,7 +153,9 @@ public class ServiceResource {
             return Response.status(400).entity(Map.of("error", "No jar name configured for " + name)).build();
 
         try {
-            HttpClient client = HttpClient.newHttpClient();
+            HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
 
             // Fetch latest release metadata from GitHub API
             String apiUrl = "https://api.github.com/repos/" + github + "/releases/latest";

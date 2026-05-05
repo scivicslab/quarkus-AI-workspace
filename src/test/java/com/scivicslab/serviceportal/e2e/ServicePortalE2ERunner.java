@@ -29,6 +29,8 @@ public class ServicePortalE2ERunner {
         new ChatUiProviderUIE2E().run();
         Thread.sleep(3_000);
         new ToolWorksE2E().run();
+        Thread.sleep(3_000);
+        new DownloadLatestE2E().run();
         System.out.println("=== All E2E tests PASSED ===");
     }
 }
