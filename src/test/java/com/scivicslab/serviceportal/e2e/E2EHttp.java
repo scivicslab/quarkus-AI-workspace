@@ -129,6 +129,33 @@ class E2EHttp {
         return configJson.substring(start, end).split(",")[0].trim();
     }
 
+    /**
+     * Polls /api/status until the named tool is READY and its accessUrl is populated,
+     * then returns that accessUrl. This is the URL the dashboard link points to —
+     * it may differ from a plain http://localhost:{port}/ when a proxy (e.g. K8sPups)
+     * overrides it.
+     */
+    static String waitForToolAccessUrl(int portalPort, String toolName, long timeoutMs) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            String status = get(portalPort, "/api/status");
+            JsonNode root = MAPPER.readTree(status);
+            for (JsonNode session : root.path("activeSessions")) {
+                if (toolName.equals(session.path("toolName").asText())) {
+                    String state = session.path("state").asText();
+                    if ("READY".equals(state)) {
+                        String url = session.path("accessUrl").asText(null);
+                        if (url != null && !url.isBlank()) return url;
+                    }
+                    if ("FAILED".equals(state))
+                        throw new AssertionError(toolName + " reached FAILED state");
+                }
+            }
+            Thread.sleep(1_000);
+        }
+        throw new AssertionError(toolName + " accessUrl not available within " + timeoutMs + "ms");
+    }
+
     /** Waits for the named management service (e.g. "quarkus-mcp-gateway") to reach READY state. */
     static void waitForManagementServiceReady(int portalPort, String serviceName, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;

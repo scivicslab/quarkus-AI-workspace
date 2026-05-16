@@ -30,6 +30,7 @@ public class DashboardResource {
         return dashboard
             .data("managementServices", model.managementServices())
             .data("activeSessions", model.activeSessions())
-            .data("launchTools", model.launchTools());
+            .data("launchTools", model.launchTools())
+            .data("mcpGateway", model.mcpGateway());
     }
 }

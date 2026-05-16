@@ -45,4 +45,22 @@ public interface ServiceBackend {
 
     /** Returns the backend type string (e.g. "jvm"). */
     String getBackendType();
+
+    /**
+     * Switch the team's MCP Gateway to an external URL.
+     * Stops the team-dedicated subprocess if it is running.
+     * Default implementation: throws ServiceException (backend does not support).
+     */
+    default void useExternalGateway(String url) throws ServiceException {
+        throw new ServiceException("Backend does not support external MCP Gateway");
+    }
+
+    /**
+     * Switch the team's MCP Gateway back to the team-dedicated subprocess.
+     * Starts the subprocess if it is not running.
+     * Default implementation: throws ServiceException (backend does not support).
+     */
+    default void useInternalGateway() throws ServiceException {
+        throw new ServiceException("Backend does not support internal MCP Gateway");
+    }
 }

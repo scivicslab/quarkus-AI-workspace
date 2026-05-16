@@ -123,6 +123,38 @@ public class ServiceResource {
     }
 
     // ---------------------------------------------------------------
+    // MCP Gateway mode switching
+    // ---------------------------------------------------------------
+
+    @POST
+    @Path("/mcp-gateway/use-external")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response useExternalGateway(Map<String, String> payload) {
+        String url = payload != null ? payload.get("url") : null;
+        if (url == null || url.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(Map.of("success", false, "error", "url is required")).build();
+        }
+        try {
+            backend.useExternalGateway(url);
+            return ok();
+        } catch (ServiceException e) {
+            return error(e);
+        }
+    }
+
+    @POST
+    @Path("/mcp-gateway/use-internal")
+    public Response useInternalGateway() {
+        try {
+            backend.useInternalGateway();
+            return ok();
+        } catch (ServiceException e) {
+            return error(e);
+        }
+    }
+
+    // ---------------------------------------------------------------
     // Download latest jar from GitHub Releases
     // ---------------------------------------------------------------
 

@@ -136,10 +136,21 @@ class ToolStartupE2E {
                     page.locator("[id^='session-turing-workflow-editor-'] a.session-name").first().click());
             toolPage.waitForLoadState(LoadState.LOAD);
 
-            String body = toolPage.textContent("body");
-            if (body == null || (!body.toLowerCase().contains("workflow")
-                    && !body.toLowerCase().contains("editor")))
-                throw new AssertionError("turing-workflow-editor: page missing expected content");
+            // Use element-based checks: workflow editor has #stepsContainer and #runBtn.
+            // Text-based checks like body.contains("workflow") are insufficient because
+            // the chat UI can also show "workflow" in its context — and that is precisely
+            // the bug this test guards against (clicking the link opens chat UI instead).
+            if (!toolPage.locator("#stepsContainer").isVisible())
+                throw new AssertionError(
+                    "turing-workflow-editor: dashboard link must open the workflow editor " +
+                    "(#stepsContainer not visible — chat UI or wrong page opened instead). " +
+                    "url=" + toolPage.url());
+            if (!toolPage.locator("#runBtn").isVisible())
+                throw new AssertionError("turing-workflow-editor: #runBtn not visible. url=" + toolPage.url());
+            if (toolPage.locator("#prompt-input").isVisible())
+                throw new AssertionError(
+                    "turing-workflow-editor: dashboard link opened chat UI (#prompt-input visible). " +
+                    "url=" + toolPage.url());
             toolPage.close();
 
             stopSession(page, "turing-workflow-editor");
