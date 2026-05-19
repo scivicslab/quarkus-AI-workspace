@@ -74,7 +74,7 @@ public class JvmBackend implements ServiceBackend {
             }
         }
         if (rangeStart < 0) {
-            String httpPort = System.getProperty("quarkus.http.port", "8080").trim();
+            String httpPort = System.getProperty("quarkus.http.port", "28000").trim();
             try {
                 rangeStart = Integer.parseInt(httpPort);
                 rangeEnd   = rangeStart + 19;

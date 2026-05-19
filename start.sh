@@ -19,4 +19,5 @@ if [ ! -f "$JAR" ]; then
     curl -LO "$JAR_URL"
 fi
 
-exec java -jar "$JAR"
+PORT_OPT=${1:+"-Dquarkus.http.port=$1"}
+exec java $PORT_OPT -jar "$JAR"

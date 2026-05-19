@@ -52,7 +52,7 @@ public class AiWorkspaceMain implements QuarkusApplication {
         + "\n"
         + "  -Dquarkus.http.port=<port>\n"
         + "      Dashboard HTTP port.\n"
-        + "      Default: 8080\n"
+        + "      Default: 28000\n"
         + "\n"
         + "Config file (loaded from CWD):\n"
         + "  ai-workspace.yaml\n"
@@ -78,13 +78,13 @@ public class AiWorkspaceMain implements QuarkusApplication {
 
         void onStart(@Observes StartupEvent e) {
             AiWorkspaceConfig config = AiWorkspaceConfigLoader.load();
-            String httpPort = System.getProperty("quarkus.http.port", "8080");
+            String httpPort = System.getProperty("quarkus.http.port", "28000");
             String accessHost = config.accessHost() != null ? config.accessHost() : "localhost";
             String configPath = AiWorkspaceConfigLoader.getLastLoadedPath();
 
             String sep = "━".repeat(54);
             System.out.println(sep);
-            System.out.println("  Service Portal  ready");
+            System.out.println("  AI Workspace  ready");
             System.out.println(sep);
             System.out.println("  Dashboard  :  http://localhost:" + httpPort + "/");
             System.out.println("  Backend    :  " + backend.getBackendType());
@@ -101,7 +101,7 @@ public class AiWorkspaceMain implements QuarkusApplication {
                                   : s.state() == SessionState.STARTING ? "starting..."
                                   : s.state().name();
                     String url = s.accessUrl() != null
-                        ? "\n      \u2192 http://localhost:" + httpPort + s.accessUrl()
+                        ? "\n      \u2192 " + s.accessUrl()
                         : "";
                     System.out.printf("    \u25cf %-28s :%d  %s%s%n",
                         s.toolName(), s.port(), status, url);
