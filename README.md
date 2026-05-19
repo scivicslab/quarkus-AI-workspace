@@ -24,13 +24,16 @@ All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 ```bash
 mkdir ~/ai-toolkit && cd ~/ai-toolkit
 curl -LO https://raw.githubusercontent.com/scivicslab/quarkus-AI-workspace/master/start.sh
-bash start.sh
+bash start.sh [PORT]
 ```
+
+- `PORT` is optional. Default is `28000`.
+- Example: `bash start.sh 28100` starts the dashboard on port 28100.
 
 `start.sh` downloads the latest `quarkus-AI-workspace-*.jar` into the same directory and starts it.
 On subsequent runs it reuses the already-downloaded JAR.
 
-Open `http://localhost:28001` in your browser.
+Open `http://localhost:28000` (or the port you specified) in your browser.
 
 ### 2. Download the other tools from the dashboard
 
