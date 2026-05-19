@@ -6,7 +6,7 @@ A launcher and dashboard for the AI toolkit. Manages a set of Java tools as loca
 
 | Tool | Description | Port (default) |
 |------|-------------|----------------|
-| **quarkus-mcp-gateway** | MCP server hub — connects LLM clients to external tools and services | 28081 |
+| **quarkus-mcp-gateway** | MCP server hub — connects LLM clients to external tools and services | 28001 |
 | **quarkus-chat-ui** | Web UI for LLMs (Claude, Codex, local vLLM) with skill commands and agent support | 28100+ |
 | **turing-workflow-editor** | Visual editor for Turing Workflow YAML definitions | 28120+ |
 | **html-saurus** | Local document portal — browse Markdown and Docusaurus docs in a browser | 28110+ |
