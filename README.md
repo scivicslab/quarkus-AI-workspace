@@ -19,33 +19,27 @@ All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 
 ## Installation
 
-### 1. Download quarkus-AI-workspace
+### 1. Download and start
 
 ```bash
-mkdir ~/ai-toolkit
-cd ~/ai-toolkit
-curl -L -o quarkus-AI-workspace.jar \
-  $(curl -s https://api.github.com/repos/scivicslab/quarkus-AI-workspace/releases/latest \
-    | grep '"browser_download_url"' | grep '\.jar' | head -1 | cut -d'"' -f4)
+mkdir ~/ai-toolkit && cd ~/ai-toolkit
+curl -LO https://github.com/scivicslab/quarkus-AI-workspace/releases/latest/download/start.sh
+bash start.sh
 ```
 
-### 2. Start
-
-```bash
-cd ~/ai-toolkit
-java -jar quarkus-AI-workspace.jar
-```
+`start.sh` downloads the latest `quarkus-AI-workspace-*.jar` into the same directory and starts it.
+On subsequent runs it reuses the already-downloaded JAR.
 
 Open `http://localhost:28001` in your browser.
 
-### 3. Download the other tools from the dashboard
+### 2. Download the other tools from the dashboard
 
-The dashboard shows a **Download Latest** button next to each tool. Click it to download the latest release JAR and update the symlink automatically — no manual `curl` or filename adjustments needed.
+The dashboard shows a **Download Latest** button next to each tool. Click it to download the latest release JAR automatically — no manual `curl` or filename adjustments needed.
 
-1. Click **Download Latest** for `quarkus-mcp-gateway` → downloads and symlinks the jar, then click **Start**
+1. Click **Download Latest** for `quarkus-mcp-gateway` → then click **Start**
 2. Click **Download Latest** for `quarkus-chat-ui`, `html-saurus`, `turing-workflow-editor` as needed
 
-All JARs are downloaded into the directory where `quarkus-AI-workspace.jar` lives. The symlinks (`quarkus-mcp-gateway.jar`, `quarkus-chat-ui.jar`, …) are what the workspace uses to launch each tool — no config change required when a new version is released.
+All JARs are saved in the same directory as `start.sh`. The workspace resolves tool JARs from that directory, so no config change is required when a new version is released.
 
 ### 4. (Optional) Customize with `ai-workspace.yaml`
 

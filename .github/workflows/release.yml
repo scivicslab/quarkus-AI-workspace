@@ -28,13 +28,15 @@ jobs:
       - name: Copy artifact
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          cp "target/quarkus-service-portal-${VERSION}.jar" "quarkus-service-portal-${VERSION}.jar"
-          echo "ARTIFACT=quarkus-service-portal-${VERSION}.jar" >> $GITHUB_ENV
+          cp "target/quarkus-ai-workspace-${VERSION}.jar" "quarkus-AI-workspace-${VERSION}.jar"
+          echo "ARTIFACT=quarkus-AI-workspace-${VERSION}.jar" >> $GITHUB_ENV
 
       - uses: actions/upload-artifact@v4
         with:
           name: uber-jar
-          path: ${{ env.ARTIFACT }}
+          path: |
+            ${{ env.ARTIFACT }}
+            start.sh
 
   release:
     needs: build-uber-jar
