@@ -25,7 +25,8 @@ All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 mkdir ~/ai-toolkit
 cd ~/ai-toolkit
 curl -L -o quarkus-AI-workspace.jar \
-  https://github.com/scivicslab/quarkus-AI-workspace/releases/latest/download/quarkus-AI-workspace-2.1.0.jar
+  $(curl -s https://api.github.com/repos/scivicslab/quarkus-AI-workspace/releases/latest \
+    | grep '"browser_download_url"' | grep '\.jar' | head -1 | cut -d'"' -f4)
 ```
 
 ### 2. Start
