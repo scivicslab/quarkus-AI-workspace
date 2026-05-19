@@ -23,7 +23,7 @@ All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 
 ```bash
 mkdir ~/ai-toolkit && cd ~/ai-toolkit
-curl -LO https://github.com/scivicslab/quarkus-AI-workspace/releases/latest/download/start.sh
+curl -LO https://raw.githubusercontent.com/scivicslab/quarkus-AI-workspace/master/start.sh
 bash start.sh
 ```
 
