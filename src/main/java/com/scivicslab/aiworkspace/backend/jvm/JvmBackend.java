@@ -574,7 +574,7 @@ public class JvmBackend implements ServiceBackend {
         int port = (rangeStart >= 0 && tool.fixedPort()) ? rangeStart + 1 : tool.port();
         return new SessionView(
             tool.name(), port, tool.name(), "",
-            SessionState.STOPPED, null, Map.of(), "", List.of()
+            SessionState.STOPPED, null, Map.of(), "", List.of(), tool.github()
         );
     }
 

@@ -601,7 +601,12 @@
             {/if}
             <span class="session-port">:{svc.port}</span>
             <span class="badge badge-{svc.state}">{svc.state}</span>
-            <div class="session-actions" style="margin-left:auto;display:flex;gap:8px;">
+            <div class="session-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                {#if svc.github}
+                <button class="btn btn-download" id="btn-download-{svc.toolName}"
+                        onclick="downloadTool('{svc.toolName}')">Download Latest</button>
+                <span class="download-status" id="download-status-{svc.toolName}"></span>
+                {/if}
                 {#if svc.state.isStopped() || svc.state.isFailed()}
                 <button class="btn btn-start" onclick="mgmtStart('{svc.toolName}', {svc.port})">Start</button>
                 {#else}

@@ -1,4 +1,4 @@
-# quarkus-service-portal
+# quarkus-AI-workspace
 
 A launcher and dashboard for the AI toolkit. Manages a set of Java tools as local processes — start, stop, and monitor everything from one web UI.
 
@@ -11,133 +11,50 @@ A launcher and dashboard for the AI toolkit. Manages a set of Java tools as loca
 | **turing-workflow-editor** | Visual editor for Turing Workflow YAML definitions | 28120+ |
 | **html-saurus** | Local document portal — browse Markdown and Docusaurus docs in a browser | 28110+ |
 
-All tools are standard Java uber-jars. Installation is: copy jars to a directory, write one config file, run `java -jar`.
+All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 
 ## Prerequisites
 
 - Java 21+
 
-That's it. No Docker, no databases, no daemons.
-
 ## Installation
 
-### 1. Download the jars
-
-Download the latest uber-jar from each project's GitHub Releases page and place them all in one directory.
-
-| Tool | Releases page |
-|------|--------------|
-| quarkus-service-portal | https://github.com/scivicslab/quarkus-service-portal/releases |
-| quarkus-mcp-gateway | https://github.com/scivicslab/quarkus-mcp-gateway/releases |
-| quarkus-chat-ui | https://github.com/scivicslab/quarkus-chat-ui/releases |
-| Turing-workflow-editor | https://github.com/scivicslab/Turing-workflow-editor/releases |
-| html-saurus | https://github.com/scivicslab/html-saurus/releases |
+### 1. Download quarkus-AI-workspace
 
 ```bash
 mkdir ~/ai-toolkit
 cd ~/ai-toolkit
-
-# Download latest releases (adjust filenames to the actual version)
-curl -L -o quarkus-service-portal.jar \
-  https://github.com/scivicslab/quarkus-service-portal/releases/latest/download/service-portal-1.3.0-runner.jar
-curl -L -o quarkus-mcp-gateway.jar \
-  https://github.com/scivicslab/quarkus-mcp-gateway/releases/latest/download/quarkus-mcp-gateway-1.2.0-runner.jar
-curl -L -o quarkus-chat-ui.jar \
-  https://github.com/scivicslab/quarkus-chat-ui/releases/latest/download/chat-ui-app-2.0.0-runner.jar
-curl -L -o turing-workflow-editor.jar \
-  https://github.com/scivicslab/Turing-workflow-editor/releases/latest/download/turing-workflow-editor-2.2.0-runner.jar
-curl -L -o html-saurus.jar \
-  https://github.com/scivicslab/html-saurus/releases/latest/download/html-saurus.jar
+curl -L -o quarkus-AI-workspace.jar \
+  https://github.com/scivicslab/quarkus-AI-workspace/releases/latest/download/quarkus-AI-workspace-2.1.0.jar
 ```
 
-### 2. Start the portal
+### 2. Start
 
 ```bash
 cd ~/ai-toolkit
-java -jar quarkus-service-portal.jar
+java -jar quarkus-AI-workspace.jar
 ```
 
-Open `http://localhost:8080` in your browser. If the jar names match the defaults above, no config file is needed — the portal starts with a built-in configuration.
+Open `http://localhost:28001` in your browser.
 
-### 3. (Optional) Customize with `service-portal.yaml`
+### 3. Download the other tools from the dashboard
 
-To override the defaults — different jar paths, ports, or extra tools — create `service-portal.yaml` in the same directory:
+The dashboard shows a **Download Latest** button next to each tool. Click it to download the latest release JAR and update the symlink automatically — no manual `curl` or filename adjustments needed.
 
-```yaml
-backend: jvm
+1. Click **Download Latest** for `quarkus-mcp-gateway` → downloads and symlinks the jar, then click **Start**
+2. Click **Download Latest** for `quarkus-chat-ui`, `html-saurus`, `turing-workflow-editor` as needed
 
-jvm:
-  tools:
-    # MCP Gateway: starts automatically
-    - name: quarkus-mcp-gateway
-      jar: quarkus-mcp-gateway.jar
-      port: 28081
-      autoStart: true
+All JARs are downloaded into the directory where `quarkus-AI-workspace.jar` lives. The symlinks (`quarkus-mcp-gateway.jar`, `quarkus-chat-ui.jar`, …) are what the workspace uses to launch each tool — no config change required when a new version is released.
 
-    # Chat UI: launched on demand from the dashboard
-    - name: quarkus-chat-ui
-      jar: quarkus-chat-ui.jar
-      port: 28100
-      autoStart: false
-      params:
-        - key: workdir
-          label: Working Directory
-          type: dir
-          default: ${HOME}/works
-          workingDir: true
-        - key: provider
-          label: LLM Provider
-          type: select
-          default: claude
-          jvmProp: chat-ui.provider
-          options:
-            - { value: claude,        label: Claude }
-            - { value: codex,         label: Codex (OpenAI) }
-            - { value: openai-compat, label: Local LLM (vLLM) }
-        - key: servers
-          label: vLLM Endpoint (Local LLM only)
-          type: text
-          default: ${VLLM_ENDPOINT}
-          jvmProp: chat-ui.servers
+### 4. (Optional) Customize with `ai-workspace.yaml`
 
-    # Document portal: launched on demand
-    - name: html-saurus
-      jar: html-saurus.jar
-      port: 28110
-      autoStart: false
-      args:
-        - ${HOME}/works
-        - --portal-mode
-        - --serve
-        - --port
-        - "${PORT}"
-      params:
-        - key: dir
-          label: Document Root
-          type: dir
-          default: ${HOME}/works
-          argPos: 0
+To override the defaults — different ports, extra tools, or non-default parameters — create `ai-workspace.yaml` in the same directory as the workspace jar.
 
-    # Turing Workflow Editor: launched on demand
-    - name: turing-workflow-editor
-      jar: turing-workflow-editor.jar
-      port: 28120
-      autoStart: false
-      params:
-        - key: workdir
-          label: Working Directory
-          type: dir
-          default: ${HOME}/works
-          workingDir: true
-```
+## Dashboard sections
 
-Open `http://localhost:8080` in your browser. The dashboard shows:
-
-- **Management Services** — always-on tools (e.g. mcp-gateway). Start/Stop buttons.
+- **Management Services** — always-on tools (e.g. `quarkus-mcp-gateway`). Start/Stop and Download Latest buttons.
 - **Active Sessions** — tools currently running. Stop button and memo field per instance.
 - **Launch Tools** — on-demand tools with configurable parameters. Click Launch to start a new instance.
-
-`quarkus-mcp-gateway` starts automatically. Launch `quarkus-chat-ui` from the dashboard when you need it.
 
 ## Configuration reference
 
@@ -145,7 +62,7 @@ Open `http://localhost:8080` in your browser. The dashboard shows:
 
 | Field | Values | Description |
 |-------|--------|-------------|
-| `backend` | `jvm` (or `docker`, `auto`) | All map to the same JVM process manager |
+| `backend` | `jvm` | JVM process manager |
 | `accessHost` | hostname or IP | Used in dashboard links. Defaults to `localhost` |
 
 ### Tool definition
@@ -153,12 +70,13 @@ Open `http://localhost:8080` in your browser. The dashboard shows:
 | Field | Description |
 |-------|-------------|
 | `name` | Unique identifier shown in the dashboard |
-| `jar` | Path to the uber-jar. Relative paths are resolved from the working directory |
-| `port` | Default port. The portal scans for a free port starting here |
-| `autoStart` | If `true`, the tool starts when the portal starts |
+| `jar` | Symlink or jar filename. Relative paths resolved from the workspace startup directory |
+| `port` | Default port. Workspace scans for a free port starting here |
+| `autoStart` | If `true`, starts automatically when the workspace starts |
 | `fixedPort` | If `true`, always use `port` exactly — no scanning |
+| `github` | `"owner/repo"` — enables the Download Latest button |
 | `args` | Argument list passed to the jar (overrides the default Quarkus port argument) |
-| `params` | User-configurable parameters shown in the Launch tile (see below) |
+| `params` | User-configurable parameters shown in the Launch tile |
 
 ### Param types
 
@@ -174,9 +92,8 @@ Use `argPos: N` to substitute the value into position N of the `args` list.
 ## Building from source
 
 ```bash
-cd quarkus-service-portal
-mvn package
-# Output: target/service-portal-<version>-runner.jar
+mvn install
+# Output: target/quarkus-AI-workspace-<version>.jar
 ```
 
 ## Related projects
@@ -185,4 +102,6 @@ mvn package
 |---------|------------|
 | quarkus-chat-ui | https://github.com/scivicslab/quarkus-chat-ui |
 | quarkus-mcp-gateway | https://github.com/scivicslab/quarkus-mcp-gateway |
+| turing-workflow-editor | https://github.com/scivicslab/Turing-workflow-editor |
+| html-saurus | https://github.com/scivicslab/html-saurus |
 | POJO-actor | https://github.com/scivicslab/POJO-actor |

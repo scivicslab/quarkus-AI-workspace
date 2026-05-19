@@ -253,7 +253,8 @@ public class ProcessSupervisor {
             accessUrl,
             launchParams,
             memo,
-            getRecentLogs(20)
+            getRecentLogs(20),
+            config.github()
         );
     }
 
