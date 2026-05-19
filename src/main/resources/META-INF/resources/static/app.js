@@ -429,12 +429,17 @@
         }
     };
 
-    window.stopSession = async function (toolName, port) {
+    window.stopSession = async function (toolName, port, btn) {
+        if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
         const r = await fetch('api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
         if (r.ok) {
             const card = document.getElementById('session-' + sessionKey(toolName, port));
-            if (card) card.remove();
+            if (card) {
+                card.classList.add('stopping');
+                card.addEventListener('transitionend', () => card.remove(), { once: true });
+            }
         } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'Stop'; }
             alert('Failed to stop session');
         }
     };
