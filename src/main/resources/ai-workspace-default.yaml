@@ -60,6 +60,8 @@ jvm:
       github: scivicslab/Turing-workflow-editor
       port: 28120
       autoStart: false
+      jvmArgs:
+        - "-Xmx2g"
       params:
         - key: workdir
           label: Working Directory

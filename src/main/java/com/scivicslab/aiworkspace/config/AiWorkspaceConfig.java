@@ -23,6 +23,9 @@ public record AiWorkspaceConfig(
      *   java -jar <jar> <args...>
      * Otherwise the default Quarkus launch is used:
      *   java -jar <jar> -Dquarkus.http.port=<port>
+     *
+     * jvmArgs: raw JVM arguments inserted immediately after "java" and before any -D flags.
+     *   Example: ["-Xmx4g", "-Xms1g"]
      */
     public record ToolDefinition(
         String name,
@@ -32,6 +35,7 @@ public record AiWorkspaceConfig(
         boolean fixedPort,
         boolean singleInstance,
         java.util.List<String> args,
+        java.util.List<String> jvmArgs,   // raw JVM flags (e.g. -Xmx4g) inserted before -D props
         java.util.List<ParamDefinition> params,
         String gatewayMcpProp,  // if set, -D{gatewayMcpProp}={gatewayUrl}/mcp/_all is injected at launch
         String github           // GitHub repo in "owner/repo" format for download-latest feature

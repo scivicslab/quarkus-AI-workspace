@@ -62,6 +62,8 @@ public class AiWorkspaceConfigLoader {
                     @SuppressWarnings("unchecked")
                     List<String> args = (List<String>) t.get("args");
                     @SuppressWarnings("unchecked")
+                    List<String> jvmArgs = (List<String>) t.get("jvmArgs");
+                    @SuppressWarnings("unchecked")
                     List<Map<String, Object>> rawParams = (List<Map<String, Object>>) t.get("params");
                     List<AiWorkspaceConfig.ParamDefinition> params = rawParams == null ? List.of()
                         : rawParams.stream().map(p -> {
@@ -91,6 +93,7 @@ public class AiWorkspaceConfigLoader {
                         (Boolean) t.getOrDefault("fixedPort", false),
                         (Boolean) t.getOrDefault("singleInstance", false),
                         args,
+                        jvmArgs,
                         params,
                         (String) t.get("gatewayMcpProp"),
                         (String) t.get("github")

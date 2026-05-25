@@ -163,11 +163,14 @@ public class ProcessSupervisor {
 
         try {
             List<String> command = buildCommand();
-            // Wrap with setsid to detach from the portal's process group.
-            // Without this, Ctrl+C or SIGINT sent to the terminal kills the entire
+            // On Linux: wrap with setsid to detach from the portal's process group.
+            // Without this, Ctrl+C / SIGINT sent to the terminal kills the entire
             // process group (portal + all children). setsid starts the child in a
             // new session so it survives portal restarts.
-            command.addAll(0, List.of("setsid", "--wait"));
+            // macOS / Windows: setsid is unavailable; omit the wrapper.
+            if (System.getProperty("os.name", "").toLowerCase().contains("linux")) {
+                command.addAll(0, List.of("setsid", "--wait"));
+            }
             logger.info("Executing: " + String.join(" ", command));
             ProcessBuilder pb = new ProcessBuilder(command);
 
@@ -302,6 +305,13 @@ public class ProcessSupervisor {
             command.add(exec);
         } else {
             command.add("java");
+        }
+
+        // Raw JVM arguments (e.g. -Xmx4g) inserted immediately after "java"
+        if (!isNative && config.jvmArgs() != null) {
+            for (String jvmArg : config.jvmArgs()) {
+                if (jvmArg != null && !jvmArg.isBlank()) command.add(jvmArg);
+            }
         }
 
         // -D flags from params (supported by both JVM and Quarkus native binaries)
@@ -507,7 +517,14 @@ public class ProcessSupervisor {
     // MCP Gateway integration
     // ---------------------------------------------------------------
 
-    private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
+    // Lazy init: avoids HttpClientFacade in GraalVM native image heap
+    private static volatile HttpClient HTTP_CLIENT;
+    private static HttpClient httpClient() {
+        if (HTTP_CLIENT == null) {
+            HTTP_CLIENT = HttpClient.newHttpClient();
+        }
+        return HTTP_CLIENT;
+    }
 
     private String gatewayUrl() {
         String url = System.getProperty("mcp.gateway.url");
@@ -533,7 +550,7 @@ public class ProcessSupervisor {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+            httpClient().sendAsync(req, HttpResponse.BodyHandlers.discarding())
                 .thenAccept(r -> logger.info("Gateway registered: " + name + " (HTTP " + r.statusCode() + ")"))
                 .exceptionally(e -> { logger.warning("Gateway registration failed for " + name + ": " + e.getMessage()); return null; });
         } catch (Exception e) {
@@ -552,7 +569,7 @@ public class ProcessSupervisor {
                 .uri(URI.create(gwUrl + "/api/servers/" + name))
                 .DELETE()
                 .build();
-            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+            httpClient().sendAsync(req, HttpResponse.BodyHandlers.discarding())
                 .thenAccept(r -> logger.info("Gateway unregistered: " + name + " (HTTP " + r.statusCode() + ")"))
                 .exceptionally(e -> { logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage()); return null; });
         } catch (Exception e) {
@@ -576,7 +593,7 @@ public class ProcessSupervisor {
                 .POST(HttpRequest.BodyPublishers.ofString(initBody))
                 .timeout(Duration.ofSeconds(3))
                 .build();
-            HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = httpClient().send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
                 Matcher m = SERVER_NAME_PATTERN.matcher(resp.body());
                 if (m.find()) {
@@ -617,7 +634,7 @@ public class ProcessSupervisor {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.ofString())
+            httpClient().sendAsync(req, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(r -> {
                     if (r.statusCode() == 200) {
                         String responseBody = r.body();
@@ -659,7 +676,7 @@ public class ProcessSupervisor {
                     + "/" + config.name() + "/" + port))
                 .DELETE()
                 .build();
-            HTTP_CLIENT.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+            httpClient().sendAsync(req, HttpResponse.BodyHandlers.discarding())
                 .thenAccept(r -> logger.info("K8sPups deregistered: " + config.name()
                     + ":" + port + " (HTTP " + r.statusCode() + ")"))
                 .exceptionally(e -> {

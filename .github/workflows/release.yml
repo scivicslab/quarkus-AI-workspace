@@ -28,7 +28,7 @@ jobs:
       - name: Copy artifact
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          cp "target/quarkus-ai-workspace-${VERSION}.jar" "quarkus-AI-workspace-${VERSION}.jar"
+          cp "target/quarkus-AI-workspace-${VERSION}.jar" "quarkus-AI-workspace-${VERSION}.jar"
           echo "ARTIFACT=quarkus-AI-workspace-${VERSION}.jar" >> $GITHUB_ENV
 
       - uses: actions/upload-artifact@v4
@@ -38,8 +38,64 @@ jobs:
             ${{ env.ARTIFACT }}
             start.sh
 
+  build-native:
+    name: Native image — ${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suffix: linux-x86_64
+          - os: ubuntu-24.04-arm
+            suffix: linux-aarch64
+          - os: macos-latest
+            suffix: macos-aarch64
+          - os: windows-latest
+            suffix: windows-x86_64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'graalvm-community'
+          cache: maven
+
+      - name: Build native image (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mvn package -Dnative -DskipTests
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp "target/quarkus-AI-workspace-${VERSION}" \
+             "quarkus-AI-workspace-${VERSION}-${{ matrix.suffix }}"
+
+      - name: Build native image (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          mvn package -Dnative -DskipTests
+          $VERSION = $env:GITHUB_REF_NAME -replace '^v', ''
+          Copy-Item "target\quarkus-AI-workspace-${VERSION}.exe" `
+                    "quarkus-AI-workspace-${VERSION}-${{ matrix.suffix }}.exe"
+
+      - name: Upload native artifact (Linux / macOS)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.suffix }}
+          path: quarkus-AI-workspace-*-${{ matrix.suffix }}
+
+      - name: Upload native artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.suffix }}
+          path: quarkus-AI-workspace-*-${{ matrix.suffix }}.exe
+
   release:
-    needs: build-uber-jar
+    needs: [build-uber-jar, build-native]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

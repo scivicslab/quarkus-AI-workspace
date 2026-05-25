@@ -122,8 +122,9 @@ public class JvmBackend implements ServiceBackend {
      *   <li>The process arguments contain the resolved jar full path.</li>
      * </ol>
      * Processes that fail either condition are left untouched.
-     * This is a Linux-only operation; if {@code ss} is unavailable or returns no
-     * output for a given port, the scan for that port is silently skipped.
+     * Uses an OS-specific command to map port → PID (ss on Linux, lsof on macOS,
+     * netstat on Windows). If the command is unavailable or produces no output,
+     * the scan for that port is silently skipped.
      */
     private void scanAndAdoptByPort() {
         if (config.jvm() == null) return;
@@ -224,11 +225,22 @@ public class JvmBackend implements ServiceBackend {
     }
 
     /**
-     * Runs {@code ss -Htlnp sport = :<port>} and extracts the PID from the output.
-     * Returns -1 if {@code ss} is unavailable, produces no output, or the output
-     * cannot be parsed.
+     * Returns the PID of the process listening on {@code port}, or -1 if none found.
+     * Delegates to an OS-specific implementation.
      */
     private long findPidByPort(int port) {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("linux"))  return findPidByPortLinux(port);
+        if (os.contains("mac"))    return findPidByPortMac(port);
+        if (os.contains("win"))    return findPidByPortWindows(port);
+        return -1;
+    }
+
+    /**
+     * Linux: {@code ss -Htlnp sport = :<port>}
+     * Output contains {@code pid=<N>} in the users field.
+     */
+    private long findPidByPortLinux(int port) {
         try {
             ProcessBuilder pb = new ProcessBuilder(
                 "ss", "-Htlnp", "sport", "=", ":" + port);
@@ -242,17 +254,77 @@ public class JvmBackend implements ServiceBackend {
             proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             java.util.regex.Matcher m =
                 java.util.regex.Pattern.compile("pid=(\\d+)").matcher(output);
-            if (m.find()) {
-                return Long.parseLong(m.group(1));
+            if (m.find()) return Long.parseLong(m.group(1));
+        } catch (Exception e) {
+            logger.warning("Port scan failed (Linux) for port " + port + ": " + e.getMessage());
+        }
+        return -1;
+    }
+
+    /**
+     * macOS: {@code lsof -nP -iTCP:<port> -sTCP:LISTEN}
+     * Output header: COMMAND PID USER FD TYPE DEVICE SIZE NODE NAME
+     * PID is in column index 1.
+     */
+    private long findPidByPortMac(int port) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "lsof", "-nP", "-iTCP:" + port, "-sTCP:LISTEN");
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            String output;
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(proc.getInputStream()))) {
+                output = reader.lines().collect(java.util.stream.Collectors.joining("\n"));
+            }
+            proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            for (String line : output.split("\n")) {
+                String[] parts = line.trim().split("\\s+");
+                // Skip header row (PID column contains "PID")
+                if (parts.length >= 2 && !parts[1].equals("PID")) {
+                    try { return Long.parseLong(parts[1]); } catch (NumberFormatException ignored) {}
+                }
             }
         } catch (Exception e) {
-            logger.warning("Port scan failed for port " + port + ": " + e.getMessage());
+            logger.warning("Port scan failed (macOS) for port " + port + ": " + e.getMessage());
+        }
+        return -1;
+    }
+
+    /**
+     * Windows: {@code netstat -ano} then match the LISTENING line for {@code :<port>}.
+     * Last column is the PID.
+     */
+    private long findPidByPortWindows(int port) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("netstat", "-ano");
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            String output;
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(proc.getInputStream()))) {
+                output = reader.lines().collect(java.util.stream.Collectors.joining("\n"));
+            }
+            proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            String portSuffix = ":" + port;
+            for (String line : output.split("\n")) {
+                String trimmed = line.trim();
+                if (!trimmed.toUpperCase().contains("LISTENING")) continue;
+                String[] parts = trimmed.split("\\s+");
+                // parts[1] = local address (e.g. 0.0.0.0:8080 or [::]:8080)
+                if (parts.length >= 5 && parts[1].endsWith(portSuffix)) {
+                    try { return Long.parseLong(parts[parts.length - 1]); } catch (NumberFormatException ignored) {}
+                }
+            }
+        } catch (Exception e) {
+            logger.warning("Port scan failed (Windows) for port " + port + ": " + e.getMessage());
         }
         return -1;
     }
 
     @Override
     public void startService(String toolName, Map<String, String> params) throws ServiceException {
+        checkJavaAvailable();
         AiWorkspaceConfig.ToolDefinition def = findTool(toolName);
         CopyOnWriteArrayList<ProcessSupervisor> list =
             instances.computeIfAbsent(toolName, k -> new CopyOnWriteArrayList<>());
@@ -560,6 +632,75 @@ public class JvmBackend implements ServiceBackend {
         String basename = new java.io.File(resolvedJar).getName();
         return Arrays.stream(args).anyMatch(a ->
             a.contains(resolvedJar) || a.equals(basename) || a.endsWith("/" + basename));
+    }
+
+    /**
+     * Verifies that a JRE/JDK {@code java} executable is reachable.
+     * Checks {@code JAVA_HOME/bin/java} first, then falls back to PATH resolution.
+     * Throws {@link ServiceException} with OS-specific installation instructions if not found.
+     */
+    private static void checkJavaAvailable() throws ServiceException {
+        // 1. JAVA_HOME/bin/java
+        String javaHome = System.getenv("JAVA_HOME");
+        if (javaHome != null && !javaHome.isBlank()) {
+            String exe = isWindows() ? "bin\\java.exe" : "bin/java";
+            java.io.File javaBin = new java.io.File(javaHome, exe);
+            if (javaBin.isFile() && javaBin.canExecute()) return;
+        }
+        // 2. PATH lookup via `java -version`
+        try {
+            Process p = new ProcessBuilder(isWindows() ? "java.exe" : "java", "-version")
+                .redirectErrorStream(true)
+                .start();
+            p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
+            boolean exited = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (exited && p.exitValue() == 0) return;
+        } catch (Exception ignored) {
+            // java not found in PATH — fall through to error
+        }
+        throw new ServiceException(buildJavaNotFoundMessage());
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private static String buildJavaNotFoundMessage() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("win")) {
+            return "Java (JRE/JDK) is not installed or not on PATH.\n"
+                 + "\n"
+                 + "Install options:\n"
+                 + "  winget install Microsoft.OpenJDK.21\n"
+                 + "  — or download from https://adoptium.net/\n"
+                 + "\n"
+                 + "After installing, restart AI Workspace.";
+        } else if (os.contains("mac")) {
+            return "Java (JRE/JDK) is not installed or not on PATH.\n"
+                 + "\n"
+                 + "Install options:\n"
+                 + "  SDKman (recommended):\n"
+                 + "    curl -s https://get.sdkman.io | bash\n"
+                 + "    sdk install java 21-tem\n"
+                 + "  Homebrew:\n"
+                 + "    brew install openjdk@21\n"
+                 + "\n"
+                 + "After installing, restart AI Workspace.";
+        } else {
+            // Linux
+            return "Java (JRE/JDK) is not installed or not on PATH.\n"
+                 + "\n"
+                 + "Install options:\n"
+                 + "  SDKman (recommended):\n"
+                 + "    curl -s https://get.sdkman.io | bash\n"
+                 + "    sdk install java 21-tem\n"
+                 + "  Debian/Ubuntu:\n"
+                 + "    sudo apt install openjdk-21-jre\n"
+                 + "  RHEL/Fedora:\n"
+                 + "    sudo dnf install java-21-openjdk\n"
+                 + "\n"
+                 + "After installing, restart AI Workspace.";
+        }
     }
 
     private AiWorkspaceConfig.ToolDefinition findTool(String name) throws ServiceException {

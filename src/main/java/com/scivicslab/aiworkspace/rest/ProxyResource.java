@@ -20,9 +20,16 @@ import java.util.concurrent.CompletionStage;
 @Path("/proxy/{port}")
 public class ProxyResource {
 
-    private static final HttpClient CLIENT = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    // Lazy init: avoids HttpClientFacade in GraalVM native image heap
+    private static volatile HttpClient CLIENT;
+    private static HttpClient client() {
+        if (CLIENT == null) {
+            CLIENT = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .build();
+        }
+        return CLIENT;
+    }
 
     private static final Set<String> HOP_BY_HOP = Set.of(
             "connection", "keep-alive", "transfer-encoding", "te",
@@ -65,7 +72,7 @@ public class ProxyResource {
             }
         });
 
-        return CLIENT.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+        return client().sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(resp -> {
                     Response.ResponseBuilder rb = Response.status(resp.statusCode())
                             .entity(resp.body());

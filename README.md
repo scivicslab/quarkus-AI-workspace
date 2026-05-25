@@ -13,13 +13,41 @@ A launcher and dashboard for the AI toolkit. Manages a set of Java tools as loca
 
 All tools are standard Java uber-jars. No Docker, no databases, no daemons.
 
-## Prerequisites
-
-- Java 21+
-
 ## Installation
 
-### 1. Download and start
+### Option A — Native image (no Java required)
+
+Download the binary for your platform from the [Releases](https://github.com/scivicslab/quarkus-AI-workspace/releases/latest) page:
+
+| Platform | File |
+|----------|------|
+| Linux x86\_64 | `quarkus-AI-workspace-*-linux-x86_64` |
+| Linux arm64 | `quarkus-AI-workspace-*-linux-aarch64` |
+| macOS (Apple Silicon) | `quarkus-AI-workspace-*-macos-aarch64` |
+| Windows | `quarkus-AI-workspace-*-windows-x86_64.exe` |
+
+```bash
+# Linux / macOS
+chmod +x quarkus-AI-workspace-*-linux-x86_64
+./quarkus-AI-workspace-*-linux-x86_64
+```
+
+```powershell
+# Windows
+.\quarkus-AI-workspace-*-windows-x86_64.exe
+```
+
+Open `http://localhost:28000` in your browser.
+
+> **Note:** The native binary itself requires no Java installation.
+> The tools it manages (quarkus-mcp-gateway, quarkus-chat-ui, etc.) are Java uber-jars and **do** require Java 21+.
+> If Java is not found when you try to start a tool, the workspace will show installation instructions.
+
+---
+
+### Option B — uber-JAR (requires Java 21+)
+
+#### 1. Download and start
 
 ```bash
 mkdir ~/ai-toolkit && cd ~/ai-toolkit
@@ -35,7 +63,7 @@ On subsequent runs it reuses the already-downloaded JAR.
 
 Open `http://localhost:28000` (or the port you specified) in your browser.
 
-### 2. Download the other tools from the dashboard
+#### 2. Download the other tools from the dashboard
 
 The dashboard shows a **Download Latest** button next to each tool. Click it to download the latest release JAR automatically — no manual `curl` or filename adjustments needed.
 
@@ -44,9 +72,11 @@ The dashboard shows a **Download Latest** button next to each tool. Click it to 
 
 All JARs are saved in the same directory as `start.sh`. The workspace resolves tool JARs from that directory, so no config change is required when a new version is released.
 
-### 4. (Optional) Customize with `ai-workspace.yaml`
+---
 
-To override the defaults — different ports, extra tools, or non-default parameters — create `ai-workspace.yaml` in the same directory as the workspace jar.
+### Option C — (Optional) Customize with `ai-workspace.yaml`
+
+To override the defaults — different ports, extra tools, or non-default parameters — create `ai-workspace.yaml` in the same directory as the workspace binary or jar.
 
 ## Dashboard sections
 
@@ -90,8 +120,13 @@ Use `argPos: N` to substitute the value into position N of the `args` list.
 ## Building from source
 
 ```bash
-mvn install
+# uber-JAR
+mvn package
 # Output: target/quarkus-AI-workspace-<version>.jar
+
+# Native image (requires GraalVM)
+mvn package -Dnative
+# Output: target/quarkus-AI-workspace-<version>
 ```
 
 ## Related projects
