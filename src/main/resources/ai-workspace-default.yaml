@@ -69,6 +69,13 @@ jvm:
           default: ${HOME}/works
           workingDir: true
 
+    # Code Raptor: code search and symbol index (GNU Global + Lucene)
+    - name: code-raptor
+      jar: code-raptor.jar
+      port: 28130
+      autoStart: false
+      singleInstance: true
+
     # MCP Gateway: starts automatically, listed last as it is rarely launched manually
     - name: quarkus-mcp-gateway
       jar: quarkus-mcp-gateway.jar
