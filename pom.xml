@@ -6,7 +6,7 @@
 
     <groupId>com.scivicslab</groupId>
     <artifactId>quarkus-ai-workspace</artifactId>
-    <version>2.2.0</version>
+    <version>2.2.1</version>
 
     <name>quarkus-AI-workspace</name>
     <description>AI workspace — manages LLM agent tool processes via uber-JAR</description>
