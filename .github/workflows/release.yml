@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v2.2.0)'
+        required: true
 
 permissions:
   contents: write
@@ -27,7 +32,8 @@ jobs:
 
       - name: Copy artifact
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${REF#v}"
           cp "target/quarkus-AI-workspace-${VERSION}.jar" "quarkus-AI-workspace-${VERSION}.jar"
           echo "ARTIFACT=quarkus-AI-workspace-${VERSION}.jar" >> $GITHUB_ENV
 
@@ -68,7 +74,8 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mvn package -Dnative -DskipTests
-          VERSION="${GITHUB_REF_NAME#v}"
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${REF#v}"
           cp "target/quarkus-AI-workspace-${VERSION}" \
              "quarkus-AI-workspace-${VERSION}-${{ matrix.suffix }}"
 
@@ -77,7 +84,8 @@ jobs:
         shell: pwsh
         run: |
           mvn package -Dnative -DskipTests
-          $VERSION = $env:GITHUB_REF_NAME -replace '^v', ''
+          $REF = "${{ github.event.inputs.tag || github.ref_name }}"
+          $VERSION = $REF -replace '^v', ''
           Copy-Item "target\quarkus-AI-workspace-${VERSION}.exe" `
                     "quarkus-AI-workspace-${VERSION}-${{ matrix.suffix }}.exe"
 
