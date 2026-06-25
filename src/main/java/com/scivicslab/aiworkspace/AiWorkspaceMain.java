@@ -1,8 +1,9 @@
 package com.scivicslab.aiworkspace;
 
-import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
-import com.scivicslab.aiworkspace.config.AiWorkspaceConfigLoader;
+import com.scivicslab.aiworkspace.model.DashboardModel;
 import com.scivicslab.aiworkspace.model.SessionState;
+import com.scivicslab.aiworkspace.model.SessionView;
+import com.scivicslab.aiworkspace.model.ToolView;
 import com.scivicslab.aiworkspace.spi.ServiceBackend;
 import com.scivicslab.pluggablecli.CommandRepository;
 import io.quarkus.runtime.Quarkus;
@@ -54,9 +55,6 @@ public class AiWorkspaceMain implements QuarkusApplication {
         + "      Dashboard HTTP port.\n"
         + "      Default: 28000\n"
         + "\n"
-        + "Config file (loaded from CWD):\n"
-        + "  ai-workspace.yaml\n"
-        + "\n"
         + "Example:\n"
         + "  java -Dquarkus.http.port=28080 -jar quarkus-AI-workspace.jar";
 
@@ -77,10 +75,8 @@ public class AiWorkspaceMain implements QuarkusApplication {
         @Inject ServiceBackend backend;
 
         void onStart(@Observes StartupEvent e) {
-            AiWorkspaceConfig config = AiWorkspaceConfigLoader.load();
             String httpPort = System.getProperty("quarkus.http.port", "28000");
-            String accessHost = config.accessHost() != null ? config.accessHost() : "localhost";
-            String configPath = AiWorkspaceConfigLoader.getLastLoadedPath();
+            String accessHost = System.getProperty("service.portal.access.host", "localhost");
 
             String sep = "━".repeat(54);
             System.out.println(sep);
@@ -89,21 +85,20 @@ public class AiWorkspaceMain implements QuarkusApplication {
             System.out.println("  Dashboard  :  http://localhost:" + httpPort + "/");
             System.out.println("  Backend    :  " + backend.getBackendType());
             System.out.println("  Access     :  http://" + accessHost + ":{port}/");
-            System.out.println("  Config     :  " + configPath);
 
-            var model = backend.getDashboardModel();
+            DashboardModel model = backend.getDashboardModel();
 
             if (!model.managementServices().isEmpty()) {
                 System.out.println();
                 System.out.println("  Management services (auto-start):");
-                for (var s : model.managementServices()) {
+                for (SessionView s : model.managementServices()) {
                     String status = s.state() == SessionState.READY   ? "READY"
                                   : s.state() == SessionState.STARTING ? "starting..."
                                   : s.state().name();
                     String url = s.accessUrl() != null
-                        ? "\n      \u2192 " + s.accessUrl()
+                        ? "\n      → " + s.accessUrl()
                         : "";
-                    System.out.printf("    \u25cf %-28s :%d  %s%s%n",
+                    System.out.printf("    ● %-28s :%d  %s%s%n",
                         s.toolName(), s.port(), status, url);
                 }
             }
@@ -111,8 +106,8 @@ public class AiWorkspaceMain implements QuarkusApplication {
             if (!model.launchTools().isEmpty()) {
                 System.out.println();
                 System.out.println("  On-demand tools:");
-                for (var t : model.launchTools()) {
-                    System.out.printf("    \u25cb %-28s%n", t.name());
+                for (ToolView t : model.launchTools()) {
+                    System.out.printf("    ○ %-28s%n", t.name());
                 }
             }
 

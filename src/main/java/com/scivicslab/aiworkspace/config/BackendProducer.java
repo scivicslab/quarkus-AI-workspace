@@ -17,8 +17,7 @@ public class BackendProducer {
     @Produces
     @ApplicationScoped
     public ServiceBackend produceBackend() {
-        AiWorkspaceConfig config = AiWorkspaceConfigLoader.load();
-        ServiceBackend backend = BackendLoader.loadBackend(config);
+        ServiceBackend backend = BackendLoader.loadBackend();
         logger.info("Produced backend: " + backend.getBackendType());
         return backend;
     }

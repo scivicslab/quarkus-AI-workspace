@@ -1,0 +1,15 @@
+tools:
+  - name: quarkus-chat-ui
+    jar: quarkus-chat-ui.jar
+    github: scivicslab/quarkus-chat-ui
+  - name: html-saurus
+    jar: html-saurus.jar
+    github: scivicslab/html-saurus
+  - name: turing-workflow-editor
+    jar: turing-workflow-editor.jar
+    github: scivicslab/Turing-workflow-editor
+  - name: code-raptor
+    jar: code-raptor.jar
+  - name: quarkus-mcp-gateway
+    jar: quarkus-mcp-gateway.jar
+    github: scivicslab/quarkus-mcp-gateway

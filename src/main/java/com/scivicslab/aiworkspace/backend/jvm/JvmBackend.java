@@ -16,7 +16,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
@@ -57,6 +59,15 @@ public class JvmBackend implements ServiceBackend {
      */
     private volatile String externalMcpGatewayUrl;
 
+    /** Tools in the registry that have not yet been downloaded to ~/works/. */
+    private List<ToolView> notAcquiredTools = List.of();
+
+    @Override
+    public void setNotAcquiredTools(List<ToolView> tools) {
+        this.notAcquiredTools = tools;
+        logger.info("Not-acquired tools: " + tools.stream().map(ToolView::name).toList());
+    }
+
     @Override
     public void initialize(AiWorkspaceConfig config) {
         this.config = config;
@@ -92,7 +103,7 @@ public class JvmBackend implements ServiceBackend {
 
         scanAndAdoptByPort();
 
-        for (var tool : config.jvm().tools()) {
+        for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             // computeIfAbsent preserves any supervisors already adopted by the port scan
             CopyOnWriteArrayList<ProcessSupervisor> existing =
                 instances.computeIfAbsent(tool.name(), k -> new CopyOnWriteArrayList<>());
@@ -144,7 +155,7 @@ public class JvmBackend implements ServiceBackend {
     private void scanRangeAndAdopt(int start, int end, String currentUser) {
         // Build resolvedJar → tool map
         java.util.Map<String, AiWorkspaceConfig.ToolDefinition> jarToTool = new java.util.LinkedHashMap<>();
-        for (var tool : config.jvm().tools()) {
+        for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             String jar = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
             if (jar != null && !jar.isBlank()) jarToTool.put(jar, tool);
         }
@@ -163,7 +174,7 @@ public class JvmBackend implements ServiceBackend {
 
             String[] args = handle.info().arguments().orElse(new String[0]);
             AiWorkspaceConfig.ToolDefinition matchedTool = null;
-            for (var entry : jarToTool.entrySet()) {
+            for (Map.Entry<String, AiWorkspaceConfig.ToolDefinition> entry : jarToTool.entrySet()) {
                 if (jarMatches(entry.getKey(), args)) { matchedTool = entry.getValue(); break; }
             }
             if (matchedTool == null) continue;
@@ -185,7 +196,7 @@ public class JvmBackend implements ServiceBackend {
      * Legacy mode: per-tool 100-port window scan (backward compatibility).
      */
     private void scanLegacyAndAdopt(String currentUser) {
-        for (var tool : config.jvm().tools()) {
+        for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             String resolvedJar = ProcessSupervisor.resolveJarPath(
                 ProcessSupervisor.expandEnvVars(tool.jar()));
             if (resolvedJar == null || resolvedJar.isBlank()) continue;
@@ -339,7 +350,7 @@ public class JvmBackend implements ServiceBackend {
 
         // autoStart tools: stop any running instance before (re)starting
         if (def.autoStart() && !list.isEmpty()) {
-            for (var s : List.copyOf(list)) s.stop();
+            for (ProcessSupervisor s : List.copyOf(list)) s.stop();
             list.clear();
         }
 
@@ -423,7 +434,7 @@ public class JvmBackend implements ServiceBackend {
         findMcpGatewayTool().ifPresent(tool -> {
             CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
             if (list != null) {
-                for (var s : List.copyOf(list)) {
+                for (ProcessSupervisor s : List.copyOf(list)) {
                     if (s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED) {
                         s.stop();
                     }
@@ -443,12 +454,12 @@ public class JvmBackend implements ServiceBackend {
      */
     public void useInternalGateway() throws ServiceException {
         this.externalMcpGatewayUrl = null;
-        var toolOpt = findMcpGatewayTool();
+        Optional<AiWorkspaceConfig.ToolDefinition> toolOpt = findMcpGatewayTool();
         if (toolOpt.isEmpty()) {
             logger.warning("useInternalGateway: no MCP Gateway tool definition found");
             return;
         }
-        var tool = toolOpt.get();
+        AiWorkspaceConfig.ToolDefinition tool = toolOpt.get();
         CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
         boolean alreadyRunning = list != null && list.stream().anyMatch(
             s -> s.getState() == SessionState.READY || s.getState() == SessionState.STARTING);
@@ -491,7 +502,7 @@ public class JvmBackend implements ServiceBackend {
 
         boolean inExternal = externalMcpGatewayUrl != null && !externalMcpGatewayUrl.isBlank();
 
-        for (var tool : config.jvm().tools()) {
+        for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(tool.name(), new CopyOnWriteArrayList<>());
 
             if (tool.autoStart()) {
@@ -506,7 +517,7 @@ public class JvmBackend implements ServiceBackend {
                 } else if (active.isEmpty()) {
                     managementServices.add(stoppedView(tool));
                 } else {
-                    for (var s : active) managementServices.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
+                    for (ProcessSupervisor s : active) managementServices.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
                 }
                 launchTools.add(toToolView(tool));
             } else if (tool.singleInstance()) {
@@ -514,11 +525,11 @@ public class JvmBackend implements ServiceBackend {
                 List<ProcessSupervisor> active = list.stream()
                     .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
                     .toList();
-                for (var s : active) activeSessions.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
+                for (ProcessSupervisor s : active) activeSessions.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
                 launchTools.add(toToolView(tool));
             } else {
                 // Active sessions section: non-stopped instances
-                for (var s : list) {
+                for (ProcessSupervisor s : list) {
                     if (s.getState() != SessionState.STOPPED) {
                         activeSessions.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
                     }
@@ -528,6 +539,7 @@ public class JvmBackend implements ServiceBackend {
             }
         }
 
+        launchTools.addAll(notAcquiredTools);
         return new DashboardModel(managementServices, activeSessions, launchTools, buildMcpGatewayStatus());
     }
 
@@ -539,7 +551,7 @@ public class JvmBackend implements ServiceBackend {
         if (externalMcpGatewayUrl != null && !externalMcpGatewayUrl.isBlank()) {
             return new McpGatewayStatus("EXTERNAL", externalMcpGatewayUrl);
         }
-        var toolOpt = findMcpGatewayTool();
+        Optional<AiWorkspaceConfig.ToolDefinition> toolOpt = findMcpGatewayTool();
         if (toolOpt.isEmpty()) {
             return new McpGatewayStatus("INTERNAL_STOPPED", null);
         }
@@ -550,7 +562,7 @@ public class JvmBackend implements ServiceBackend {
         // Pick highest-priority state: READY > STARTING > FAILED > STOPPED
         SessionState best = SessionState.STOPPED;
         ProcessSupervisor pick = null;
-        for (var s : list) {
+        for (ProcessSupervisor s : list) {
             SessionState st = s.getState();
             if (st == SessionState.READY) { best = st; pick = s; break; }
             if (st == SessionState.STARTING && best != SessionState.READY) { best = st; pick = s; }
@@ -586,7 +598,7 @@ public class JvmBackend implements ServiceBackend {
      * Port-range mode: finds the first free port in [start, end] across all tool instances.
      */
     private int findFreePortInRange(int start, int end) throws ServiceException {
-        var usedPorts = instances.values().stream()
+        Set<Integer> usedPorts = instances.values().stream()
             .flatMap(List::stream)
             .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
             .map(ProcessSupervisor::getPort)
@@ -604,7 +616,7 @@ public class JvmBackend implements ServiceBackend {
      * Searches within the tool's own 100-port window.
      */
     private int findFreePort(int basePort, List<ProcessSupervisor> activeInstances) throws ServiceException {
-        var usedPorts = activeInstances.stream()
+        Set<Integer> usedPorts = activeInstances.stream()
             .map(ProcessSupervisor::getPort)
             .collect(java.util.stream.Collectors.toSet());
 
@@ -703,6 +715,26 @@ public class JvmBackend implements ServiceBackend {
         }
     }
 
+    @Override
+    public Optional<String> getGithubRepo(String toolName) {
+        if (config == null || config.jvm() == null) return Optional.empty();
+        return config.jvm().tools().stream()
+            .filter(t -> t.name().equals(toolName))
+            .map(AiWorkspaceConfig.ToolDefinition::github)
+            .filter(g -> g != null && !g.isBlank())
+            .findFirst();
+    }
+
+    @Override
+    public Optional<String> getJarFileName(String toolName) {
+        if (config == null || config.jvm() == null) return Optional.empty();
+        return config.jvm().tools().stream()
+            .filter(t -> t.name().equals(toolName))
+            .map(AiWorkspaceConfig.ToolDefinition::jar)
+            .filter(j -> j != null && !j.isBlank())
+            .findFirst();
+    }
+
     private AiWorkspaceConfig.ToolDefinition findTool(String name) throws ServiceException {
         if (config.jvm() == null) throw new ServiceException("No JVM config");
         return config.jvm().tools().stream()
@@ -722,7 +754,7 @@ public class JvmBackend implements ServiceBackend {
     private ToolView toToolView(AiWorkspaceConfig.ToolDefinition tool) {
         List<ParamDefinition> params = new ArrayList<>();
         if (tool.params() != null) {
-            for (var p : tool.params()) {
+            for (AiWorkspaceConfig.ParamDefinition p : tool.params()) {
                 List<ParamDefinition.ParamOption> options = p.options() == null ? List.of()
                     : p.options().stream()
                         .map(o -> new ParamDefinition.ParamOption(o.value(), o.label()))
@@ -734,6 +766,6 @@ public class JvmBackend implements ServiceBackend {
                 ));
             }
         }
-        return new ToolView(tool.name(), tool.name(), "", params, tool.github() != null ? tool.github() : "");
+        return new ToolView(tool.name(), tool.name(), "", params, tool.github() != null ? tool.github() : "", true);
     }
 }

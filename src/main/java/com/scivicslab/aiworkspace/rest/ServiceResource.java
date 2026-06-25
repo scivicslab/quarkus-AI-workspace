@@ -1,7 +1,5 @@
 package com.scivicslab.aiworkspace.rest;
 
-import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
-import com.scivicslab.aiworkspace.config.AiWorkspaceConfigLoader;
 import com.scivicslab.aiworkspace.model.DashboardModel;
 import com.scivicslab.aiworkspace.spi.ServiceBackend;
 import com.scivicslab.aiworkspace.spi.ServiceException;
@@ -166,23 +164,13 @@ public class ServiceResource {
     @POST
     @Path("/tool/{name}/download")
     public Response downloadLatest(@PathParam("name") String name) {
-        AiWorkspaceConfig config = AiWorkspaceConfigLoader.load();
-        if (config.jvm() == null)
-            return Response.status(500).entity(Map.of("error", "No JVM config")).build();
+        String github = backend.getGithubRepo(name).orElse(null);
+        if (github == null)
+            return Response.status(404).entity(Map.of("error", "No GitHub repo configured for " + name)).build();
 
-        AiWorkspaceConfig.ToolDefinition tool = config.jvm().tools().stream()
-            .filter(t -> t.name().equals(name))
-            .findFirst().orElse(null);
-        if (tool == null)
-            return Response.status(404).entity(Map.of("error", "Tool not found: " + name)).build();
-
-        String github = tool.github();
-        if (github == null || github.isBlank())
-            return Response.status(400).entity(Map.of("error", "No GitHub repo configured for " + name)).build();
-
-        String jarName = tool.jar();
-        if (jarName == null || jarName.isBlank())
-            return Response.status(400).entity(Map.of("error", "No jar name configured for " + name)).build();
+        String jarName = backend.getJarFileName(name).orElse(null);
+        if (jarName == null)
+            return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
 
         try {
             HttpClient client = HttpClient.newBuilder()
@@ -213,14 +201,35 @@ public class ServiceResource {
             String downloadUrl = asset[1];
 
             java.nio.file.Path worksDir = java.nio.file.Path.of(System.getProperty("user.dir"));
-
-            // Download to versioned filename, e.g. ~/works/html-saurus-1.9.0.jar
             java.nio.file.Path versionedDest = worksDir.resolve(assetName);
+
+            // Download to a temp file first to avoid corrupting the existing JAR on failure
+            java.nio.file.Path tmpDest = worksDir.resolve(assetName + ".tmp");
+            java.nio.file.Files.deleteIfExists(tmpDest);
             HttpRequest dlReq = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
                 .header("User-Agent", "quarkus-ai-workspace")
                 .build();
-            client.send(dlReq, HttpResponse.BodyHandlers.ofFile(versionedDest));
+            HttpResponse<java.nio.file.Path> dlResp = client.send(dlReq, HttpResponse.BodyHandlers.ofFile(tmpDest));
+            if (dlResp.statusCode() < 200 || dlResp.statusCode() >= 300) {
+                java.nio.file.Files.deleteIfExists(tmpDest);
+                return Response.status(502)
+                    .entity(Map.of("error", "Download returned HTTP " + dlResp.statusCode())).build();
+            }
+
+            // Verify the downloaded JAR is not corrupt before replacing the live file
+            try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(tmpDest.toFile())) {
+                if (zf.size() == 0) throw new java.io.IOException("JAR is empty");
+            } catch (Exception e) {
+                java.nio.file.Files.deleteIfExists(tmpDest);
+                return Response.status(502)
+                    .entity(Map.of("error", "Downloaded JAR is corrupt: " + e.getMessage())).build();
+            }
+
+            // Atomic replace: rename temp file to final destination
+            java.nio.file.Files.move(tmpDest, versionedDest,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE);
 
             // Replace symlink ~/works/<jarName> → <assetName> (relative, same directory)
             java.nio.file.Path symlink = worksDir.resolve(jarName);

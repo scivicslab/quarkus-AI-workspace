@@ -1,10 +1,12 @@
 package com.scivicslab.aiworkspace.spi;
 
 import com.scivicslab.aiworkspace.model.DashboardModel;
+import com.scivicslab.aiworkspace.model.ToolView;
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service management backend abstraction.
@@ -16,6 +18,13 @@ public interface ServiceBackend {
 
     /** Initialize backend with configuration. Called once at application startup. */
     void initialize(AiWorkspaceConfig config);
+
+    /**
+     * Provides the list of tools that are in the registry but not yet downloaded.
+     * These are rendered as "Download Latest only" tiles in the dashboard.
+     * Default: no-op (backends that don't support this concept ignore it).
+     */
+    default void setNotAcquiredTools(List<ToolView> tools) {}
 
     /**
      * Launch a new instance of the named tool with the given parameters.
@@ -63,4 +72,16 @@ public interface ServiceBackend {
     default void useInternalGateway() throws ServiceException {
         throw new ServiceException("Backend does not support internal MCP Gateway");
     }
+
+    /**
+     * Returns the GitHub repository ("owner/repo") for the named tool, or empty if unknown.
+     * Used by the "Download Latest" feature.
+     */
+    default Optional<String> getGithubRepo(String toolName) { return Optional.empty(); }
+
+    /**
+     * Returns the JAR file name (e.g. "quarkus-chat-ui.jar") for the named tool, or empty if unknown.
+     * Used by the "Download Latest" feature.
+     */
+    default Optional<String> getJarFileName(String toolName) { return Optional.empty(); }
 }
