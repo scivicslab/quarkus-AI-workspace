@@ -21,10 +21,10 @@ public final class BootstrapPlugins {
     public static List<WorkspaceToolPlugin> all() {
         return List.of(
             new QuarkusChatUi(),
+            new QuarkusChatUi3(),
             new HtmlSaurus(),
             new TuringWorkflowEditor(),
-            new CodeRaptor(),
-            new QuarkusMcpGateway()
+            new CodeRaptor()
         );
     }
 
@@ -105,14 +105,19 @@ public final class BootstrapPlugins {
         @Override public boolean singleInstance() { return true; }
     }
 
-    // ---------- quarkus-mcp-gateway ----------
+    // ---------- quarkus-chat-ui3 ----------
 
-    static final class QuarkusMcpGateway implements WorkspaceToolPlugin {
-        @Override public String toolName()    { return "quarkus-mcp-gateway"; }
-        @Override public String jarFileName() { return "quarkus-mcp-gateway.jar"; }
-        @Override public int defaultPort()    { return 28001; }
-        @Override public String githubRepo()  { return "scivicslab/quarkus-mcp-gateway"; }
-        @Override public boolean fixedPort()  { return true; }
-        @Override public boolean autoStart()  { return true; }
+    static final class QuarkusChatUi3 implements WorkspaceToolPlugin {
+        @Override public String toolName()    { return "quarkus-chat-ui3"; }
+        @Override public String jarFileName() { return "quarkus-chat-ui3.jar"; }
+        @Override public int defaultPort()    { return 28140; }
+
+        @Override
+        public List<ParamDef> params() {
+            return List.of(
+                new ParamDef("servers", "vLLM Endpoint", "text",
+                    "${VLLM_ENDPOINT}", "chatui3.vllm-base-url", false, -1, List.of())
+            );
+        }
     }
 }
