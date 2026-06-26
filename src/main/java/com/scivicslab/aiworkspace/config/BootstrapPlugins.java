@@ -115,7 +115,13 @@ public final class BootstrapPlugins {
         @Override
         public List<ParamDef> params() {
             return List.of(
-                new ParamDef("servers", "vLLM Endpoint", "text",
+                new ParamDef("backend", "LLM Backend", "select",
+                    "vllm", "chatui3.backend", false, -1, List.of(
+                        new ParamOption("vllm",   "Local LLM (vLLM)"),
+                        new ParamOption("claude", "Claude (claude code CLI)"),
+                        new ParamOption("codex",  "Codex CLI")
+                    )),
+                new ParamDef("servers", "vLLM Endpoint (Local LLM only)", "text",
                     "${VLLM_ENDPOINT}", "chatui3.vllm-base-url", false, -1, List.of())
             );
         }
