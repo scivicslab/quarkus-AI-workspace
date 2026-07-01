@@ -378,6 +378,33 @@ public class JvmBackend implements ServiceBackend {
                 port = findFreePort(def.port(), list);
             }
         }
+
+        // User-specified port override (non-fixed-port tools only). A blank/invalid
+        // value keeps the auto-assigned port above; an in-use value falls forward to
+        // the next free port at or after the requested one.
+        if (!def.fixedPort()) {
+            String requested = params.get("port");
+            if (requested != null && !requested.isBlank()) {
+                Integer rp = parsePort(requested);
+                if (rp == null) {
+                    logger.warning("Invalid port '" + requested + "' for " + toolName
+                        + "; using auto-assigned :" + port);
+                } else if (isPortAvailable(rp) && !portUsedByInstances(rp)) {
+                    port = rp;
+                } else {
+                    try {
+                        int free = findFreePort(rp, list);
+                        logger.info("Requested port :" + rp + " for " + toolName
+                            + " is in use; using next free :" + free);
+                        port = free;
+                    } catch (ServiceException ex) {
+                        logger.info("Requested port :" + rp + " for " + toolName
+                            + " is in use and no free port was found near it; using auto-assigned :" + port);
+                    }
+                }
+            }
+        }
+
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
         supervisor.setGatewayUrl(resolveGatewayUrl().orElse(null));
         list.add(supervisor);
@@ -629,6 +656,29 @@ public class JvmBackend implements ServiceBackend {
 
     private boolean isPortAvailable(int port) {
         return findPidByPort(port) < 0;
+    }
+
+    /** @return true if any live instance (any tool) already holds this port. */
+    private boolean portUsedByInstances(int port) {
+        return instances.values().stream()
+            .flatMap(List::stream)
+            .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
+            .anyMatch(s -> s.getPort() == port);
+    }
+
+    /**
+     * Parses a user-supplied port string.
+     *
+     * @return the port as an Integer in [1, 65535], or null if not a valid port
+     */
+    static Integer parsePort(String raw) {
+        if (raw == null) return null;
+        try {
+            int p = Integer.parseInt(raw.trim());
+            return (p >= 1 && p <= 65535) ? p : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

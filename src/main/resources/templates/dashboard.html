@@ -702,15 +702,19 @@
                 {#if tool.github}
                 <button class="btn btn-download" id="btn-download-{tool.name}"
                         onclick="downloadTool('{tool.name}')">Download Latest</button>
+                <button class="btn btn-download" id="btn-build-{tool.name}"
+                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
                 {/if}
             </div>
             {#else}
             <div style="font-size:12px;color:var(--text-secondary);margin:0.4rem 0 0.6rem;">Not yet downloaded</div>
             {#if tool.github}
-            <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
                 <button class="btn btn-download" id="btn-download-{tool.name}"
                         onclick="downloadTool('{tool.name}')">Download Latest</button>
+                <button class="btn btn-download" id="btn-build-{tool.name}"
+                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
             </div>
             {/if}

@@ -567,4 +567,61 @@
         }
     };
 
+    // Build the tool from GitHub source (clone → mvn install → copy uber-jar to ~/works).
+    // The build runs on the server as a background job; we poll for its state.
+    window.buildSnapshot = async function(name) {
+        const btn = document.getElementById('btn-build-' + name);
+        const status = document.getElementById('download-status-' + name);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Building…';
+        status.textContent = '';
+        status.style.color = '';
+        try {
+            const r = await fetch('api/tool/' + encodeURIComponent(name) + '/build-snapshot', { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || !data.jobId) {
+                status.textContent = '✗ ' + (data.error || 'failed to start build');
+                status.style.color = 'var(--accent-red)';
+                return;
+            }
+            await pollBuild(name, data.jobId, btn, status);
+        } catch (e) {
+            status.textContent = '✗ ' + e.message;
+            status.style.color = 'var(--accent-red)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Build Snapshot';
+        }
+    };
+
+    async function pollBuild(name, jobId, btn, status) {
+        const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(jobId);
+        while (true) {
+            await new Promise(res => setTimeout(res, 2000));
+            let data;
+            try {
+                const r = await fetch(url);
+                data = await r.json();
+            } catch (e) {
+                continue; // transient; keep polling
+            }
+            if (data.state === 'RUNNING') {
+                status.textContent = '⏳ ' + (data.step || 'building…');
+                status.style.color = 'var(--text-secondary)';
+                status.title = data.log || '';
+            } else if (data.state === 'SUCCESS') {
+                status.textContent = '✓ built ' + (data.file || 'snapshot');
+                status.style.color = 'var(--accent-green)';
+                status.title = data.log || '';
+                return;
+            } else {
+                status.textContent = '✗ ' + (data.error || 'build failed');
+                status.style.color = 'var(--accent-red)';
+                status.title = data.log || '';
+                return;
+            }
+        }
+    }
+
 })();

@@ -105,4 +105,52 @@ class JvmBackendTest {
             assertThat(ProcessSupervisor.resolveJarPath("   ")).isEqualTo("   ");
         }
     }
+
+    // ---------------------------------------------------------------
+    // parsePort — user-supplied launch port
+    // ---------------------------------------------------------------
+
+    @Nested
+    @DisplayName("parsePort")
+    class ParsePortTest {
+
+        @Test
+        @DisplayName("valid port is parsed")
+        void validPort_parsed() {
+            assertThat(JvmBackend.parsePort("28100")).isEqualTo(28100);
+        }
+
+        @Test
+        @DisplayName("surrounding whitespace is trimmed")
+        void whitespace_trimmed() {
+            assertThat(JvmBackend.parsePort("  9000 ")).isEqualTo(9000);
+        }
+
+        @Test
+        @DisplayName("boundary values 1 and 65535 are valid")
+        void boundaries_valid() {
+            assertThat(JvmBackend.parsePort("1")).isEqualTo(1);
+            assertThat(JvmBackend.parsePort("65535")).isEqualTo(65535);
+        }
+
+        @Test
+        @DisplayName("null returns null")
+        void nullInput_null() {
+            assertThat(JvmBackend.parsePort(null)).isNull();
+        }
+
+        @Test
+        @DisplayName("non-numeric returns null")
+        void nonNumeric_null() {
+            assertThat(JvmBackend.parsePort("abc")).isNull();
+        }
+
+        @Test
+        @DisplayName("out-of-range values return null")
+        void outOfRange_null() {
+            assertThat(JvmBackend.parsePort("0")).isNull();
+            assertThat(JvmBackend.parsePort("65536")).isNull();
+            assertThat(JvmBackend.parsePort("-5")).isNull();
+        }
+    }
 }

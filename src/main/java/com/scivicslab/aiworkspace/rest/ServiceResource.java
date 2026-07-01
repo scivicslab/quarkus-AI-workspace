@@ -40,6 +40,9 @@ public class ServiceResource {
     @Inject
     ServiceBackend backend;
 
+    @Inject
+    com.scivicslab.aiworkspace.build.SnapshotBuildService snapshotBuilder;
+
     @GET
     @Path("/status")
     public DashboardModel getStatus() {
@@ -247,6 +250,48 @@ public class ServiceResource {
             logger.warning("Download failed for " + name + ": " + e.getMessage());
             return Response.status(500).entity(Map.of("error", e.getMessage())).build();
         }
+    }
+
+    /**
+     * Starts a background build of the named tool from its GitHub source and installs
+     * the resulting uber-jar into {@code ~/works/}. Use this instead of "Download Latest"
+     * when the tool is only available as an unreleased {@code -SNAPSHOT}.
+     *
+     * <p>Returns immediately with a {@code jobId}; poll {@code /build-status/{jobId}}
+     * for progress, since the Maven build takes minutes.
+     */
+    @POST
+    @Path("/tool/{name}/build-snapshot")
+    public Response buildSnapshot(@PathParam("name") String name) {
+        String github = backend.getGithubRepo(name).orElse(null);
+        if (github == null)
+            return Response.status(404).entity(Map.of("error", "No GitHub repo configured for " + name)).build();
+
+        String jarName = backend.getJarFileName(name).orElse(null);
+        if (jarName == null)
+            return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
+
+        var job = snapshotBuilder.start(name, github, jarName);
+        return Response.ok(Map.of("jobId", job.id(), "state", job.state().name())).build();
+    }
+
+    /** Reports the progress of a snapshot build started via {@code build-snapshot}. */
+    @GET
+    @Path("/tool/{name}/build-status/{jobId}")
+    public Response buildStatus(@PathParam("name") String name, @PathParam("jobId") String jobId) {
+        var jobOpt = snapshotBuilder.get(jobId);
+        if (jobOpt.isEmpty())
+            return Response.status(404).entity(Map.of("error", "Unknown build job " + jobId)).build();
+
+        var job = jobOpt.get();
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("jobId", job.id());
+        body.put("state", job.state().name());
+        body.put("step", job.step());
+        body.put("log", String.join("\n", job.tail(40)));
+        if (job.resultFile() != null) body.put("file", job.resultFile());
+        if (job.error() != null) body.put("error", job.error());
+        return Response.ok(body).build();
     }
 
     /** Extracts a top-level string value from a JSON object by key (simple regex, no full parser). */

@@ -51,7 +51,9 @@ public final class BootstrapPlugins {
                 new ParamDef("servers", "vLLM Endpoint (Local LLM only)", "text",
                     "${VLLM_ENDPOINT}", "chat-ui.servers", false, -1, List.of()),
                 new ParamDef("allowed-dirs", "Allowed Directories (comma-separated)", "text",
-                    "${HOME}/works", "chat-ui.filesystem.allowed-dirs", false, -1, List.of())
+                    "${HOME}/works", "chat-ui.filesystem.allowed-dirs", false, -1, List.of()),
+                new ParamDef("port", "Port (blank = auto-assign)", "text",
+                    "", null, false, -1, List.of())
             );
         }
     }
@@ -111,12 +113,15 @@ public final class BootstrapPlugins {
         @Override public String toolName()    { return "quarkus-chat-ui3"; }
         @Override public String jarFileName() { return "quarkus-chat-ui3.jar"; }
         @Override public int defaultPort()    { return 28140; }
+        @Override public String githubRepo()  { return "scivicslab/quarkus-chat-ui3"; }
 
         @Override
         public List<ParamDef> params() {
             return List.of(
                 new ParamDef("servers", "vLLM Endpoint", "text",
-                    "${VLLM_ENDPOINT}", "chatui3.vllm-base-url", false, -1, List.of())
+                    "${VLLM_ENDPOINT}", "chatui3.vllm-base-url", false, -1, List.of()),
+                new ParamDef("port", "Port (blank = auto-assign)", "text",
+                    "", null, false, -1, List.of())
             );
         }
     }
