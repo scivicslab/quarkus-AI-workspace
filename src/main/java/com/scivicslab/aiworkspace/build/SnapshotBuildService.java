@@ -53,6 +53,11 @@ public class SnapshotBuildService {
         defaultValue = "${user.home}/.local/share/quarkus-ai-workspace/build")
     String buildDirTemplate;
 
+    /** Directory the built uber-jar is installed into (defaults to the launch directory). */
+    @ConfigProperty(name = "ai-workspace.snapshot.works-dir",
+        defaultValue = "${user.dir}")
+    String worksDirTemplate;
+
     private final ConcurrentHashMap<String, BuildJob> jobs = new ConcurrentHashMap<>();
 
     /** State of a snapshot build. */
@@ -211,7 +216,8 @@ public class SnapshotBuildService {
     }
 
     private Path installToWorks(BuildJob job, Path uberJar, String jarFileName) throws Exception {
-        Path worksDir = Path.of(System.getProperty("user.dir"));
+        Path worksDir = Path.of(expand(worksDirTemplate));
+        Files.createDirectories(worksDir);
         String versioned = uberJar.getFileName().toString();
         Path dest = worksDir.resolve(versioned);
         Files.copy(uberJar, dest, StandardCopyOption.REPLACE_EXISTING);
