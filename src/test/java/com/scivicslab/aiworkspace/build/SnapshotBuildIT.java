@@ -1,5 +1,6 @@
 package com.scivicslab.aiworkspace.build;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,20 +22,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  * cloning into a temp directory and installing into a temp "works" directory so
  * the developer's real {@code ~/works} is untouched.
  *
- * <p>Requirements to run: network + SSH access to the {@code github-scivicslab}
- * host, {@code git} and {@code mvn} on PATH, and a populated {@code ~/.m2}.
+ * <p>The tool is a public GitHub repository, so no credentials are needed — only
+ * network reachability to github.com plus {@code git} and {@code mvn} on PATH and
+ * a populated {@code ~/.m2}. When those are unavailable the test is skipped (not
+ * failed) so a plain {@code mvn verify} on a fresh box does not break.
  */
 class SnapshotBuildIT {
 
     private static final String TOOL = "quarkus-chat-ui3";
     private static final String REPO = "scivicslab/quarkus-chat-ui3";
     private static final String JAR  = "quarkus-chat-ui3.jar";
+    private static final String CLONE_URL = "https://github.com/" + REPO + ".git";
 
     @Test
     @DisplayName("clones, builds and installs the uber-jar into the works directory")
-    void buildsAndInstalls(@TempDir Path buildRoot, @TempDir Path worksRoot) throws Exception {
+    void start_forSnapshotRepo_clonesBuildsAndInstallsUberJar(
+            @TempDir Path buildRoot, @TempDir Path worksRoot) throws Exception {
+        assumeToolchainAndNetwork();
+
         SnapshotBuildService svc = new SnapshotBuildService();
-        svc.gitHost = "github-scivicslab";
+        svc.gitBaseUrl = "https://github.com";
         svc.mvnCommand = "mvn";
         svc.buildDirTemplate = buildRoot.toString();
         svc.worksDirTemplate = worksRoot.toString();
@@ -65,6 +72,37 @@ class SnapshotBuildIT {
         Path symlink = worksRoot.resolve(JAR);
         assertThat(Files.isSymbolicLink(symlink)).isTrue();
         assertThat(Files.readSymbolicLink(symlink).toString()).isEqualTo(job.resultFile());
+    }
+
+    /**
+     * Skips the test (rather than failing) unless git, mvn, and anonymous access to
+     * the public repo over HTTPS are all available. This keeps {@code mvn verify}
+     * green on a machine without a network or build toolchain.
+     */
+    private void assumeToolchainAndNetwork() {
+        Assumptions.assumeTrue(runsOk("git", "--version"), "git not available on PATH");
+        Assumptions.assumeTrue(runsOk("mvn", "-v"), "mvn not available on PATH");
+        // GIT_TERMINAL_PROMPT=0 makes a private/unreachable repo fail fast instead of
+        // blocking on a credential prompt.
+        Assumptions.assumeTrue(runsOk(java.util.Map.of("GIT_TERMINAL_PROMPT", "0"),
+                "git", "ls-remote", CLONE_URL, "HEAD"),
+            "public repo not reachable anonymously over HTTPS: " + CLONE_URL);
+    }
+
+    private static boolean runsOk(String... command) {
+        return runsOk(java.util.Map.of(), command);
+    }
+
+    private static boolean runsOk(java.util.Map<String, String> env, String... command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
+            pb.environment().putAll(env);
+            Process p = pb.start();
+            p.getInputStream().readAllBytes(); // drain so the process can exit
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private SnapshotBuildService.State awaitTerminal(

@@ -40,9 +40,13 @@ public class SnapshotBuildService {
     /** Maximum number of output lines retained per job (rolling tail). */
     private static final int MAX_LOG_LINES = 800;
 
-    /** SSH host alias used to clone repositories (matches the developer's ~/.ssh/config). */
-    @ConfigProperty(name = "ai-workspace.snapshot.git-host", defaultValue = "github-scivicslab")
-    String gitHost;
+    /**
+     * Base URL used to clone repositories. The tools are public GitHub repositories
+     * (the "Download Latest" flow already reads them anonymously), so the default
+     * is anonymous HTTPS — no SSH key required. Override for GitHub Enterprise or SSH.
+     */
+    @ConfigProperty(name = "ai-workspace.snapshot.git-base-url", defaultValue = "https://github.com")
+    String gitBaseUrl;
 
     /** Maven executable; overridable when mvn is not on the launch PATH. */
     @ConfigProperty(name = "ai-workspace.snapshot.mvn", defaultValue = "mvn")
@@ -167,7 +171,10 @@ public class SnapshotBuildService {
             exec(job, repoDir, "git", "reset", "--hard", "@{u}");
         } else {
             job.step = "git clone";
-            String url = "git@" + gitHost + ":" + githubRepo + ".git";
+            String base = gitBaseUrl.endsWith("/")
+                ? gitBaseUrl.substring(0, gitBaseUrl.length() - 1)
+                : gitBaseUrl;
+            String url = base + "/" + githubRepo + ".git";
             job.append("Cloning " + url + " → " + repoDir);
             exec(job, buildRoot, "git", "clone", url, leaf);
         }
