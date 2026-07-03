@@ -132,21 +132,27 @@ public class SnapshotBuildService {
             Path repoDir = cloneOrUpdate(job, githubRepo);
             build(job, repoDir);
 
-            job.step = "locating jar";
-            String jarBase = jarFileName.endsWith(".jar")
-                ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
-                : jarFileName;
-            Path uberJar = locateUberJar(repoDir, jarBase);
-            job.append("Found uber-jar: " + uberJar);
+            if (jarFileName != null && !jarFileName.isBlank()) {
+                job.step = "locating jar";
+                String jarBase = jarFileName.endsWith(".jar")
+                    ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
+                    : jarFileName;
+                Path uberJar = locateUberJar(repoDir, jarBase);
+                job.append("Found uber-jar: " + uberJar);
 
-            job.step = "installing to ~/works";
-            Path dest = installToWorks(job, uberJar, jarFileName);
-            job.resultFile = dest.getFileName().toString();
+                job.step = "installing to ~/works";
+                Path dest = installToWorks(job, uberJar, jarFileName);
+                job.resultFile = dest.getFileName().toString();
+                job.append("SUCCESS: installed " + dest);
+                logger.info("Snapshot build succeeded for " + job.tool + " → " + dest);
+            } else {
+                // Library build: artifacts installed to ~/.m2 by mvn install; nothing to deploy.
+                job.append("Library build complete: artifacts installed to ~/.m2");
+                logger.info("Snapshot library build succeeded for " + job.tool);
+            }
 
             job.step = "done";
             job.state = State.SUCCESS;
-            job.append("SUCCESS: installed " + dest);
-            logger.info("Snapshot build succeeded for " + job.tool + " → " + dest);
         } catch (Exception e) {
             job.error = e.getMessage();
             job.state = State.FAILED;

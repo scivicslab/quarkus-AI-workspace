@@ -37,24 +37,31 @@ public final class ToolRegistryLoader {
     private static List<ToolRegistryEntry> parse(InputStream is) {
         Yaml yaml = new Yaml();
         Map<String, Object> root = yaml.load(is);
-        List<Map<String, String>> tools = (List<Map<String, String>>) root.get("tools");
+        // Use Map<String, Object>: 'library: true' is parsed as Boolean by SnakeYAML, not String.
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) root.get("tools");
         if (tools == null) return List.of();
         List<ToolRegistryEntry> result = new ArrayList<>();
-        for (Map<String, String> entry : tools) {
-            String name   = entry.get("name");
-            String jar    = entry.get("jar");
-            String github = entry.get("github");
-            if (name != null && jar != null) {
-                result.add(new ToolRegistryEntry(name, jar, github));
+        for (Map<String, Object> entry : tools) {
+            String name    = str(entry.get("name"));
+            String jar     = str(entry.get("jar"));
+            String github  = str(entry.get("github"));
+            boolean library = Boolean.TRUE.equals(entry.get("library"));
+            // Library entries (library: true) have no jar — they install to ~/.m2 only.
+            if (name != null && (jar != null || library)) {
+                result.add(new ToolRegistryEntry(name, jar, github, library));
             }
         }
         logger.info("Loaded tool registry: " + result.size() + " entries from ai-workspace-tools.yaml");
         return List.copyOf(result);
     }
 
+    private static String str(Object v) {
+        return v == null ? null : v.toString();
+    }
+
     private static List<ToolRegistryEntry> fallback() {
         return BootstrapPlugins.all().stream()
-            .map(p -> new ToolRegistryEntry(p.toolName(), p.jarFileName(), p.githubRepo()))
+            .map(p -> new ToolRegistryEntry(p.toolName(), p.jarFileName(), p.githubRepo(), false))
             .toList();
     }
 }

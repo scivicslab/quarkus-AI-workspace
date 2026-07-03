@@ -33,6 +33,7 @@ public class BackendLoader {
 
         List<ToolView> notAcquired = registry.stream()
             .filter(e -> !acquiredNames.contains(e.name()))
+            .filter(e -> !e.library())   // library entries have no jar; don't show as unacquired tiles
             .map(e -> new ToolView(e.name(), e.name(), "", List.of(),
                                    e.githubRepo() != null ? e.githubRepo() : "", false))
             .toList();

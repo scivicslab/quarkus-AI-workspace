@@ -43,6 +43,9 @@ public class ServiceResource {
     @Inject
     com.scivicslab.aiworkspace.build.SnapshotBuildService snapshotBuilder;
 
+    @Inject
+    com.scivicslab.aiworkspace.config.ToolRegistry toolRegistry;
+
     @GET
     @Path("/status")
     public DashboardModel getStatus() {
@@ -263,12 +266,15 @@ public class ServiceResource {
     @POST
     @Path("/tool/{name}/build-snapshot")
     public Response buildSnapshot(@PathParam("name") String name) {
-        String github = backend.getGithubRepo(name).orElse(null);
+        // Use ToolRegistry (not backend) so library entries — which have no jar in ~/works/
+        // and are therefore absent from the backend's acquired-tool list — can also be built.
+        String github = toolRegistry.getGithubRepo(name).orElse(null);
         if (github == null)
             return Response.status(404).entity(Map.of("error", "No GitHub repo configured for " + name)).build();
 
-        String jarName = backend.getJarFileName(name).orElse(null);
-        if (jarName == null)
+        boolean library = toolRegistry.isLibrary(name);
+        String jarName  = library ? null : toolRegistry.getJarFileName(name).orElse(null);
+        if (!library && jarName == null)
             return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
 
         var job = snapshotBuilder.start(name, github, jarName);

@@ -13,3 +13,6 @@ tools:
     github: scivicslab/Turing-workflow-editor
   - name: code-raptor
     jar: code-raptor.jar
+  - name: Turing-workflow-plugins
+    github: scivicslab/Turing-workflow-plugins
+    library: true
