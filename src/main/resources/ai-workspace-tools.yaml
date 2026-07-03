@@ -4,6 +4,7 @@ tools:
     github: scivicslab/quarkus-chat-ui
   - name: quarkus-chat-ui3
     jar: quarkus-chat-ui3.jar
+    github: scivicslab/quarkus-chat-ui3
   - name: html-saurus
     jar: html-saurus.jar
     github: scivicslab/html-saurus
