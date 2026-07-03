@@ -317,11 +317,23 @@ public class ProcessSupervisor {
         // -D flags from params (supported by both JVM and Quarkus native binaries)
         if (config.params() != null) {
             for (var param : config.params()) {
-                String raw = launchParams.getOrDefault(param.key(), param.defaultVal());
+                boolean provided = launchParams.containsKey(param.key());
+                String raw = provided ? launchParams.get(param.key()) : param.defaultVal();
                 String value = expandEnvVars(raw);
-                if (value == null || value.isBlank()) continue;
                 if (param.jvmProp() != null && !param.jvmProp().isBlank()) {
-                    command.add("-D" + param.jvmProp() + "=" + value);
+                    if (value == null || value.isBlank()) {
+                        // Make the skip visible: this is exactly how -Dchatui3.vllm-base-url goes missing
+                        // (e.g. the 'servers' form field left empty, or an unset ${VLLM_ENDPOINT}).
+                        logger.info(config.name() + ": param '" + param.key() + "' -> -D"
+                            + param.jvmProp() + " SKIPPED (resolved empty; "
+                            + (provided ? "form value=[" + raw + "]" : "default=[" + param.defaultVal() + "]")
+                            + "). The tool will use its own built-in default.");
+                    } else {
+                        command.add("-D" + param.jvmProp() + "=" + value);
+                    }
+                } else if (value != null && !value.isBlank()) {
+                    // No jvmProp mapping: value is only used elsewhere (positional args / working dir).
+                    logger.fine(config.name() + ": param '" + param.key() + "'=[" + value + "] (no -D mapping)");
                 }
             }
         }
