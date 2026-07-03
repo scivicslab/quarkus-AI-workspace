@@ -49,6 +49,9 @@ public final class PluginLoader {
         Map<String, WorkspaceToolPlugin> result = new LinkedHashMap<>();
 
         for (ToolRegistryEntry entry : registry) {
+            if (entry.library()) {
+                continue;   // library entries install to ~/.m2; no jar in ~/works/ to load
+            }
             WorkspaceToolPlugin fromJar = fromJars.get(entry.name());
             if (fromJar != null) {
                 logger.info("Using WorkspaceToolPlugin from JAR for: " + entry.name());
