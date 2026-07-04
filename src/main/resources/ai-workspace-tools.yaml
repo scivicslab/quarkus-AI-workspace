@@ -57,6 +57,8 @@ tools:
     github: scivicslab/code-raptor
     port: 28130
     singleInstance: true
+    params:
+      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
 
   - name: Turing-workflow-plugins
     github: scivicslab/Turing-workflow-plugins

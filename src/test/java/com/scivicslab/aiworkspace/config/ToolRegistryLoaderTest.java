@@ -58,12 +58,16 @@ class ToolRegistryLoaderTest {
         assertEquals(28120, e.defaultPort());
     }
 
-    @Test void code_raptor_single_instance() {
+    @Test void code_raptor_single_instance_with_workdir() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "code-raptor");
         assertTrue(e.singleInstance());
         assertEquals("scivicslab/code-raptor", e.githubRepo());
         assertTrue(e.args().isEmpty());
-        assertTrue(e.params().isEmpty());
+        assertEquals(1, e.params().size(), "code-raptor has a Working Directory selector");
+        AiWorkspaceConfig.ParamDefinition wd = e.params().get(0);
+        assertEquals("workdir", wd.key());
+        assertEquals("dir", wd.type());
+        assertEquals("code.raptor.works-dir", wd.jvmProp());
     }
 
     @Test void library_entry_flagged() {
