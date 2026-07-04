@@ -16,6 +16,9 @@ ENV SERVICE_PORTAL_IMAGE_TAG=${IMAGE_TAG}
 # with uid 1000 (the pod runs as uid 1000) so ~/.m2 and other $HOME writes work; the NFS mount overlays
 # only the works subdir at runtime.
 ENV HOME=/home/devteam
+# Persist Maven's dependency cache on the NFS-backed ~/works (the only persistent mount in the pod),
+# so Build Snapshot doesn't re-download everything after each Pod re-creation.
+ENV AI_WORKSPACE_SNAPSHOT_MAVEN_REPO_LOCAL=/home/devteam/works/.m2/repository
 RUN mkdir -p /home/devteam/works && chown -R 1000:1000 /home/devteam
 
 # Tool uber-jars bundled in the image (at /app). pod-entrypoint.sh seeds them into $HOME/works on first

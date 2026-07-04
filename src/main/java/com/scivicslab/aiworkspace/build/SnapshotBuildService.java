@@ -52,6 +52,14 @@ public class SnapshotBuildService {
     @ConfigProperty(name = "ai-workspace.snapshot.mvn", defaultValue = "mvn")
     String mvnCommand;
 
+    /**
+     * Local Maven repository path passed as {@code -Dmaven.repo.local}. Empty = use Maven's default
+     * ({@code ~/.m2}). Set this to a path on persistent storage (e.g. an NFS-backed {@code ~/works/.m2})
+     * so the dependency cache survives Pod re-creation; otherwise each fresh Pod re-downloads everything.
+     */
+    @ConfigProperty(name = "ai-workspace.snapshot.maven-repo-local", defaultValue = "")
+    String mavenRepoLocal;
+
     /** Root directory holding one working checkout per repository. */
     @ConfigProperty(name = "ai-workspace.snapshot.build-dir",
         defaultValue = "${user.home}/.local/share/quarkus-ai-workspace/build")
@@ -196,10 +204,18 @@ public class SnapshotBuildService {
                 .forEach(SnapshotBuildService::deleteQuietly);
         }
         job.step = "mvn install";
-        job.append("Running " + mvnCommand + " install -DskipITs (unit tests run; integration tests skipped)");
+        // Optionally pin the local repo onto persistent storage so the dependency cache survives Pod
+        // re-creation (e.g. an NFS-backed ~/works/.m2). Empty -> Maven's default ~/.m2.
+        java.util.List<String> cmd = new java.util.ArrayList<>(
+                java.util.List.of(mvnCommand, "install", "-DskipITs", "-B"));
+        if (mavenRepoLocal != null && !mavenRepoLocal.isBlank()) {
+            cmd.add("-Dmaven.repo.local=" + mavenRepoLocal.trim());
+        }
+        job.append("Running " + String.join(" ", cmd)
+                + " (unit tests run; integration tests skipped)");
         // Unit tests run (no -DskipTests, per project policy); integration tests
         // need a k8s cluster and are skipped here.
-        exec(job, repoDir, mvnCommand, "install", "-DskipITs", "-B");
+        exec(job, repoDir, cmd.toArray(new String[0]));
     }
 
     /**
