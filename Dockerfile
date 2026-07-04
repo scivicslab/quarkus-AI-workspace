@@ -2,6 +2,11 @@ FROM eclipse-temurin:21-jre-noble
 
 WORKDIR /app
 
+# The image tag, baked in at build time so the running portal can show its exact build in the header.
+# Pass with: docker build --build-arg IMAGE_TAG=<tag> ...
+ARG IMAGE_TAG=dev
+ENV SERVICE_PORTAL_IMAGE_TAG=${IMAGE_TAG}
+
 # Tool uber-jars bundled in the image
 COPY service-portal.jar         service-portal.jar
 COPY quarkus-chat-ui.jar        quarkus-chat-ui.jar
