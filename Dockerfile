@@ -1,4 +1,10 @@
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:21-jdk-noble
+
+# git + maven so "Build Snapshot" works inside the pod (SnapshotBuildService clones from GitHub and
+# runs mvn install). The JDK base (not JRE) provides javac, which Maven needs to compile tools.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git maven \
+ && rm -rf /var/lib/apt/lists/*
 
 # The image tag, baked in at build time so the running portal can show its exact build in the header.
 # Pass with: docker build --build-arg IMAGE_TAG=<tag> ...
