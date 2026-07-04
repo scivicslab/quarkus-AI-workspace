@@ -58,10 +58,10 @@ class ToolRegistryLoaderTest {
         assertEquals(28120, e.defaultPort());
     }
 
-    @Test void code_raptor_single_instance_no_github() {
+    @Test void code_raptor_single_instance() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "code-raptor");
         assertTrue(e.singleInstance());
-        assertNull(e.githubRepo(), "code-raptor is not on GitHub");
+        assertEquals("scivicslab/code-raptor", e.githubRepo());
         assertTrue(e.args().isEmpty());
         assertTrue(e.params().isEmpty());
     }

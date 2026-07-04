@@ -54,6 +54,7 @@ tools:
 
   - name: code-raptor
     jar: code-raptor.jar
+    github: scivicslab/code-raptor
     port: 28130
     singleInstance: true
 
