@@ -1,20 +1,32 @@
 FROM eclipse-temurin:21-jre-noble
 
-WORKDIR /app
-
 # The image tag, baked in at build time so the running portal can show its exact build in the header.
 # Pass with: docker build --build-arg IMAGE_TAG=<tag> ...
 ARG IMAGE_TAG=dev
 ENV SERVICE_PORTAL_IMAGE_TAG=${IMAGE_TAG}
 
-# Tool uber-jars bundled in the image
-COPY service-portal.jar         service-portal.jar
-COPY quarkus-chat-ui.jar        quarkus-chat-ui.jar
-COPY quarkus-chat-ui3.jar       quarkus-chat-ui3.jar
-COPY turing-workflow-editor.jar turing-workflow-editor.jar
-COPY html-saurus.jar            html-saurus.jar
-COPY code-raptor.jar            code-raptor.jar
+# The AI Workspace discovers tools in $HOME/works and the k8s-pups pod mounts the user's persistent
+# NFS at /home/devteam/works, so HOME must be /home/devteam for the two to coincide. Own /home/devteam
+# with uid 1000 (the pod runs as uid 1000) so ~/.m2 and other $HOME writes work; the NFS mount overlays
+# only the works subdir at runtime.
+ENV HOME=/home/devteam
+RUN mkdir -p /home/devteam/works && chown -R 1000:1000 /home/devteam
+
+# Tool uber-jars bundled in the image (at /app). pod-entrypoint.sh seeds them into $HOME/works on first
+# launch so tools show as acquired (matching a normal host ~/works); the portal jar runs from /app.
+COPY service-portal.jar         /app/service-portal.jar
+COPY quarkus-chat-ui.jar        /app/quarkus-chat-ui.jar
+COPY quarkus-chat-ui3.jar       /app/quarkus-chat-ui3.jar
+COPY turing-workflow-editor.jar /app/turing-workflow-editor.jar
+COPY html-saurus.jar            /app/html-saurus.jar
+COPY code-raptor.jar            /app/code-raptor.jar
+COPY pod-entrypoint.sh          /app/pod-entrypoint.sh
+RUN chmod +x /app/pod-entrypoint.sh
+
+# user.dir = ~/works so SnapshotBuildService (default works-dir ${user.dir}) installs where the portal
+# scans; the CMD/portal jar is referenced by absolute path since CWD is now the works dir.
+WORKDIR /home/devteam/works
 
 EXPOSE 28000
 
-CMD ["java", "-Dservice.portal.port-range=28000-28019", "-jar", "service-portal.jar"]
+ENTRYPOINT ["/app/pod-entrypoint.sh"]
