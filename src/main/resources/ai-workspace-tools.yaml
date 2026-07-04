@@ -1,18 +1,62 @@
+# Single source of truth for the workspace tool registry (bundled in the uber-JAR).
+#
+# Each entry fully describes how AI workspace launches and displays the tool:
+#   name           tool id (unique)
+#   jar            uber-jar file name in ~/works/
+#   github         "owner/repo" for Download Latest / Build Snapshot (omit if not on GitHub)
+#   port           default launch port
+#   library        true = Maven library installed to ~/.m2 (no runnable jar, no tile)
+#   autoStart      start on workspace launch (default false)
+#   fixedPort      do not allocate from the dynamic pool (default false)
+#   singleInstance only one running instance allowed (default false)
+#   args           launch args after the jar path; ${PORT}/${HOME} expanded at launch
+#   jvmArgs        raw JVM flags inserted before -D props (e.g. -Xmx2g)
+#   params         dashboard form fields (key,label,type[dir|select|text],default,jvmProp,workingDir,argPos,options)
+#
+# Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
+# metadata lives here — there is no per-tool plugin and no external override file.
 tools:
   - name: quarkus-chat-ui
     jar: quarkus-chat-ui.jar
     github: scivicslab/quarkus-chat-ui
+    port: 28100
+    params:
+      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
+      - {key: provider, label: "LLM Provider", type: select, default: "${DEFAULT_PROVIDER}", jvmProp: "chat-ui.provider",
+         options: [{value: "claude", label: "Claude"}, {value: "codex", label: "Codex (OpenAI)"}, {value: "openai-compat", label: "Local LLM (vLLM)"}]}
+      - {key: servers, label: "vLLM Endpoint (Local LLM only)", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      - {key: allowed-dirs, label: "Allowed Directories (comma-separated)", type: text, default: "${HOME}/works", jvmProp: "chat-ui.filesystem.allowed-dirs"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
   - name: quarkus-chat-ui3
     jar: quarkus-chat-ui3.jar
     github: scivicslab/quarkus-chat-ui3
+    port: 28140
+    params:
+      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chatui3.vllm-base-url"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
   - name: html-saurus
     jar: html-saurus.jar
     github: scivicslab/html-saurus
+    port: 28110
+    args: ["${HOME}/works", "--portal-mode", "--serve", "--port", "${PORT}"]
+    params:
+      - {key: dir, label: "Document Root", type: dir, default: "${HOME}/works", argPos: 0}
+
   - name: turing-workflow-editor
     jar: turing-workflow-editor.jar
     github: scivicslab/Turing-workflow-editor
+    port: 28120
+    jvmArgs: ["-Xmx2g"]
+    params:
+      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
+
   - name: code-raptor
     jar: code-raptor.jar
+    port: 28130
+    singleInstance: true
+
   - name: Turing-workflow-plugins
     github: scivicslab/Turing-workflow-plugins
     library: true

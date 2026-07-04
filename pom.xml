@@ -34,12 +34,6 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Workspace SPI (WorkspaceToolPlugin interface) -->
-        <dependency>
-            <groupId>com.scivicslab</groupId>
-            <artifactId>ai-workspace-spi</artifactId>
-            <version>1.0.0</version>
-        </dependency>
 
         <!-- YAML parsing for ai-workspace-tools.yaml registry -->
         <dependency>
