@@ -2,8 +2,9 @@ FROM eclipse-temurin:21-jdk-noble
 
 # git + maven so "Build Snapshot" works inside the pod (SnapshotBuildService clones from GitHub and
 # runs mvn install). The JDK base (not JRE) provides javac, which Maven needs to compile tools.
+# openssh-client so users can clone/push their own repos over SSH (git@github.com) from the pod.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git maven \
+ && apt-get install -y --no-install-recommends git maven openssh-client \
  && rm -rf /var/lib/apt/lists/*
 
 # The image tag, baked in at build time so the running portal can show its exact build in the header.
