@@ -28,10 +28,11 @@ import java.util.logging.Logger;
  * <h2>Port allocation</h2>
  * <p><b>Port-range mode</b> (recommended for multi-team deployments):</p>
  * <pre>
- *   -Dservice.portal.port-range=28000-28019
- *       28000 → quarkus-AI-workspace dashboard
- *       28001 → first autoStart+fixedPort tool (mcp-gateway)
- *       28002-28019 → dynamic pool for on-demand tools
+ *   -Dservice.portal.port-range=28000-28099
+ *       28000       → quarkus-AI-workspace dashboard (rangeStart)
+ *       28001-28009 → reserved fixed ports for search / knowledge services
+ *                     (each fixedPort tool uses its own YAML port; reused if already running)
+ *       28010-28099 → dynamic pool for on-demand tools and extra instances
  * </pre>
  * <p><b>Legacy mode</b>: no port-range property; each tool uses its configured port
  * from the YAML with a 100-port scan window.</p>
@@ -41,8 +42,8 @@ public class JvmBackend implements ServiceBackend {
 
     private static final Logger logger = Logger.getLogger(JvmBackend.class.getName());
 
-    /** toolName -> list of instances (may have multiple per tool) */
-    private final ConcurrentHashMap<String, CopyOnWriteArrayList<ProcessSupervisor>> instances
+    /** toolName -> list of instances (may have multiple per tool). Package-private for testing. */
+    final ConcurrentHashMap<String, CopyOnWriteArrayList<ProcessSupervisor>> instances
         = new ConcurrentHashMap<>();
 
     private AiWorkspaceConfig config;
@@ -96,7 +97,8 @@ public class JvmBackend implements ServiceBackend {
         }
         if (rangeStart >= 0) {
             logger.info("Port-range: " + rangeStart + "-" + rangeEnd
-                + " (gateway=" + (rangeStart + 1) + ", pool=" + (rangeStart + 2) + "-" + rangeEnd + ")");
+                + " (reserved=" + (rangeStart + 1) + "-" + (rangeStart + 9)
+                + ", pool=" + (rangeStart + 10) + "-" + rangeEnd + ")");
         }
 
         if (config.jvm() == null) return;
@@ -354,56 +356,19 @@ public class JvmBackend implements ServiceBackend {
             list.clear();
         }
 
-        int port;
-        if (rangeStart >= 0) {
-            // Port-range mode
-            if (def.fixedPort()) {
-                port = rangeStart + 1;
-                if (!isPortAvailable(port)) {
-                    throw new ServiceException(toolName + " requires port " + port
-                        + " (range start+1) but it is already in use.");
-                }
-            } else {
-                port = findFreePortInRange(rangeStart + 2, rangeEnd);
-            }
-        } else {
-            // Legacy mode
-            if (def.fixedPort()) {
-                port = def.port();
-                if (!isPortAvailable(port)) {
-                    throw new ServiceException(toolName + " requires fixed port :" + port
-                        + " but the port is already in use. Free the port before starting " + toolName + ".");
-                }
-            } else {
-                port = findFreePort(def.port(), list);
-            }
+        // Reuse: a reserved (fixedPort) tool already READY on its reserved port is reused rather
+        // than started a second time — unless an explicit port was requested (an intentional
+        // additional instance). This makes "launch the search service" idempotent.
+        String requestedPort = params.get("port");
+        boolean explicitPort = requestedPort != null && !requestedPort.isBlank();
+        if (rangeStart >= 0 && def.fixedPort() && !explicitPort
+                && readyInstanceOn(toolName, def.port()) != null) {
+            logger.info(toolName + " already running on reserved port " + def.port()
+                + " — reusing existing instance");
+            return;
         }
 
-        // User-specified port override (non-fixed-port tools only). A blank/invalid
-        // value keeps the auto-assigned port above; an in-use value falls forward to
-        // the next free port at or after the requested one.
-        if (!def.fixedPort()) {
-            String requested = params.get("port");
-            if (requested != null && !requested.isBlank()) {
-                Integer rp = parsePort(requested);
-                if (rp == null) {
-                    logger.warning("Invalid port '" + requested + "' for " + toolName
-                        + "; using auto-assigned :" + port);
-                } else if (isPortAvailable(rp) && !portUsedByInstances(rp)) {
-                    port = rp;
-                } else {
-                    try {
-                        int free = findFreePort(rp, list);
-                        logger.info("Requested port :" + rp + " for " + toolName
-                            + " is in use; using next free :" + free);
-                        port = free;
-                    } catch (ServiceException ex) {
-                        logger.info("Requested port :" + rp + " for " + toolName
-                            + " is in use and no free port was found near it; using auto-assigned :" + port);
-                    }
-                }
-            }
-        }
+        int port = choosePort(def, params);
 
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
         supervisor.setGatewayUrl(resolveGatewayUrl().orElse(null));
@@ -580,7 +545,9 @@ public class JvmBackend implements ServiceBackend {
         }
         Optional<AiWorkspaceConfig.ToolDefinition> toolOpt = findMcpGatewayTool();
         if (toolOpt.isEmpty()) {
-            return new McpGatewayStatus("INTERNAL_STOPPED", null);
+            // MCP Gateway retired: no gateway tool is defined, so the dashboard tile
+            // ({#if mcpGateway}) is hidden by returning null.
+            return null;
         }
         CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(toolOpt.get().name());
         if (list == null || list.isEmpty()) {
@@ -622,6 +589,77 @@ public class JvmBackend implements ServiceBackend {
     // ---------------------------------------------------------------
 
     /**
+     * Decides the launch port for a tool. Package-private for testing.
+     *
+     * <p>Port-range mode: a {@code fixedPort} tool uses its reserved YAML port ({@code def.port()})
+     * when that port is free, otherwise falls forward to the dynamic pool; a non-fixedPort tool
+     * uses the dynamic pool. An explicit {@code port} param (blank = ignored) overrides with the
+     * requested port, falling forward to the next free pool port when it is taken — this is how an
+     * intentional additional instance of a reserved tool is placed. Legacy mode preserves the
+     * original per-tool 100-port window.</p>
+     *
+     * @param def    the tool definition
+     * @param params launch params (may carry a {@code port} override)
+     * @return the port to launch on
+     * @throws ServiceException if no free port is available
+     */
+    int choosePort(AiWorkspaceConfig.ToolDefinition def, Map<String, String> params)
+            throws ServiceException {
+        String requested = params.get("port");
+        Integer rp = (requested != null && !requested.isBlank()) ? parsePort(requested) : null;
+        if (requested != null && !requested.isBlank() && rp == null) {
+            logger.warning("Invalid port '" + requested + "' for " + def.name() + "; ignoring override");
+        }
+
+        if (rangeStart >= 0) {
+            int poolStart = rangeStart + 10;
+            if (rp != null) {
+                return (isPortFree(rp) && !portUsedByInstances(rp))
+                        ? rp : findFreePortInRange(poolStart, rangeEnd);
+            }
+            if (def.fixedPort()) {
+                return isPortFree(def.port()) ? def.port() : findFreePortInRange(poolStart, rangeEnd);
+            }
+            return findFreePortInRange(poolStart, rangeEnd);
+        }
+
+        // Legacy mode (no port-range): unchanged behaviour.
+        CopyOnWriteArrayList<ProcessSupervisor> list =
+            instances.getOrDefault(def.name(), new CopyOnWriteArrayList<>());
+        if (def.fixedPort()) {
+            if (!isPortFree(def.port())) {
+                throw new ServiceException(def.name() + " requires fixed port :" + def.port()
+                    + " but the port is already in use. Free the port before starting " + def.name() + ".");
+            }
+            return def.port();
+        }
+        if (rp != null) {
+            return (isPortFree(rp) && !portUsedByInstances(rp)) ? rp : findFreePort(rp, list);
+        }
+        return findFreePort(def.port(), list);
+    }
+
+    /**
+     * Returns a READY instance of {@code toolName} listening on {@code port}, or {@code null}.
+     * Basis of the reserved-port reuse in {@link #startService}. Package-private for testing.
+     */
+    ProcessSupervisor readyInstanceOn(String toolName, int port) {
+        CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(toolName);
+        if (list == null) return null;
+        return list.stream()
+            .filter(s -> s.getPort() == port && s.getState() == SessionState.READY)
+            .findFirst().orElse(null);
+    }
+
+    /**
+     * Returns whether no process is listening on {@code port}. Package-private test seam:
+     * tests override this to make port decisions deterministic without touching the OS.
+     */
+    boolean isPortFree(int port) {
+        return findPidByPort(port) < 0;
+    }
+
+    /**
      * Port-range mode: finds the first free port in [start, end] across all tool instances.
      */
     private int findFreePortInRange(int start, int end) throws ServiceException {
@@ -633,7 +671,7 @@ public class JvmBackend implements ServiceBackend {
 
         for (int port = start; port <= end; port++) {
             if (usedPorts.contains(port)) continue;
-            if (findPidByPort(port) < 0) return port;
+            if (isPortFree(port)) return port;
         }
         throw new ServiceException("No free port in range " + start + "-" + end);
     }
@@ -649,13 +687,9 @@ public class JvmBackend implements ServiceBackend {
 
         for (int port = basePort; port < basePort + 100; port++) {
             if (usedPorts.contains(port)) continue;
-            if (findPidByPort(port) < 0) return port;
+            if (isPortFree(port)) return port;
         }
         throw new ServiceException("No free port found in range " + basePort + "-" + (basePort + 99));
-    }
-
-    private boolean isPortAvailable(int port) {
-        return findPidByPort(port) < 0;
     }
 
     /** @return true if any live instance (any tool) already holds this port. */
@@ -794,7 +828,7 @@ public class JvmBackend implements ServiceBackend {
     }
 
     private SessionView stoppedView(AiWorkspaceConfig.ToolDefinition tool) {
-        int port = (rangeStart >= 0 && tool.fixedPort()) ? rangeStart + 1 : tool.port();
+        int port = tool.port();
         return new SessionView(
             tool.name(), port, tool.name(), "",
             SessionState.STOPPED, null, Map.of(), "", List.of(), tool.github()

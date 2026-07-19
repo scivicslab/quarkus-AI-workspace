@@ -23,4 +23,4 @@ done
 # Chain to the base image's CA-cert entrypoint, then run the portal (jar lives at /app).
 # -Duser.home makes PluginLoader (user.home/works) and the file browser use the NFS-mounted ~/works.
 exec /__cacert_entrypoint.sh java -Duser.home=/home/devteam \
-    -Dservice.portal.port-range=28000-28019 -jar /app/service-portal.jar
+    -Dservice.portal.port-range=28000-28099 -jar /app/service-portal.jar

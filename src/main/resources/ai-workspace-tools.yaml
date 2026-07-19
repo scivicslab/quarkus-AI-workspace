@@ -39,10 +39,12 @@ tools:
   - name: html-saurus
     jar: html-saurus.jar
     github: scivicslab/html-saurus
-    port: 28110
+    port: 28001          # reserved fixed port (search service; reused if already running)
+    fixedPort: true
     args: ["${HOME}/works", "--portal-mode", "--serve", "--port", "${PORT}"]
     params:
       - {key: dir, label: "Document Root", type: dir, default: "${HOME}/works", argPos: 0}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: turing-workflow-editor
     jar: turing-workflow-editor.jar
@@ -55,10 +57,12 @@ tools:
   - name: code-raptor
     jar: code-raptor.jar
     github: scivicslab/code-raptor
-    port: 28130
+    port: 28002          # reserved fixed port (search service; reused if already running)
+    fixedPort: true
     singleInstance: true
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: Turing-workflow-plugins
     github: scivicslab/Turing-workflow-plugins
