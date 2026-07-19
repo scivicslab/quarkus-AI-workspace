@@ -48,8 +48,9 @@ class ToolRegistryLoaderTest {
     @Test void html_saurus_args_and_argpos() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "html-saurus");
         assertEquals(List.of("${HOME}/works", "--portal-mode", "--serve", "--port", "${PORT}"), e.args());
-        assertEquals(1, e.params().size());
+        assertEquals(2, e.params().size(), "html-saurus has a Document Root selector and a port field");
         assertEquals(0, e.params().get(0).argPos(), "Document Root replaces args[0]");
+        assertEquals("port", e.params().get(1).key());
     }
 
     @Test void turing_editor_jvmargs() {
@@ -63,11 +64,12 @@ class ToolRegistryLoaderTest {
         assertTrue(e.singleInstance());
         assertEquals("scivicslab/code-raptor", e.githubRepo());
         assertTrue(e.args().isEmpty());
-        assertEquals(1, e.params().size(), "code-raptor has a Working Directory selector");
+        assertEquals(2, e.params().size(), "code-raptor has a Working Directory selector and a port field");
         AiWorkspaceConfig.ParamDefinition wd = e.params().get(0);
         assertEquals("workdir", wd.key());
         assertEquals("dir", wd.type());
         assertEquals("code.raptor.works-dir", wd.jvmProp());
+        assertEquals("port", e.params().get(1).key());
     }
 
     @Test void library_entry_flagged() {

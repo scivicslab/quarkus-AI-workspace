@@ -57,8 +57,8 @@ public class SnapshotBuildService {
      * ({@code ~/.m2}). Set this to a path on persistent storage (e.g. an NFS-backed {@code ~/works/.m2})
      * so the dependency cache survives Pod re-creation; otherwise each fresh Pod re-downloads everything.
      */
-    @ConfigProperty(name = "ai-workspace.snapshot.maven-repo-local", defaultValue = "")
-    String mavenRepoLocal;
+    @ConfigProperty(name = "ai-workspace.snapshot.maven-repo-local")
+    Optional<String> mavenRepoLocal = Optional.empty();
 
     /** Root directory holding one working checkout per repository. */
     @ConfigProperty(name = "ai-workspace.snapshot.build-dir",
@@ -208,8 +208,8 @@ public class SnapshotBuildService {
         // re-creation (e.g. an NFS-backed ~/works/.m2). Empty -> Maven's default ~/.m2.
         java.util.List<String> cmd = new java.util.ArrayList<>(
                 java.util.List.of(mvnCommand, "install", "-DskipITs", "-B"));
-        if (mavenRepoLocal != null && !mavenRepoLocal.isBlank()) {
-            cmd.add("-Dmaven.repo.local=" + mavenRepoLocal.trim());
+        if (mavenRepoLocal.isPresent() && !mavenRepoLocal.get().isBlank()) {
+            cmd.add("-Dmaven.repo.local=" + mavenRepoLocal.get().trim());
         }
         job.append("Running " + String.join(" ", cmd)
                 + " (unit tests run; integration tests skipped)");
