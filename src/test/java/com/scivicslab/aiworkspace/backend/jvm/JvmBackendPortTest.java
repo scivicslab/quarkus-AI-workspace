@@ -33,7 +33,7 @@ class JvmBackendPortTest {
 
     @BeforeEach
     void setUp() {
-        System.setProperty("service.portal.port-range", "28000-28099");
+        System.setProperty("ai-workspace.port-range", "28000-28099");
         backend = new TestBackend();
         // config.jvm()==null makes initialize() set the range then return before the port scan.
         backend.initialize(AiWorkspaceConfig.defaultConfig());
@@ -41,7 +41,7 @@ class JvmBackendPortTest {
 
     @AfterEach
     void tearDown() {
-        System.clearProperty("service.portal.port-range");
+        System.clearProperty("ai-workspace.port-range");
     }
 
     private static AiWorkspaceConfig.ToolDefinition tool(String name, int port, boolean fixedPort) {

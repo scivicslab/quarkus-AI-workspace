@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  * <h2>Port allocation</h2>
  * <p><b>Port-range mode</b> (recommended for multi-team deployments):</p>
  * <pre>
- *   -Dservice.portal.port-range=28000-28099
+ *   -Dai-workspace.port-range=28000-28099
  *       28000       → quarkus-AI-workspace dashboard (rangeStart)
  *       28001-28009 → reserved fixed ports for search / knowledge services
  *                     (each fixedPort tool uses its own YAML port; reused if already running)
@@ -67,14 +67,14 @@ public class JvmBackend implements ServiceBackend {
         this.config = config;
         this.accessHost = config.accessHost() != null ? config.accessHost() : "localhost";
 
-        String portRange = System.getProperty("service.portal.port-range", "").trim();
+        String portRange = System.getProperty("ai-workspace.port-range", "").trim();
         if (!portRange.isBlank()) {
             try {
                 String[] parts = portRange.split("-");
                 rangeStart = Integer.parseInt(parts[0].trim());
                 rangeEnd   = Integer.parseInt(parts[1].trim());
             } catch (Exception e) {
-                logger.warning("Invalid service.portal.port-range '" + portRange + "' — deriving from http.port");
+                logger.warning("Invalid ai-workspace.port-range '" + portRange + "' — deriving from http.port");
                 rangeStart = -1;
             }
         }

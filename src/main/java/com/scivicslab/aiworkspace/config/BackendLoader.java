@@ -37,7 +37,7 @@ public class BackendLoader {
     }
 
     static AiWorkspaceConfig toConfig(List<ToolRegistryEntry> entries) {
-        String accessHost = System.getProperty("service.portal.access.host");
+        String accessHost = System.getProperty("ai-workspace.access.host");
         List<AiWorkspaceConfig.ToolDefinition> toolDefs = entries.stream()
             .map(BackendLoader::toToolDef)
             .toList();

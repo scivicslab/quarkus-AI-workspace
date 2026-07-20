@@ -10,7 +10,7 @@ RUN apt-get update \
 # The image tag, baked in at build time so the running portal can show its exact build in the header.
 # Pass with: docker build --build-arg IMAGE_TAG=<tag> ...
 ARG IMAGE_TAG=dev
-ENV SERVICE_PORTAL_IMAGE_TAG=${IMAGE_TAG}
+ENV AI_WORKSPACE_IMAGE_TAG=${IMAGE_TAG}
 
 # The AI Workspace discovers tools in $HOME/works and the k8s-pups pod mounts the user's persistent
 # NFS at /home/devteam/works, so HOME must be /home/devteam for the two to coincide. Own /home/devteam
@@ -24,7 +24,7 @@ RUN mkdir -p /home/devteam/works && chown -R 1000:1000 /home/devteam
 
 # Tool uber-jars bundled in the image (at /app). pod-entrypoint.sh seeds them into $HOME/works on first
 # launch so tools show as acquired (matching a normal host ~/works); the portal jar runs from /app.
-COPY service-portal.jar         /app/service-portal.jar
+COPY ai-workspace.jar         /app/ai-workspace.jar
 COPY quarkus-chat-ui.jar        /app/quarkus-chat-ui.jar
 COPY quarkus-chat-ui3.jar       /app/quarkus-chat-ui3.jar
 COPY turing-workflow-editor.jar /app/turing-workflow-editor.jar

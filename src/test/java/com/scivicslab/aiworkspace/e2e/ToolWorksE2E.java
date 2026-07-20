@@ -73,7 +73,7 @@ class ToolWorksE2E {
         }
 
         // Scenario 2: verify chat-ui was launched with correct per-tool MCP URL.
-        // Service-portal's own log contains the "Executing:" line showing the exact command.
+        // AI-workspace's own log contains the "Executing:" line showing the exact command.
         // The MCP URL must be per-tool (http://localhost:<chatUiPort>/mcp), NOT /mcp/_all.
         String log = Files.readString(portal.logFile().toPath());
         String expectedMcpUrl = "http://localhost:" + chatUiPort + "/mcp";

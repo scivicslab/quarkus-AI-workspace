@@ -47,7 +47,7 @@ public class AiWorkspaceMain implements QuarkusApplication {
     private static final String HELP_DETAILS =
         "Startup options (passed as -D JVM system properties):\n"
         + "\n"
-        + "  -Dservice.portal.access.host=<host>\n"
+        + "  -Dai-workspace.access.host=<host>\n"
         + "      Hostname used in dashboard tool links.\n"
         + "      Default: localhost\n"
         + "\n"
@@ -76,7 +76,7 @@ public class AiWorkspaceMain implements QuarkusApplication {
 
         void onStart(@Observes StartupEvent e) {
             String httpPort = System.getProperty("quarkus.http.port", "28000");
-            String accessHost = System.getProperty("service.portal.access.host", "localhost");
+            String accessHost = System.getProperty("ai-workspace.access.host", "localhost");
 
             String sep = "━".repeat(54);
             System.out.println(sep);

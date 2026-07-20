@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Reads {@code service.portal.port-range} (e.g. "28000-28019") and exposes
+ * Reads {@code ai-workspace.port-range} (e.g. "28000-28019") and exposes
  * {@code quarkus.http.port} as the range start so that a single JVM property
  * is sufficient to assign both the dashboard port and the tool port pool.
  *
@@ -18,7 +18,7 @@ public class PortRangeConfigSource implements ConfigSource {
     private final Map<String, String> properties;
 
     public PortRangeConfigSource() {
-        String range = System.getProperty("service.portal.port-range", "").trim();
+        String range = System.getProperty("ai-workspace.port-range", "").trim();
         Map<String, String> props = Map.of();
         if (!range.isBlank()) {
             try {

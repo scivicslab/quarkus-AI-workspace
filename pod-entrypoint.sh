@@ -1,5 +1,5 @@
 #!/bin/sh
-# k8s-pups pod entrypoint for the AI Workspace (service-portal).
+# k8s-pups pod entrypoint for the AI Workspace (ai-workspace).
 #
 # The pod mounts the user's persistent NFS at $HOME/works (HOME=/home/devteam, set in the image).
 # The tool uber-jars are baked into the image at /app but the app discovers tools in $HOME/works, so
@@ -9,7 +9,7 @@ set -e
 
 # The JVM derives user.home from /etc/passwd (getpwuid), NOT the HOME env var, so we pin it explicitly
 # with -Duser.home below. Keep this path in sync with that flag and with the pod's NFS mount point
-# (ServicePortalPlugin.userDataMountPath = /home/devteam/works).
+# (AiWorkspacePlugin.userDataMountPath = /home/devteam/works).
 WORKS=/home/devteam/works
 mkdir -p "$WORKS"
 
@@ -23,4 +23,4 @@ done
 # Chain to the base image's CA-cert entrypoint, then run the portal (jar lives at /app).
 # -Duser.home makes PluginLoader (user.home/works) and the file browser use the NFS-mounted ~/works.
 exec /__cacert_entrypoint.sh java -Duser.home=/home/devteam \
-    -Dservice.portal.port-range=28000-28099 -jar /app/service-portal.jar
+    -Dai-workspace.port-range=28000-28099 -jar /app/ai-workspace.jar

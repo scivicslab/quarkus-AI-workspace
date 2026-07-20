@@ -20,12 +20,12 @@ import java.util.Optional;
  *                    (same naming convention as production ai-workspace.yaml)
  *
  * System properties:
- *   service.portal.jar  — path to the quarkus-AI-workspace uber-JAR
+ *   ai-workspace.jar  — path to the quarkus-AI-workspace uber-JAR
  *                         (default: auto-detected from target/quarkus-AI-workspace-*-runner.jar)
  */
 public class AiWorkspaceProcess {
 
-    private static final String JAR_PROP = "service.portal.jar";
+    private static final String JAR_PROP = "ai-workspace.jar";
 
     private static String resolveDefaultJar() {
         String explicit = System.getProperty(JAR_PROP);
@@ -70,7 +70,7 @@ public class AiWorkspaceProcess {
         File logFile = new File(System.getProperty("java.io.tmpdir"),
                 "quarkus-ai-workspace-" + port + ".log");
 
-        // Service-portal resolves relative tool JAR paths against its working directory.
+        // AI-workspace resolves relative tool JAR paths against its working directory.
         // Use TEST_JARS_DIR if provided so that tools are found correctly.
         String jarsDir = extraEnv.getOrDefault("TEST_JARS_DIR",
                 Path.of(System.getProperty("user.home"), "works").toString());

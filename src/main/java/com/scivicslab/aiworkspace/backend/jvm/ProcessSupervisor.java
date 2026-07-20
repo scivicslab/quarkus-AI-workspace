@@ -596,7 +596,7 @@ public class ProcessSupervisor {
         String mcpUrl = "http://localhost:" + externalPort() + "/mcp";
         String initBody = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
             + "\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},"
-            + "\"clientInfo\":{\"name\":\"service-portal\",\"version\":\"1.0\"}}}";
+            + "\"clientInfo\":{\"name\":\"ai-workspace\",\"version\":\"1.0\"}}}";
         try {
             HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(mcpUrl))
