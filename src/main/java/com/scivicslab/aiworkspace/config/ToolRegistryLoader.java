@@ -57,7 +57,9 @@ public final class ToolRegistryLoader {
                 strList(entry.get("args")),
                 strList(entry.get("jvmArgs")),
                 parseParams(entry.get("params")),
-                str(entry.get("gatewayMcpProp"))
+                str(entry.get("gatewayMcpProp")),
+                strList(entry.get("dependsOn")),
+                strList(entry.get("modules"))
             ));
         }
         logger.info("Loaded tool registry: " + result.size() + " entries from ai-workspace-tools.yaml");

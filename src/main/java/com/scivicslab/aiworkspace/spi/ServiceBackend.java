@@ -20,13 +20,6 @@ public interface ServiceBackend {
     void initialize(AiWorkspaceConfig config);
 
     /**
-     * Provides the list of tools that are in the registry but not yet downloaded.
-     * These are rendered as "Download Latest only" tiles in the dashboard.
-     * Default: no-op (backends that don't support this concept ignore it).
-     */
-    default void setNotAcquiredTools(List<ToolView> tools) {}
-
-    /**
      * Launch a new instance of the named tool with the given parameters.
      * The same tool can be launched multiple times with different parameters;
      * each instance gets a unique port.

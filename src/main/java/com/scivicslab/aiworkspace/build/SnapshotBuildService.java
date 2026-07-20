@@ -4,6 +4,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import com.scivicslab.aiworkspace.config.ToolRegistryEntry;
+import com.scivicslab.aiworkspace.config.ToolRegistryLoader;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -11,10 +14,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -137,8 +145,9 @@ public class SnapshotBuildService {
 
     private void run(BuildJob job, String githubRepo, String jarFileName) {
         try {
+            buildDependencies(job);
             Path repoDir = cloneOrUpdate(job, githubRepo);
-            build(job, repoDir);
+            build(job, repoDir, false, List.of()); // the tool itself is tested (project policy), full build
 
             if (jarFileName != null && !jarFileName.isBlank()) {
                 job.step = "locating jar";
@@ -169,6 +178,65 @@ public class SnapshotBuildService {
         }
     }
 
+    /**
+     * Builds this tool's declared dependency libraries — transitively and in dependency order —
+     * installing each to {@code ~/.m2} before the tool itself is built. This is what makes Build
+     * Snapshot one-touch: an internal {@code -SNAPSHOT} dependency that is not published to Maven
+     * Central is produced from source here instead of failing the tool's own dependency resolution.
+     */
+    private void buildDependencies(BuildJob job) throws Exception {
+        List<ToolRegistryEntry> ordered = dependencyBuildOrder(job.tool);
+        if (ordered.isEmpty()) return;
+        job.append("Dependencies to build first (in order): "
+            + ordered.stream().map(ToolRegistryEntry::name).toList());
+        for (ToolRegistryEntry dep : ordered) {
+            if (dep.githubRepo() == null || dep.githubRepo().isBlank()) {
+                job.append("── Skipping dependency " + dep.name() + ": no github repo configured");
+                continue;
+            }
+            job.step = "dependency: " + dep.name();
+            job.append("────── Building dependency: " + dep.name() + " (" + dep.githubRepo() + ")");
+            Path depDir = cloneOrUpdate(job, dep.githubRepo());
+            build(job, depDir, true, dep.modules()); // library: mvn install to ~/.m2 (tests skipped, only needed modules)
+        }
+        job.append("────── Dependencies ready; building " + job.tool);
+    }
+
+    /**
+     * Returns the transitive dependency closure of {@code toolName} in build order (each dependency
+     * before the entry that needs it), excluding the tool itself. Entries appear once; dependency
+     * cycles are broken; names not present in the registry are skipped with a warning.
+     */
+    private List<ToolRegistryEntry> dependencyBuildOrder(String toolName) {
+        Map<String, ToolRegistryEntry> byName = new LinkedHashMap<>();
+        for (ToolRegistryEntry e : ToolRegistryLoader.load()) {
+            byName.put(e.name(), e);
+        }
+        List<ToolRegistryEntry> ordered = new ArrayList<>();
+        visitDependencies(toolName, byName, new HashSet<>(), new HashSet<>(), ordered, true);
+        return ordered;
+    }
+
+    private void visitDependencies(String name, Map<String, ToolRegistryEntry> byName,
+            Set<String> done, Set<String> onPath, List<ToolRegistryEntry> ordered, boolean isRoot) {
+        if (done.contains(name)) return;
+        if (!onPath.add(name)) {
+            logger.warning("Dependency cycle at '" + name + "'; breaking the cycle");
+            return;
+        }
+        ToolRegistryEntry e = byName.get(name);
+        if (e == null) {
+            if (!isRoot) logger.warning("Unknown dependency '" + name + "' — skipping");
+        } else {
+            for (String dep : e.dependsOn()) {
+                visitDependencies(dep, byName, done, onPath, ordered, false);
+            }
+            if (!isRoot) ordered.add(e); // post-order: dependencies precede dependents; exclude the root
+        }
+        onPath.remove(name);
+        done.add(name);
+    }
+
     private Path cloneOrUpdate(BuildJob job, String githubRepo) throws Exception {
         Path buildRoot = Path.of(expand(buildDirTemplate));
         Files.createDirectories(buildRoot);
@@ -195,7 +263,7 @@ public class SnapshotBuildService {
         return repoDir;
     }
 
-    private void build(BuildJob job, Path repoDir) throws Exception {
+    private void build(BuildJob job, Path repoDir, boolean skipTests, List<String> modules) throws Exception {
         job.step = "clean target";
         // `mvn clean` is unreliable in these projects; remove target dirs directly.
         try (Stream<Path> tree = Files.walk(repoDir)) {
@@ -208,13 +276,24 @@ public class SnapshotBuildService {
         // re-creation (e.g. an NFS-backed ~/works/.m2). Empty -> Maven's default ~/.m2.
         java.util.List<String> cmd = new java.util.ArrayList<>(
                 java.util.List.of(mvnCommand, "install", "-DskipITs", "-B"));
+        // Build only the requested modules (plus the reactor deps they need, via -am) when the
+        // library declares them. A multi-module library may contain sibling modules a consumer does
+        // not need and that may not build on their own, so building the whole reactor would fail.
+        if (modules != null && !modules.isEmpty()) {
+            cmd.add("-pl");
+            cmd.add(String.join(",", modules));
+            cmd.add("-am");
+        }
+        // Dependency libraries are built only to install their artifacts to ~/.m2; running their
+        // full unit-test suites (some of which are environment-dependent, e.g. plugin-ssh) is not
+        // the consumer's job and would let an unrelated dependency's test failure block the tool.
+        // The tool itself is still tested (per project policy).
+        if (skipTests) cmd.add("-DskipTests");
         if (mavenRepoLocal.isPresent() && !mavenRepoLocal.get().isBlank()) {
             cmd.add("-Dmaven.repo.local=" + mavenRepoLocal.get().trim());
         }
         job.append("Running " + String.join(" ", cmd)
-                + " (unit tests run; integration tests skipped)");
-        // Unit tests run (no -DskipTests, per project policy); integration tests
-        // need a k8s cluster and are skipped here.
+                + (skipTests ? " (tests skipped: dependency build)" : " (unit tests run; integration tests skipped)"));
         exec(job, repoDir, cmd.toArray(new String[0]));
     }
 

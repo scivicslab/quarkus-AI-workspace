@@ -6,6 +6,11 @@
 #   github         "owner/repo" for Download Latest / Build Snapshot (omit if not on GitHub)
 #   port           default launch port
 #   library        true = Maven library installed to ~/.m2 (no runnable jar, no tile)
+#   dependsOn      names of registry entries to build (mvn install to ~/.m2) before this one,
+#                  so Build Snapshot resolves internal -SNAPSHOT deps that are not on Maven Central
+#   modules        for a multi-module library, the Maven modules to build (mvn install -pl … -am);
+#                  omit to build the whole reactor. Use it to skip sibling modules a consumer does
+#                  not need (and that may not build on their own).
 #   autoStart      start on workspace launch (default false)
 #   fixedPort      do not allocate from the dynamic pool (default false)
 #   singleInstance only one running instance allowed (default false)
@@ -19,6 +24,7 @@ tools:
   - name: quarkus-chat-ui
     jar: quarkus-chat-ui.jar
     github: scivicslab/quarkus-chat-ui
+    dependsOn: [turing-workflow, Turing-workflow-plugins]
     port: 28100
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
@@ -31,6 +37,7 @@ tools:
   - name: quarkus-chat-ui3
     jar: quarkus-chat-ui3.jar
     github: scivicslab/quarkus-chat-ui3
+    dependsOn: [turing-workflow, Turing-workflow-plugins]
     port: 28140
     params:
       - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chatui3.vllm-base-url"}
@@ -64,6 +71,16 @@ tools:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
+  - name: pluggable-cli
+    github: scivicslab/pluggable-cli
+    library: true
+
+  - name: turing-workflow
+    github: scivicslab/Turing-workflow
+    library: true
+
   - name: Turing-workflow-plugins
     github: scivicslab/Turing-workflow-plugins
     library: true
+    dependsOn: [turing-workflow, pluggable-cli]
+    modules: [plugin-llm, plugin-log-db, plugin-codedoc]

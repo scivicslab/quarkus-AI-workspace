@@ -61,13 +61,6 @@ public class JvmBackend implements ServiceBackend {
     private volatile String externalMcpGatewayUrl;
 
     /** Tools in the registry that have not yet been downloaded to ~/works/. */
-    private List<ToolView> notAcquiredTools = List.of();
-
-    @Override
-    public void setNotAcquiredTools(List<ToolView> tools) {
-        this.notAcquiredTools = tools;
-        logger.info("Not-acquired tools: " + tools.stream().map(ToolView::name).toList());
-    }
 
     @Override
     public void initialize(AiWorkspaceConfig config) {
@@ -531,7 +524,8 @@ public class JvmBackend implements ServiceBackend {
             }
         }
 
-        launchTools.addAll(notAcquiredTools);
+        // Every tool comes from the registry (via config) in declaration order, so launchTools is
+        // already ordered; jar presence no longer splits or reshuffles the tiles.
         return new DashboardModel(managementServices, activeSessions, launchTools, buildMcpGatewayStatus());
     }
 
@@ -836,9 +830,42 @@ public class JvmBackend implements ServiceBackend {
     }
 
     private ToolView toToolView(AiWorkspaceConfig.ToolDefinition tool) {
+        return new ToolView(tool.name(), tool.name(), "", buildParams(tool.params()),
+                            tool.github() != null ? tool.github() : "", liveStatus(tool));
+    }
+
+    /**
+     * Live status of a tool, recomputed on every render (never frozen at startup): a running
+     * instance wins and shows its port(s); otherwise whether the tool's jar is present in the
+     * launch directory (resolved exactly as at launch time). So a freshly built tool flips to
+     * "準備完了" and becomes launchable without a restart.
+     */
+    private String liveStatus(AiWorkspaceConfig.ToolDefinition tool) {
+        CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
+        if (list != null) {
+            List<Integer> ports = list.stream()
+                .filter(s -> s.getState() == SessionState.READY || s.getState() == SessionState.STARTING)
+                .map(ProcessSupervisor::getPort)
+                .toList();
+            if (!ports.isEmpty()) {
+                return "実行中: " + ports.stream().map(p -> ":" + p).collect(Collectors.joining(", "));
+            }
+        }
+        String resolved = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
+        boolean present = resolved != null && !resolved.isBlank() && new java.io.File(resolved).exists();
+        return present ? "準備完了" : "未取得";
+    }
+
+    /**
+     * Builds the UI param models (with {@code ${VAR}} defaults expanded) from the registry param
+     * specs. Shared by acquired tiles (here) and not-yet-downloaded tiles (BackendLoader) so the
+     * launch form is identical whether or not the tool's jar is present in ~/works — only the
+     * available actions (Launch vs. Download/Build) differ.
+     */
+    public static List<ParamDefinition> buildParams(List<AiWorkspaceConfig.ParamDefinition> src) {
         List<ParamDefinition> params = new ArrayList<>();
-        if (tool.params() != null) {
-            for (AiWorkspaceConfig.ParamDefinition p : tool.params()) {
+        if (src != null) {
+            for (AiWorkspaceConfig.ParamDefinition p : src) {
                 List<ParamDefinition.ParamOption> options = p.options() == null ? List.of()
                     : p.options().stream()
                         .map(o -> new ParamDefinition.ParamOption(o.value(), o.label()))
@@ -850,6 +877,6 @@ public class JvmBackend implements ServiceBackend {
                 ));
             }
         }
-        return new ToolView(tool.name(), tool.name(), "", params, tool.github() != null ? tool.github() : "", true);
+        return params;
     }
 }

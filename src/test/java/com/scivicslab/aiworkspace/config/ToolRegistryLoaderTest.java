@@ -25,9 +25,9 @@ class ToolRegistryLoaderTest {
                 .orElseThrow(() -> new AssertionError("missing entry: " + name));
     }
 
-    @Test void all_six_entries_load() {
+    @Test void all_entries_load() {
         List<ToolRegistryEntry> all = ToolRegistryLoader.load();
-        assertEquals(6, all.size(), "expected all registry entries to parse");
+        assertEquals(8, all.size(), "expected all registry entries to parse");
     }
 
     @Test void chat_ui_full_form() {
@@ -76,6 +76,30 @@ class ToolRegistryLoaderTest {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "Turing-workflow-plugins");
         assertTrue(e.library());
         assertNull(e.jarFileName());
+    }
+
+    @Test void turing_workflow_core_is_a_library() {
+        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "turing-workflow");
+        assertTrue(e.library());
+        assertNull(e.jarFileName());
+        assertEquals("scivicslab/Turing-workflow", e.githubRepo());
+    }
+
+    @Test void dependsOn_declares_build_order() {
+        List<ToolRegistryEntry> all = ToolRegistryLoader.load();
+        assertEquals(List.of("turing-workflow", "Turing-workflow-plugins"),
+                byName(all, "quarkus-chat-ui3").dependsOn(),
+                "chat-ui3 must build turing-workflow then the plugins before itself");
+        assertEquals(List.of("turing-workflow", "pluggable-cli"),
+                byName(all, "Turing-workflow-plugins").dependsOn(),
+                "the plugins compile against turing-workflow and pluggable-cli, so both build first");
+        assertTrue(byName(all, "html-saurus").dependsOn().isEmpty(),
+                "a tool with no declared dependencies has an empty dependsOn");
+        assertEquals(List.of("plugin-llm", "plugin-log-db", "plugin-codedoc"),
+                byName(all, "Turing-workflow-plugins").modules(),
+                "only the plugin modules the tools consume are built (sibling modules may not build)");
+        assertTrue(byName(all, "turing-workflow").modules().isEmpty(),
+                "a single-module library builds its whole reactor");
     }
 
     @Test void chat_ui3_present_and_decoupled_shape() {

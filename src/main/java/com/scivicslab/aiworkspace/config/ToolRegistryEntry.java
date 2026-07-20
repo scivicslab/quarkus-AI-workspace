@@ -27,5 +27,7 @@ public record ToolRegistryEntry(
     List<String> args,
     List<String> jvmArgs,
     List<AiWorkspaceConfig.ParamDefinition> params,
-    String gatewayMcpProp
+    String gatewayMcpProp,
+    List<String> dependsOn,
+    List<String> modules
 ) {}

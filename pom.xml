@@ -144,6 +144,31 @@
     </build>
 
     <profiles>
+        <!--
+          Opt-in profile to run the manual end-to-end driver SnapshotBuildE2E.main.
+          It is NEVER active during a normal build (`mvn install`); activate it explicitly:
+
+              mvn -Pe2e-snapshot-build test-compile exec:java
+
+          The class is a plain main() (not a *IT/*Test), so it clones GitHub and runs a real
+          Maven build only when you ask it to.
+        -->
+        <profile>
+            <id>e2e-snapshot-build</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <configuration>
+                            <mainClass>com.scivicslab.aiworkspace.build.SnapshotBuildE2E</mainClass>
+                            <classpathScope>test</classpathScope>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>native</id>
             <activation>

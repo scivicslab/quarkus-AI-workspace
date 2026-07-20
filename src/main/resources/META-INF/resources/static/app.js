@@ -554,6 +554,7 @@
             if (data.success) {
                 status.textContent = '✓ ' + (data.version || 'updated');
                 status.style.color = 'var(--accent-green)';
+                markReady(name);
             } else {
                 status.textContent = '✗ ' + (data.error || 'failed');
                 status.style.color = 'var(--accent-red)';
@@ -563,9 +564,16 @@
             status.style.color = 'var(--accent-red)';
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Download Latest';
+            btn.textContent = 'Download Release';
         }
     };
+
+    // The tool's jar is now present, so flip the tile status to launchable without waiting for a
+    // reload (the server computes the same status live on the next render).
+    function markReady(name) {
+        const ts = document.getElementById('tool-status-' + name);
+        if (ts) ts.textContent = '準備完了';
+    }
 
     // Build the tool from GitHub source (clone → mvn install → copy uber-jar to ~/works).
     // The build runs on the server as a background job; we poll for its state.
@@ -614,6 +622,7 @@
                 status.textContent = '✓ built ' + (data.file || 'snapshot');
                 status.style.color = 'var(--accent-green)';
                 status.title = data.log || '';
+                markReady(name);
                 return;
             } else {
                 status.textContent = '✗ ' + (data.error || 'build failed');

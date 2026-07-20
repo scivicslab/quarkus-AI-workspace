@@ -1,15 +1,10 @@
 package com.scivicslab.aiworkspace.config;
 
 import com.scivicslab.aiworkspace.backend.jvm.JvmBackend;
-import com.scivicslab.aiworkspace.model.ToolView;
 import com.scivicslab.aiworkspace.spi.ServiceBackend;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 /**
  * Builds the ServiceBackend directly from the tool registry (ai-workspace-tools.yaml):
@@ -26,29 +21,18 @@ public class BackendLoader {
 
     public static ServiceBackend loadBackend() {
         List<ToolRegistryEntry> registry = ToolRegistryLoader.load();
-        Path worksDir = Path.of(System.getProperty("user.home"), "works");
-
-        List<ToolRegistryEntry> acquired = registry.stream()
-            .filter(e -> !e.library())   // library entries install to ~/.m2; no jar to launch
-            .filter(e -> e.jarFileName() != null && Files.exists(worksDir.resolve(e.jarFileName())))
+        // Every non-library entry is a launchable tool tile, in registry order. Whether its jar is
+        // actually present in ~/works — and therefore whether it can run right now — is decided
+        // live at render/launch time (see JvmBackend), not frozen here, so a freshly built tool
+        // becomes launchable without a restart.
+        List<ToolRegistryEntry> tools = registry.stream()
+            .filter(e -> !e.library())   // library entries install to ~/.m2; no runnable jar
             .toList();
-        logger.info("Acquired tools: " + acquired.size() + " / Registry: " + registry.size());
+        logger.info("Launchable tools: " + tools.size() + " / Registry: " + registry.size());
 
-        Set<String> acquiredNames = acquired.stream()
-            .map(ToolRegistryEntry::name)
-            .collect(Collectors.toSet());
-
-        List<ToolView> notAcquired = registry.stream()
-            .filter(e -> !acquiredNames.contains(e.name()))
-            .filter(e -> !e.library())   // library entries have no jar; don't show as unacquired tiles
-            .map(e -> new ToolView(e.name(), e.name(), "", List.of(),
-                                   e.githubRepo() != null ? e.githubRepo() : "", false))
-            .toList();
-
-        AiWorkspaceConfig config = toConfig(acquired);
+        AiWorkspaceConfig config = toConfig(tools);
         ServiceBackend backend = new JvmBackend();
         backend.initialize(config);
-        backend.setNotAcquiredTools(notAcquired);
         return backend;
     }
 

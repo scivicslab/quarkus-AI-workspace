@@ -362,6 +362,7 @@
         }
         .btn-download:hover { background: color-mix(in srgb, var(--accent-green) 12%, transparent); opacity: 1; }
         .download-status { font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.3rem; }
+        .tool-status { font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem; }
         /* ── Tool grid ───────────────────────────────────────── */
         .tool-grid {
             display: grid;
@@ -681,7 +682,8 @@
         {#if !tool.name.equals("mcp-gateway") && !tool.name.equals("quarkus-mcp-gateway")}
         <div class="tool-tile" id="tool-tile-{tool.name}">
             <div class="tool-tile-name">{tool.displayName}</div>
-            {#if tool.acquired}
+            {! Param form is rendered the same whether or not the jar is present, so the tile
+               layout never changes on jar presence — only the actions below differ. !}
             {#for param in tool.params}
             <div class="param-row">
                 <label class="param-label">{param.label}</label>
@@ -706,28 +708,19 @@
                 {/if}
             </div>
             {/for}
+            {#if tool.github}
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
+                <button class="btn btn-download" id="btn-download-{tool.name}"
+                        onclick="downloadTool('{tool.name}')">Download Release</button>
+                <button class="btn btn-download" id="btn-build-{tool.name}"
+                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
+                <span class="download-status" id="download-status-{tool.name}"></span>
+            </div>
+            {/if}
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
                 <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Launch</button>
-                {#if tool.github}
-                <button class="btn btn-download" id="btn-download-{tool.name}"
-                        onclick="downloadTool('{tool.name}')">Download Latest</button>
-                <button class="btn btn-download" id="btn-build-{tool.name}"
-                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
-                <span class="download-status" id="download-status-{tool.name}"></span>
-                {/if}
+                <span class="tool-status" id="tool-status-{tool.name}">{tool.status}</span>
             </div>
-            {#else}
-            <div style="font-size:12px;color:var(--text-secondary);margin:0.4rem 0 0.6rem;">Not yet downloaded</div>
-            {#if tool.github}
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-                <button class="btn btn-download" id="btn-download-{tool.name}"
-                        onclick="downloadTool('{tool.name}')">Download Latest</button>
-                <button class="btn btn-download" id="btn-build-{tool.name}"
-                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
-                <span class="download-status" id="download-status-{tool.name}"></span>
-            </div>
-            {/if}
-            {/if}
         </div>
         {/if}
         {/for}
