@@ -274,8 +274,12 @@ public class SnapshotBuildService {
         job.step = "mvn install";
         // Optionally pin the local repo onto persistent storage so the dependency cache survives Pod
         // re-creation (e.g. an NFS-backed ~/works/.m2). Empty -> Maven's default ~/.m2.
+        // -Dgpg.skip=true: several tools sign artifacts with maven-gpg-plugin on `install` for
+        // Maven Central publishing. A build pod has no signing key, so signing fails (exit 2) even
+        // though compile/package succeed. Build Snapshot only needs the jar installed locally, not
+        // signed, so skip signing.
         java.util.List<String> cmd = new java.util.ArrayList<>(
-                java.util.List.of(mvnCommand, "install", "-DskipITs", "-B"));
+                java.util.List.of(mvnCommand, "install", "-DskipITs", "-B", "-Dgpg.skip=true"));
         // Build only the requested modules (plus the reactor deps they need, via -am) when the
         // library declares them. A multi-module library may contain sibling modules a consumer does
         // not need and that may not build on their own, so building the whole reactor would fail.
