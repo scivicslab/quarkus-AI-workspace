@@ -838,7 +838,7 @@ public class JvmBackend implements ServiceBackend {
      * Live status of a tool, recomputed on every render (never frozen at startup): a running
      * instance wins and shows its port(s); otherwise whether the tool's jar is present in the
      * launch directory (resolved exactly as at launch time). So a freshly built tool flips to
-     * "準備完了" and becomes launchable without a restart.
+     * "Ready" and becomes launchable without a restart.
      */
     private String liveStatus(AiWorkspaceConfig.ToolDefinition tool) {
         CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
@@ -848,12 +848,12 @@ public class JvmBackend implements ServiceBackend {
                 .map(ProcessSupervisor::getPort)
                 .toList();
             if (!ports.isEmpty()) {
-                return "実行中: " + ports.stream().map(p -> ":" + p).collect(Collectors.joining(", "));
+                return "Running: " + ports.stream().map(p -> ":" + p).collect(Collectors.joining(", "));
             }
         }
         String resolved = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
         boolean present = resolved != null && !resolved.isBlank() && new java.io.File(resolved).exists();
-        return present ? "準備完了" : "未取得";
+        return present ? "Ready" : "Not downloaded";
     }
 
     /**

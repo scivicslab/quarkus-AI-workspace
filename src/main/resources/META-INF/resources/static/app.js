@@ -572,7 +572,7 @@
     // reload (the server computes the same status live on the next render).
     function markReady(name) {
         const ts = document.getElementById('tool-status-' + name);
-        if (ts) ts.textContent = '準備完了';
+        if (ts) ts.textContent = 'Ready';
     }
 
     // Build the tool from GitHub source (clone → mvn install → copy uber-jar to ~/works).
