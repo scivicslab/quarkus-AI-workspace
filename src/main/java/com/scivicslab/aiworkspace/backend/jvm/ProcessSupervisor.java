@@ -247,6 +247,11 @@ public class ProcessSupervisor {
             accessUrl = cachedAccessUrl != null ? cachedAccessUrl : urlBuilder.apply(config.name(), port);
         }
 
+        // A "title" launch param (e.g. chat-ui.title) always wins over the freely-editable memo,
+        // so the memo box stays permanently in sync with the title the tool was launched with.
+        String title = launchParams.get("title");
+        String effectiveMemo = (title != null && !title.isBlank()) ? title : memo;
+
         return new SessionView(
             config.name(),
             port,
@@ -255,7 +260,7 @@ public class ProcessSupervisor {
             state,
             accessUrl,
             launchParams,
-            memo,
+            effectiveMemo,
             getRecentLogs(20),
             config.github()
         );

@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Reads {@code ai-workspace.port-range} (e.g. "28000-28019") and exposes
+ * Reads {@code ai-workspace.port-range} (e.g. "28000-28050") and exposes
  * {@code quarkus.http.port} as the range start so that a single JVM property
  * is sufficient to assign both the dashboard port and the tool port pool.
  *

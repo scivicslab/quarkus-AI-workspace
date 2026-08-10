@@ -663,11 +663,20 @@
             {#for line in svc.progressLog}{line}<br>{/for}
         </div>
         {/if}
+        {#if svc.memoIsFromTitle()}
+        <input type="text" class="memo-input"
+               readonly
+               title="Synced with the session title set at launch"
+               value="{svc.memo}"
+               data-tool-name="{svc.toolName}"
+               data-port="{svc.port}">
+        {#else}
         <input type="text" class="memo-input"
                placeholder="Add memo..."
                value="{svc.memo}"
                data-tool-name="{svc.toolName}"
                data-port="{svc.port}">
+        {/if}
     </div>
     {/for}
     </div>
