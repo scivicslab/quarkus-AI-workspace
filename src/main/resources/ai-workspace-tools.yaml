@@ -27,6 +27,7 @@ tools:
     dependsOn: [turing-workflow, Turing-workflow-plugins]
     port: 28100
     params:
+      - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
       - {key: provider, label: "LLM Provider", type: select, default: "${DEFAULT_PROVIDER}", jvmProp: "chat-ui.provider",
          options: [{value: "claude", label: "Claude"}, {value: "codex", label: "Codex (OpenAI)"}, {value: "openai-compat", label: "Local LLM (vLLM)"}]}
@@ -41,6 +42,18 @@ tools:
     port: 28140
     params:
       - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chatui3.vllm-base-url"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
+  - name: chat-ui-with-audit-trail
+    jar: chat-ui-with-audit-trail.jar
+    github: scivicslab/chat-ui-with-audit-trail
+    port: 28030
+    params:
+      # Placeholder: no backend code reads this yet (static console mock stage, see
+      # chat-ui-with-audit-trail's application.properties). Added ahead of time so the launch
+      # form already matches quarkus-chat-ui3's shape; jvmProp follows quarkus-chat-ui's own
+      # "chat-ui.servers" naming since the left panel embeds quarkus-chat-ui's markup verbatim.
+      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: html-saurus
@@ -69,6 +82,16 @@ tools:
     singleInstance: true
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
+  - name: quarkus-gpu-broker
+    jar: quarkus-gpu-broker.jar
+    github: scivicslab/quarkus-gpu-broker
+    port: 28003          # reserved fixed port (GPU broker; reused if already running)
+    fixedPort: true
+    singleInstance: true
+    params:
+      - {key: nodes, label: "Node IPs / CIDR (comma-separated)", type: text, default: "192.168.5.0/26", jvmProp: "broker.nodes"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: pluggable-cli

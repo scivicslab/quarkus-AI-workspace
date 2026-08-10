@@ -30,8 +30,9 @@ import java.util.logging.Logger;
  * <pre>
  *   -Dai-workspace.port-range=28000-28099
  *       28000       → quarkus-AI-workspace dashboard (rangeStart)
- *       28001-28009 → reserved fixed ports for search / knowledge services
- *                     (each fixedPort tool uses its own YAML port; reused if already running)
+ *       28001-28009 → reserved fixed ports for singleton infrastructure services
+ *                     (search/knowledge tools, GPU broker, ...; each fixedPort tool uses its
+ *                     own YAML port; reused if already running)
  *       28010-28099 → dynamic pool for on-demand tools and extra instances
  * </pre>
  * <p><b>Legacy mode</b>: no port-range property; each tool uses its configured port
@@ -82,7 +83,7 @@ public class JvmBackend implements ServiceBackend {
             String httpPort = System.getProperty("quarkus.http.port", "28000").trim();
             try {
                 rangeStart = Integer.parseInt(httpPort);
-                rangeEnd   = rangeStart + 19;
+                rangeEnd   = rangeStart + 50;
             } catch (Exception e) {
                 logger.warning("Could not parse quarkus.http.port '" + httpPort + "' — port-range mode inactive");
                 rangeStart = -1;

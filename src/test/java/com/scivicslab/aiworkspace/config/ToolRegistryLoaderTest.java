@@ -27,7 +27,7 @@ class ToolRegistryLoaderTest {
 
     @Test void all_entries_load() {
         List<ToolRegistryEntry> all = ToolRegistryLoader.load();
-        assertEquals(8, all.size(), "expected all registry entries to parse");
+        assertEquals(10, all.size(), "expected all registry entries to parse");
     }
 
     @Test void chat_ui_full_form() {
@@ -35,14 +35,17 @@ class ToolRegistryLoaderTest {
         assertEquals("quarkus-chat-ui.jar", e.jarFileName());
         assertEquals("scivicslab/quarkus-chat-ui", e.githubRepo());
         assertEquals(28100, e.defaultPort());
-        assertEquals(5, e.params().size(), "chat-ui has 5 form fields");
-        AiWorkspaceConfig.ParamDefinition provider = e.params().get(1);
+        assertEquals(6, e.params().size(), "chat-ui has 6 form fields");
+        AiWorkspaceConfig.ParamDefinition title = e.params().get(0);
+        assertEquals("title", title.key());
+        assertEquals("chat-ui.title", title.jvmProp());
+        AiWorkspaceConfig.ParamDefinition provider = e.params().get(2);
         assertEquals("provider", provider.key());
         assertEquals("select", provider.type());
         assertEquals("chat-ui.provider", provider.jvmProp());
         assertEquals(3, provider.options().size(), "provider select has 3 options");
         assertEquals("claude", provider.options().get(0).value());
-        assertTrue(e.params().get(0).workingDir(), "workdir sets the working directory");
+        assertTrue(e.params().get(1).workingDir(), "workdir sets the working directory");
     }
 
     @Test void html_saurus_args_and_argpos() {
@@ -69,6 +72,19 @@ class ToolRegistryLoaderTest {
         assertEquals("workdir", wd.key());
         assertEquals("dir", wd.type());
         assertEquals("code.raptor.works-dir", wd.jvmProp());
+        assertEquals("port", e.params().get(1).key());
+    }
+
+    @Test void quarkus_gpu_broker_single_instance_with_nodes() {
+        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "quarkus-gpu-broker");
+        assertTrue(e.singleInstance());
+        assertEquals("scivicslab/quarkus-gpu-broker", e.githubRepo());
+        assertEquals(28003, e.defaultPort());
+        assertTrue(e.args().isEmpty());
+        assertEquals(2, e.params().size(), "quarkus-gpu-broker has a Node IPs field and a port field");
+        AiWorkspaceConfig.ParamDefinition nodes = e.params().get(0);
+        assertEquals("nodes", nodes.key());
+        assertEquals("broker.nodes", nodes.jvmProp());
         assertEquals("port", e.params().get(1).key());
     }
 
@@ -111,5 +127,17 @@ class ToolRegistryLoaderTest {
         Optional<AiWorkspaceConfig.ParamDefinition> port =
                 e.params().stream().filter(p -> p.key().equals("port")).findFirst();
         assertNotNull(port.orElse(null));
+    }
+
+    @Test void chat_ui_with_audit_trail_present_and_shape() {
+        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail");
+        assertEquals("chat-ui-with-audit-trail.jar", e.jarFileName());
+        assertEquals("scivicslab/chat-ui-with-audit-trail", e.githubRepo());
+        assertEquals(28030, e.defaultPort());
+        assertTrue(e.dependsOn().isEmpty(), "still a bare Quarkus shell, no turing-workflow dependency yet");
+        assertEquals(2, e.params().size(), "vLLM Endpoint placeholder + port");
+        assertEquals("servers", e.params().get(0).key());
+        assertEquals("chat-ui.servers", e.params().get(0).jvmProp(),
+                "matches quarkus-chat-ui's own property name, since the left panel embeds its markup verbatim");
     }
 }
