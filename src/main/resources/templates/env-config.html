@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workspace — Environment Config</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        :root {
+            --bg-primary:   #1e1e2e;
+            --bg-secondary: #313244;
+            --bg-tertiary:  #45475a;
+            --text-primary: #cdd6f4;
+            --text-secondary: #a6adc8;
+            --accent-blue:  #89b4fa;
+            --accent-green: #a6e3a1;
+            --accent-red:   #f38ba8;
+            --border-color: #585b70;
+            --code-bg:      #181825;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, 'Noto Sans JP', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        a.back { color: var(--accent-blue); text-decoration: none; font-size: 14px; }
+        a.back:hover { text-decoration: underline; }
+        h1 { font-size: 16px; font-weight: 600; }
+        main { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+        p.note {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            line-height: 1.6;
+        }
+        p.path {
+            font-size: 12px;
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            color: var(--text-secondary);
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin-bottom: 14px;
+        }
+        textarea {
+            width: 100%;
+            height: 60vh;
+            background: var(--code-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+        }
+        textarea:focus { border-color: var(--accent-blue); }
+        .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+        .btn {
+            padding: 6px 18px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            background: var(--accent-blue);
+            color: var(--bg-primary);
+        }
+        .btn:hover { opacity: .85; }
+        .btn:disabled { opacity: .5; cursor: default; }
+        #status { font-size: 13px; color: var(--text-secondary); }
+        #status.ok { color: var(--accent-green); }
+        #status.err { color: var(--accent-red); }
+    </style>
+</head>
+<body>
+
+<header>
+    <a class="back" href="/">&larr; Dashboard</a>
+    <h1>Environment Config</h1>
+</header>
+
+<main>
+    <p class="note">
+        Deployment-wide runtime settings shared by every tool launched from this working
+        directory — real node IPs, per-instance capacity overrides, and similar facts about
+        this environment that are not any single tool's own concern (see
+        <code>CapabilityConfig_260810_oo01</code> for the motivating example). Kept out of
+        source repositories on purpose. Editing here overwrites the whole file; each tool
+        reads this only when it starts, so a running tool will not pick up a change until
+        it is restarted.
+    </p>
+    <p class="path" id="config-path">config/application.properties</p>
+    <textarea id="content" spellcheck="false" placeholder="Loading…"></textarea>
+    <div class="actions">
+        <button class="btn" id="save-btn" onclick="save()">Save</button>
+        <span id="status"></span>
+    </div>
+</main>
+
+<script>
+    const textarea = document.getElementById('content');
+    const status = document.getElementById('status');
+    const saveBtn = document.getElementById('save-btn');
+
+    function setStatus(text, cls) {
+        status.textContent = text;
+        status.className = cls || '';
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/env-config/content');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            textarea.value = await res.text();
+            setStatus('');
+        } catch (e) {
+            setStatus('Failed to load: ' + e.message, 'err');
+        }
+    }
+
+    async function save() {
+        saveBtn.disabled = true;
+        setStatus('Saving…');
+        try {
+            const res = await fetch('/env-config/content', {
+                method: 'POST',
+                headers: {'Content-Type': 'text/plain'},
+                body: textarea.value
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            setStatus('Saved. Running tools will pick this up on their next restart.', 'ok');
+        } catch (e) {
+            setStatus('Failed to save: ' + e.message, 'err');
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    load();
+</script>
+</body>
+</html>
