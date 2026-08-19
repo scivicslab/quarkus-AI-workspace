@@ -20,14 +20,18 @@ import jakarta.ws.rs.core.Response;
 
 /**
  * Reads and writes the single environment-wide runtime config file at
- * {@code ${user.dir}/config/application.properties} — the file Quarkus's
- * own {@code $PWD/config/application.properties} convention lets every tool
- * launched from this working directory pick up at its own startup. Holds
- * environment facts (real node IPs, per-instance capacity overrides) that
- * are properties of this deployment, not of any one tool, kept out of
- * source repos, and shared rather than duplicated per tool — see
- * quarkus-gpu-broker's {@code CapabilityConfig_260810_oo01} for the
- * motivating example.
+ * {@code ${user.dir}/config/application.yaml} — the file Quarkus's own
+ * {@code $PWD/config/application.yaml} convention lets every tool launched
+ * from this working directory pick up at its own startup. Holds environment
+ * facts (real node IPs, per-instance capacity overrides) that are properties
+ * of this deployment, not of any one tool, kept out of source repos, and
+ * shared rather than duplicated per tool — see quarkus-gpu-broker's
+ * {@code CapabilityConfig_260810_oo01} for the motivating example.
+ *
+ * <p>YAML, not {@code .properties}: a map key such as {@code "192.168.5.14:8000"}
+ * mixes dots and a colon, which the {@code .properties} quoted-segment syntax
+ * cannot parse reliably (fails with {@code SRCFG00050} at startup). YAML
+ * represents the same map natively.
  *
  * <p>Deliberately scoped to this ONE fixed path, not a general file editor,
  * so the dashboard never exposes arbitrary filesystem read/write.
@@ -40,7 +44,7 @@ public class EnvConfigResource {
     Template envConfig;
 
     private static java.nio.file.Path configFile() {
-        return java.nio.file.Path.of(System.getProperty("user.dir"), "config", "application.properties");
+        return java.nio.file.Path.of(System.getProperty("user.dir"), "config", "application.yaml");
     }
 
     /** The edit page. */
