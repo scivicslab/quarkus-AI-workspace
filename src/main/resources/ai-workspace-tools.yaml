@@ -89,7 +89,7 @@ tools:
   - name: quarkus-gpu-broker
     jar: quarkus-gpu-broker.jar
     github: scivicslab/quarkus-gpu-broker
-    port: 28003          # reserved fixed port (GPU broker; reused if already running)
+    port: 28005          # reserved fixed port (GPU broker; reused if already running)
     fixedPort: true
     singleInstance: true
     params:
