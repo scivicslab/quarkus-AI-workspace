@@ -49,10 +49,12 @@ tools:
     github: scivicslab/chat-ui-with-audit-trail
     port: 28030
     params:
-      # Placeholder: no backend code reads this yet (static console mock stage, see
-      # chat-ui-with-audit-trail's application.properties). Added ahead of time so the launch
-      # form already matches quarkus-chat-ui3's shape; jvmProp follows quarkus-chat-ui's own
-      # "chat-ui.servers" naming since the left panel embeds quarkus-chat-ui's markup verbatim.
+      # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
+      # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
+      # which points directly at a vLLM node, this app talks to quarkus-gpu-broker's
+      # OpenAiCompatResource — the value must be a full base URL (http://host:port) for the
+      # broker, not a bare vLLM node IP/hostname. Leave blank to fall back to the value hardcoded
+      # in application.properties (currently http://localhost:28005).
       - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
