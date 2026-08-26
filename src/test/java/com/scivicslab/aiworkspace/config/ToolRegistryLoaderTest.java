@@ -79,7 +79,7 @@ class ToolRegistryLoaderTest {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "quarkus-gpu-broker");
         assertTrue(e.singleInstance());
         assertEquals("scivicslab/quarkus-gpu-broker", e.githubRepo());
-        assertEquals(28003, e.defaultPort());
+        assertEquals(28005, e.defaultPort());
         assertTrue(e.args().isEmpty());
         assertEquals(2, e.params().size(), "quarkus-gpu-broker has a Node IPs field and a port field");
         AiWorkspaceConfig.ParamDefinition nodes = e.params().get(0);
