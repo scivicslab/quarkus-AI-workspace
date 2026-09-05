@@ -21,13 +21,6 @@ class ClaudeToClaudeE2E {
         System.out.println("ClaudeToClaudeE2E: PASSED");
     }
 
-    private static void reregister(int gatewayPort, String name, int chatUiPort) throws Exception {
-        String body = "{\"name\":\"" + name + "\","
-                + "\"url\":\"http://localhost:" + chatUiPort + "\","
-                + "\"description\":\"" + name + "\"}";
-        E2EHttp.postRaw("http://localhost:" + gatewayPort + "/api/servers", body);
-    }
-
     /** -1 for mockVllmPort means no mock vLLM needed. */
     static void runAgentPair(String providerA, String providerB, int mockVllmPort) throws Exception {
         Path configPath = E2EConfig.configYaml();
@@ -47,22 +40,25 @@ class ClaudeToClaudeE2E {
             int portA = ports.get(0);
             int portB = ports.get(1);
 
-            // Wait for gateway fully initialized, then re-register (portal registers before CDI completes)
-            E2EHttp.waitForManagementServiceReady(portalPort, "quarkus-mcp-gateway", 90_000);
-            reregister(portalPort + 1, "quarkus-chat-ui-" + portA, portA);
-            reregister(portalPort + 1, "quarkus-chat-ui-" + portB, portB);
-            Thread.sleep(3_000);
+            // Agent A reaches agent B the way ServiceDirectory_260905_oo01 describes: it asks the
+            // portal which quarkus-chat-ui instances are running, and then calls the one it wants
+            // directly. There is no aggregating middleman any more — the portal answers where, and
+            // the tool's own HTTP API answers what.
+            String directory = E2EHttp.get(portalPort, "/api/services?name=quarkus-chat-ui&readyOnly=true");
+            System.out.println("  directory: " + directory);
+            E2EHttp.assertContains(directory, "\"port\":" + portA,
+                    "the directory must list agent-a on " + portA);
+            E2EHttp.assertContains(directory, "\"port\":" + portB,
+                    "the directory must list agent-b on " + portB);
 
-            String gatewayMcp = "http://localhost:" + (portalPort + 1) + "/mcp";
-            System.out.println("  gateway: " + gatewayMcp);
+            String urlB = urlOf(directory, portB);
+            System.out.println("  agent-b at " + urlB);
 
-            // Call agent-b's getStatus via gateway — synchronous, no LLM needed
-            String toolName = "quarkus-chat-ui-" + portB + "__getStatus";
-            String result = E2EHttp.postRaw(gatewayMcp,
-                    "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":2," +
-                    "\"params\":{\"name\":\"" + toolName + "\",\"arguments\":{}}}");
-            System.out.println("  getStatus result: " + result.substring(0, Math.min(300, result.length())));
-            E2EHttp.assertContains(result, "result", "gateway call to agent-b must return a result");
+            // Synchronous, no LLM needed — the same thing the gateway's getStatus tool used to reach.
+            String result = E2EHttp.getUrl(urlB + "api/status");
+            System.out.println("  agent-b status: " + result.substring(0, Math.min(300, result.length())));
+            E2EHttp.assertContains(result, "model",
+                    "agent-b, found through the directory, must answer its own status");
 
             for (int p : ports) {
                 E2EHttp.post(portalPort, "/api/tool/quarkus-chat-ui/" + p + "/stop", Map.of());
@@ -70,6 +66,21 @@ class ClaudeToClaudeE2E {
         } finally {
             portal.stop();
         }
+    }
+
+    /**
+     * The {@code url} of the directory entry whose {@code port} is {@code port}.
+     *
+     * <p>Read by hand rather than with a JSON library: this test module has no JSON dependency, and
+     * the shape being read is three fields of one object.</p>
+     */
+    private static String urlOf(String directoryJson, int port) {
+        int at = directoryJson.indexOf("\"port\":" + port);
+        if (at < 0) throw new AssertionError("no directory entry for port " + port + ": " + directoryJson);
+        int urlAt = directoryJson.indexOf("\"url\":\"", at);
+        if (urlAt < 0) throw new AssertionError("directory entry has no url: " + directoryJson);
+        urlAt += "\"url\":\"".length();
+        return directoryJson.substring(urlAt, directoryJson.indexOf('"', urlAt));
     }
 
     private static Map<String, String> buildParams(String provider, String name, int mockVllmPort) {

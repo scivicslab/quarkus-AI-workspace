@@ -10,6 +10,14 @@ class WorkflowClaudeToClaudeE2E {
     private static final int POLL_TIMEOUT_MS = 60_000;
     private static final String HOME = System.getProperty("user.home");
 
+    /**
+     * The workflow agent A runs: point the LLM actor at agent B's own REST API and submit a prompt.
+     *
+     * <p>{@code setDirectUrl} + {@code submitDirect} POST to {@code /api/chat/submit} on a
+     * quarkus-chat-ui and poll for the result — no MCP session, no aggregating middleman. The URL
+     * comes from the portal's service directory, which is how one tool learns where another is
+     * ({@code ServiceDirectory_260905_oo01}).</p>
+     */
     static final String YAML_TEMPLATE =
             "name: call-agent-b\n" +
             "steps:\n" +
@@ -26,13 +34,13 @@ class WorkflowClaudeToClaudeE2E {
             "  - states: [\"2\", \"3\"]\n" +
             "    actions:\n" +
             "      - actor: caller\n" +
-            "        method: setUrl\n" +
-            "        arguments: \"http://localhost:{gatewayPort}/mcp\"\n" +
+            "        method: setDirectUrl\n" +
+            "        arguments: \"{agentBUrl}\"\n" +
             "  - states: [\"3\", \"end\"]\n" +
             "    actions:\n" +
             "      - actor: caller\n" +
-            "        method: callAgent\n" +
-            "        arguments: \"{agentBName},Hello from workflow\"\n";
+            "        method: submitDirect\n" +
+            "        arguments: \"Hello from workflow\"\n";
 
     public static void main(String[] args) {
         try { new WorkflowClaudeToClaudeE2E().run(); }
@@ -45,12 +53,6 @@ class WorkflowClaudeToClaudeE2E {
         System.out.println("WorkflowClaudeToClaudeE2E: PASSED");
     }
 
-    private static void reregister(int gatewayPort, String name, int chatUiPort) throws Exception {
-        String body = "{\"name\":\"" + name + "\","
-                + "\"url\":\"http://localhost:" + chatUiPort + "\","
-                + "\"description\":\"" + name + "\"}";
-        E2EHttp.postRaw("http://localhost:" + gatewayPort + "/api/servers", body);
-    }
 
     static void runWorkflowScenario(String providerA, String providerB, int mockVllmPort) throws Exception {
         Path configPath = E2EConfig.configYaml();
@@ -72,20 +74,12 @@ class WorkflowClaudeToClaudeE2E {
             int portB      = chatPorts.get(1);
             int editorPort = E2EHttp.waitForToolReady(portalPort, "turing-workflow-editor", POLL_TIMEOUT_MS);
 
-            // Wait for gateway CDI to complete before re-registering chat-ui instances.
-            // Portal registers on READY but gateway CDI reset wipes it; must re-register after READY.
-            E2EHttp.waitForManagementServiceReady(portalPort, "quarkus-mcp-gateway", 90_000);
-            reregister(portalPort + 1, "quarkus-chat-ui-" + portA, portA);
-            reregister(portalPort + 1, "quarkus-chat-ui-" + portB, portB);
-            Thread.sleep(3_000);
+            // Where agent B is, asked of the portal rather than of a middleman.
+            String directory = E2EHttp.get(portalPort, "/api/services?name=quarkus-chat-ui&readyOnly=true");
+            String agentBUrl = urlOf(directory, portB);
+            System.out.println("  agent-b at " + agentBUrl + " (from the portal's service directory)");
 
-            String gatewayPort = String.valueOf(portalPort + 1);
-            System.out.println("  gateway port: " + gatewayPort + ", agent-b server: quarkus-chat-ui-" + portB);
-
-            // agentBName must match the gateway-registered server name (quarkus-chat-ui-{port})
-            String yaml = YAML_TEMPLATE
-                    .replace("{gatewayPort}", gatewayPort)
-                    .replace("{agentBName}", "quarkus-chat-ui-" + portB);
+            String yaml = YAML_TEMPLATE.replace("{agentBUrl}", agentBUrl);
 
             // POST YAML as text/plain to /api/run/yaml — imports and starts in one call
             String runResult = E2EHttp.postText(
@@ -96,13 +90,11 @@ class WorkflowClaudeToClaudeE2E {
             waitForWorkflowDone(editorPort, 300_000);
             System.out.println("  workflow done");
 
-            // Verify agent-b was actually called by checking its last reply via gateway
-            String gatewayMcp = "http://localhost:" + (portalPort + 1) + "/mcp";
-            String lastReply = E2EHttp.postRaw(gatewayMcp,
-                    "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":3," +
-                    "\"params\":{\"name\":\"quarkus-chat-ui-" + portB + "__getLastReply\",\"arguments\":{}}}");
-            E2EHttp.assertContains(lastReply, "result", "agent-b must have a reply after workflow callAgent");
-            System.out.println("  agent-b replied via workflow");
+            // Agent B answered if its own conversation now holds the workflow's prompt.
+            String history = E2EHttp.getUrl(agentBUrl + "api/history");
+            E2EHttp.assertContains(history, "Hello from workflow",
+                    "agent-b must hold the prompt the workflow submitted to it");
+            System.out.println("  agent-b holds the workflow's prompt");
 
             for (int p : chatPorts) {
                 E2EHttp.post(portalPort, "/api/tool/quarkus-chat-ui/" + p + "/stop", Map.of());
@@ -121,6 +113,21 @@ class WorkflowClaudeToClaudeE2E {
             Thread.sleep(2_000);
         }
         throw new AssertionError("Workflow did not complete within " + timeoutMs + "ms");
+    }
+
+    /**
+     * The {@code url} of the directory entry whose {@code port} is {@code port}.
+     *
+     * <p>Read by hand rather than with a JSON library: this test module has no JSON dependency, and
+     * the shape being read is three fields of one object.</p>
+     */
+    private static String urlOf(String directoryJson, int port) {
+        int at = directoryJson.indexOf("\"port\":" + port);
+        if (at < 0) throw new AssertionError("no directory entry for port " + port + ": " + directoryJson);
+        int urlAt = directoryJson.indexOf("\"url\":\"", at);
+        if (urlAt < 0) throw new AssertionError("directory entry has no url: " + directoryJson);
+        urlAt += "\"url\":\"".length();
+        return directoryJson.substring(urlAt, directoryJson.indexOf('"', urlAt));
     }
 
     private static Map<String, String> buildParams(String provider, String name, int mockVllmPort) {

@@ -18,26 +18,28 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * E2E: tool startup sequence with fixed ports 28200-28205.
+ * E2E: tool startup sequence with fixed ports 28200-28213.
  *
  * Step 1: AI workspace starts on 28200
- * Step 2: MCP gateway auto-starts on 28201
- * Step 3: chat-ui launched via portal lands on 28202 (first free port in range)
- * Step 4a: chat-ui started externally on 28203 is NOT adopted into portal sessions
- * Step 4b: chat-ui started externally on 28204 is NOT adopted into portal sessions
- * Step 5: turing-workflow-editor skips occupied 28203 and 28204, lands on 28205;
+ * Step 2: chat-ui launched via portal lands on 28210, the first port of the dynamic
+ *         pool — 28201-28209 are the reserved band (PortConvention_260719_oo01) and
+ *         belong to the search services, which are not launched here
+ * Step 3a: chat-ui started externally on 28211 is NOT adopted into portal sessions
+ * Step 3b: chat-ui started externally on 28212 is NOT adopted into portal sessions
+ * Step 4: turing-workflow-editor skips occupied 28211 and 28212, lands on 28213;
  *         accessUrl navigates to the workflow editor, not the chat UI
+ *
+ * The MCP gateway used to occupy 28201 and be waited for between steps 1 and 2. It no
+ * longer exists, and the ports below moved off the numbers that assumed it.
  */
 class ToolStartupSequenceE2E {
 
     private static final int PORTAL_PORT    = 28200;
-    private static final int GATEWAY_PORT   = 28201;
-    private static final int CHAT_UI_PORT   = 28202;
-    private static final int EXTERNAL_PORT  = 28203;
-    private static final int EXTERNAL_PORT2 = 28204;
-    private static final int EDITOR_PORT    = 28205;
+    private static final int CHAT_UI_PORT   = 28210;
+    private static final int EXTERNAL_PORT  = 28211;
+    private static final int EXTERNAL_PORT2 = 28212;
+    private static final int EDITOR_PORT    = 28213;
 
-    private static final long GATEWAY_TIMEOUT_MS = 90_000;
     private static final long TOOL_TIMEOUT_MS    = 60_000;
     private static final long STARTUP_TIMEOUT_MS = 30_000;
     private static final String HOME = System.getProperty("user.home");
@@ -67,25 +69,20 @@ class ToolStartupSequenceE2E {
             try {
                 System.out.println("  [step 1] AI workspace READY on " + PORTAL_PORT);
 
-                // Step 2: MCP gateway should auto-start on portalPort+1 = 28201
-                System.out.println("  [step 2] waiting for MCP gateway on " + GATEWAY_PORT + "...");
-                E2EHttp.waitForManagementServiceReady(PORTAL_PORT, "quarkus-mcp-gateway", GATEWAY_TIMEOUT_MS);
-                System.out.println("  [step 2] MCP gateway READY on " + GATEWAY_PORT);
-
-                // Step 3: Launch chat-ui via portal; expect first free port = 28202
-                System.out.println("  [step 3] launching chat-ui via portal...");
+                // Step 2: Launch chat-ui via portal; expect the first pool port = 28210
+                System.out.println("  [step 2] launching chat-ui via portal...");
                 E2EHttp.post(PORTAL_PORT, "/api/tool/quarkus-chat-ui/launch",
                         Map.of("provider", "claude", "workdir", HOME + "/works"));
                 int chatUiPort = E2EHttp.waitForToolReady(PORTAL_PORT, "quarkus-chat-ui", TOOL_TIMEOUT_MS);
                 if (chatUiPort != CHAT_UI_PORT)
                     throw new AssertionError("chat-ui must start on " + CHAT_UI_PORT
-                            + " (first free port after gateway), but got " + chatUiPort);
+                            + " (the first port of the dynamic pool), but got " + chatUiPort);
                 verifyVisible(browser, "http://localhost:" + chatUiPort + "/",
                         "#prompt-input", "portal-managed chat-ui on " + chatUiPort);
-                System.out.println("  [step 3] chat-ui READY on " + chatUiPort + " (portal-managed) — PASSED");
+                System.out.println("  [step 2] chat-ui READY on " + chatUiPort + " (portal-managed) — PASSED");
 
                 // Step 4: Start external chat-ui on 28203; verify portal does not adopt it
-                System.out.println("  [step 4] starting external chat-ui on " + EXTERNAL_PORT + "...");
+                System.out.println("  [step 3] starting external chat-ui on " + EXTERNAL_PORT + "...");
                 Path chatUiJar = jarsDir.resolve("quarkus-chat-ui.jar");
                 externalChatUi = new ProcessBuilder(
                         "java", "-Dquarkus.http.port=" + EXTERNAL_PORT,
@@ -97,11 +94,11 @@ class ToolStartupSequenceE2E {
                 verifyVisible(browser, "http://localhost:" + EXTERNAL_PORT + "/",
                         "#prompt-input", "external chat-ui on " + EXTERNAL_PORT);
                 verifyNotInSessions(EXTERNAL_PORT);
-                System.out.println("  [step 4a] external chat-ui READY on " + EXTERNAL_PORT
+                System.out.println("  [step 3a] external chat-ui READY on " + EXTERNAL_PORT
                         + " (not in portal sessions) — PASSED");
 
                 // Step 4b: Start another external chat-ui on 28204; verify portal does not adopt it
-                System.out.println("  [step 4b] starting external chat-ui on " + EXTERNAL_PORT2 + "...");
+                System.out.println("  [step 3b] starting external chat-ui on " + EXTERNAL_PORT2 + "...");
                 externalChatUi2 = new ProcessBuilder(
                         "java", "-Dquarkus.http.port=" + EXTERNAL_PORT2,
                         "-jar", chatUiJar.toAbsolutePath().toString())
@@ -112,11 +109,11 @@ class ToolStartupSequenceE2E {
                 verifyVisible(browser, "http://localhost:" + EXTERNAL_PORT2 + "/",
                         "#prompt-input", "external chat-ui on " + EXTERNAL_PORT2);
                 verifyNotInSessions(EXTERNAL_PORT2);
-                System.out.println("  [step 4b] external chat-ui READY on " + EXTERNAL_PORT2
+                System.out.println("  [step 3b] external chat-ui READY on " + EXTERNAL_PORT2
                         + " (not in portal sessions) — PASSED");
 
                 // Step 5: Launch turing-workflow-editor; 28203 and 28204 are occupied → 28205
-                System.out.println("  [step 5] launching turing-workflow-editor via portal...");
+                System.out.println("  [step 4] launching turing-workflow-editor via portal...");
                 E2EHttp.post(PORTAL_PORT, "/api/tool/turing-workflow-editor/launch",
                         Map.of("workdir", HOME + "/works"));
                 int editorPort = E2EHttp.waitForToolReady(PORTAL_PORT, "turing-workflow-editor", TOOL_TIMEOUT_MS);
@@ -125,7 +122,7 @@ class ToolStartupSequenceE2E {
                             + " (skipping occupied " + EXTERNAL_PORT + " and " + EXTERNAL_PORT2 + "), but got " + editorPort);
                 String accessUrl = E2EHttp.waitForToolAccessUrl(PORTAL_PORT, "turing-workflow-editor", 5_000);
                 verifyWorkflowEditorPage(browser, accessUrl, editorPort);
-                System.out.println("  [step 5] turing-workflow-editor READY on " + editorPort
+                System.out.println("  [step 4] turing-workflow-editor READY on " + editorPort
                         + ", accessUrl=" + accessUrl + " — PASSED");
 
             } finally {
