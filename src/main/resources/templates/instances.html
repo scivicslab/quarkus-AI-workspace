@@ -14,11 +14,11 @@
         </thead>
         <tbody>
         {#for i in instances}
-            <tr>
+            <tr data-tool="{i.toolName}" data-port="{i.port}">
                 <td class="inst-name">{#if i.memo}{i.memo}{#else}—{/if}</td>
                 <td>{i.toolName}</td>
                 <td class="inst-mono">{i.port}</td>
-                <td><span class="state-pill state-{i.state}">{i.state}</span></td>
+                <td><span class="state-pill state-{i.state} cell-state">{i.state}</span></td>
                 <td class="inst-mono">{#if i.startedAt}{i.startedAt}{#else}—{/if}</td>
                 <td class="inst-mono">{#if i.uptime}{i.uptime}{#else}—{/if}</td>
                 <td>

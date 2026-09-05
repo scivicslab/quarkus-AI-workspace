@@ -1,8 +1,12 @@
 // AI Workspace dashboard — adaptive polling, tab UI, drag-to-reorder
 
 (function () {
-    const POLL_FAST = 2000;  // while any session is STARTING
-    const POLL_SLOW = 5000;  // all sessions stable
+    // Something is STARTING and its state is about to change, so ask again soon.
+    const POLL_FAST = 5000;
+    // Nothing is moving. A minute is enough for a screen whose rows change only when a human
+    // launches or stops something, and polling faster is what made the page unusable: every poll
+    // rewrote the page, so a selection never survived long enough to be copied.
+    const POLL_SLOW = 60000;
 
     // ---------------------------------------------------------------
     // localStorage: team definitions and session assignments
@@ -283,6 +287,7 @@
             if (!r.ok) return;
             const model = await r.json();
             applyModel(model);
+            applyCatalogStatus(model);
             const interval = hasStarting(model) ? POLL_FAST : POLL_SLOW;
             setTimeout(pollStatus, interval);
         } catch (e) {
@@ -290,61 +295,51 @@
         }
     }
 
+    /**
+     * Brings the Instances table up to date without rebuilding it.
+     *
+     * The previous version of this looked up a `.session-card` per session — the markup the
+     * dashboard had before it became a table — found none, and called location.reload() on every
+     * poll. The page reloaded every five seconds, which is why a selection could never survive
+     * long enough to be copied.
+     *
+     * A cell is written only when its value actually differs, so a table that has not changed is
+     * not touched at all.
+     */
     function applyModel(model) {
+        const rows = document.querySelectorAll('tr[data-port]');
+        if (rows.length === 0) return;              // not the Instances screen
+
         const all = (model.managementServices || []).concat(model.activeSessions || []);
-        all.forEach(svc => {
-            const card = document.getElementById('session-' + sessionKey(svc.toolName, svc.port));
-            if (!card) {
-                // New session appeared — reload page to render new card
-                location.reload();
-                return;
-            }
-            // Update badge
-            const badge = card.querySelector('.badge');
-            if (badge) updateBadge(badge, svc.state);
+        const byPort = new Map(all.map(s => [String(s.port), s]));
 
-            // Update link/name
-            const nameEl = card.querySelector('.session-name');
-            if (nameEl && svc.accessUrl && nameEl.tagName !== 'A') {
-                const a = document.createElement('a');
-                a.className = 'session-name';
-                a.href = svc.accessUrl;
-                a.target = '_blank';
-                a.textContent = svc.toolName;
-                nameEl.replaceWith(a);
+        // A row appearing or disappearing changes the table's shape, and the server renders it.
+        // That is the one case worth a reload, and it happens only when someone launched or
+        // stopped something.
+        let sameShape = rows.length === byPort.size;
+        if (sameShape) {
+            for (const row of rows) {
+                if (!byPort.has(row.dataset.port)) { sameShape = false; break; }
             }
+        }
+        if (!sameShape) { location.reload(); return; }
 
-            // Update Start/Stop button for management services
-            const actions = card.querySelector('.session-actions');
-            if (actions) {
-                const isStopped = svc.state === 'STOPPED' || svc.state === 'FAILED';
-                const btn = actions.querySelector('button');
-                const isStartBtn = btn && btn.classList.contains('btn-start');
-                if (isStopped && !isStartBtn) {
-                    actions.innerHTML = '<button class="btn btn-start" onclick="mgmtStart(\'' + svc.toolName + '\', ' + svc.port + ')">Start</button>';
-                } else if (!isStopped && isStartBtn) {
-                    actions.innerHTML = '<button class="btn btn-stop" onclick="mgmtStop(\'' + svc.toolName + '\', ' + svc.port + ')">Stop</button>';
-                }
+        for (const row of rows) {
+            const svc = byPort.get(row.dataset.port);
+            if (!svc) continue;
+            const stateEl = row.querySelector('.cell-state');
+            if (stateEl && stateEl.textContent.trim() !== svc.state) {
+                stateEl.textContent = svc.state;
+                stateEl.className = 'state-pill state-' + svc.state + ' cell-state';
             }
+        }
+    }
 
-            // Update progress log
-            const logEl = card.querySelector('.session-log');
-            if (svc.state === 'STARTING' && svc.progressLog && svc.progressLog.length > 0) {
-                if (logEl) {
-                    logEl.innerHTML = svc.progressLog.join('<br>');
-                }
-            } else if (logEl && svc.state === 'READY') {
-                logEl.style.display = 'none';
-            }
-        });
-
-        // Check for sessions that disappeared (stopped)
-        document.querySelectorAll('.session-card').forEach(card => {
-            const id = card.id.replace('session-', '');
-            const stillExists = all.some(s => sessionKey(s.toolName, s.port) === id);
-            if (!stillExists) {
-                card.remove();
-            }
+    /** Updates a Catalog tile's status line, only when it says something different. */
+    function applyCatalogStatus(model) {
+        (model.launchTools || []).forEach(tool => {
+            const el = document.getElementById('tool-status-' + tool.name);
+            if (el && el.textContent.trim() !== tool.status) el.textContent = tool.status;
         });
     }
 
@@ -397,7 +392,8 @@
         });
 
         if (r.ok) {
-            // Reload to show new session card, then resume polling
+            // The one reload worth doing: the human just asked for a new instance, and the row
+            // for it is rendered by the server.
             location.reload();
         } else {
             alert('Failed to launch ' + toolName);
