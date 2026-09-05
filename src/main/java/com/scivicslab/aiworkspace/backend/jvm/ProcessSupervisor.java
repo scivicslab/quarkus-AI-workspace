@@ -181,6 +181,12 @@ public class ProcessSupervisor {
                 pb.environment().put("GPU_BROKER_URL", brokerUrl);
             }
 
+            // Where to ask about everything that changes while this tool runs. The set of running
+            // tools cannot be handed over at launch — it is different an hour later — so what is
+            // handed over is the address to ask at (ServiceDirectory_260905_oo01). A tool that
+            // wants to reach another tool reads GET /api/services from here.
+            pb.environment().put("AI_WORKSPACE_URL", ownBaseUrl());
+
             java.io.File workingDir = resolveWorkingDir();
             if (workingDir != null) {
                 pb.directory(workingDir);
@@ -536,6 +542,19 @@ public class ProcessSupervisor {
             HTTP_CLIENT = HttpClient.newHttpClient();
         }
         return HTTP_CLIENT;
+    }
+
+    /**
+     * This portal's own base URL, as a tool it launched should address it.
+     *
+     * <p>Read from {@code quarkus.http.port} the same way {@code JvmBackend} reads it to derive its
+     * port range, so the two cannot disagree about which port this portal is on. {@code localhost}
+     * because every tool this supervisor starts is a child process on this machine.</p>
+     *
+     * @return e.g. {@code http://localhost:28000}
+     */
+    private static String ownBaseUrl() {
+        return "http://localhost:" + System.getProperty("quarkus.http.port", "28000").trim();
     }
 
     /**
