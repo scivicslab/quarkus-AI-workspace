@@ -1,0 +1,39 @@
+{#include layout}
+{#body}
+    <div class="inst-summary">
+        Running <b>{running}</b> · Starting <b>{starting}</b> · Failed <b>{failed}</b> · Stopped <b>{stopped}</b>
+    </div>
+
+    {#if instances}
+    <table class="inst-table">
+        <thead>
+            <tr>
+                <th>Name / Memo</th><th>Tool</th><th>Port</th><th>State</th>
+                <th>Started</th><th>Uptime</th><th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {#for i in instances}
+            <tr>
+                <td class="inst-name">{#if i.memo}{i.memo}{#else}—{/if}</td>
+                <td>{i.toolName}</td>
+                <td class="inst-mono">{i.port}</td>
+                <td><span class="state-pill state-{i.state}">{i.state}</span></td>
+                <td class="inst-mono">{#if i.startedAt}{i.startedAt}{#else}—{/if}</td>
+                <td class="inst-mono">{#if i.uptime}{i.uptime}{#else}—{/if}</td>
+                <td>
+                    <div class="inst-actions">
+                        {#if i.accessUrl}<a class="btn btn-open" href="{i.accessUrl}" target="_blank">Open</a>{/if}
+                        <a class="btn" href="/instances/{i.toolName}/{i.port}">Detail</a>
+                        <button class="btn btn-stop" onclick="stopTool('{i.toolName}', {i.port})">Stop</button>
+                    </div>
+                </td>
+            </tr>
+        {/for}
+        </tbody>
+    </table>
+    {#else}
+    <p class="inst-empty">Nothing is running. Start something from the <a href="/catalog">Catalog</a>.</p>
+    {/if}
+{/body}
+{/include}

@@ -1,0 +1,34 @@
+{#include layout}
+{#body}
+    <div class="detail-head">
+        <span class="inst-name" style="font-size:18px;">{#if instance.memo}{instance.memo}{#else}{instance.toolName}{/if}</span>
+        <span style="color:var(--text-secondary);">{instance.toolName}</span>
+        <span class="state-pill state-{instance.state}">{instance.state}</span>
+    </div>
+
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+        {#if instance.accessUrl}<a class="btn btn-open" href="{instance.accessUrl}" target="_blank">Open</a>{/if}
+        <button class="btn btn-stop" onclick="stopTool('{instance.toolName}', {instance.port})">Stop</button>
+        <a class="btn" href="/">Back to Instances</a>
+    </div>
+
+    <dl class="detail-grid">
+        <dt>Tool</dt><dd>{instance.toolName}</dd>
+        <dt>Port</dt><dd class="inst-mono">{instance.port}</dd>
+        <dt>URL</dt><dd class="inst-mono">{#if instance.accessUrl}{instance.accessUrl}{#else}—{/if}</dd>
+        <dt>State</dt><dd>{instance.state}</dd>
+        <dt>Started</dt><dd class="inst-mono">{#if instance.startedAt}{instance.startedAt}{#else}—{/if}</dd>
+        <dt>Uptime</dt><dd class="inst-mono">{#if instance.uptime}{instance.uptime}{#else}—{/if}</dd>
+        {#if instance.params}
+        <dt>Launch params</dt>
+        <dd>{#for entry in instance.params.entrySet()}<span class="inst-mono">{entry.key}={entry.value}</span>　{/for}</dd>
+        {/if}
+    </dl>
+
+    {! The log is read from the file, so it is here whether or not the instance is still running
+       (ControlDashboard_260905_oo01). !}
+    <p class="section-label">Log — last {logLines} lines</p>
+    <div class="detail-log">{#for line in log}{line}
+{/for}{#if !log}(no log file for {instance.toolName} on port {instance.port}){/if}</div>
+{/body}
+{/include}

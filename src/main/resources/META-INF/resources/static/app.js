@@ -363,6 +363,16 @@
     };
 
     // ---------------------------------------------------------------
+    // Catalog: the launch form is hidden until asked for
+    // ---------------------------------------------------------------
+
+    window.toggleLaunchForm = function (name) {
+        const form = document.getElementById('launch-form-' + name);
+        if (!form) return;
+        form.style.display = (form.style.display === 'none' || !form.style.display) ? 'block' : 'none';
+    };
+
+    // ---------------------------------------------------------------
     // Tool session actions
     // ---------------------------------------------------------------
 

@@ -569,6 +569,59 @@
             transition: background .1s, color .1s;
         }
         .menu-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+        /* An anchor used as a button: .btn was written for <button>, which has no underline and
+           no link colour of its own. Open / Detail / Back are links because they navigate. */
+        a.btn { text-decoration: none; display: inline-block; line-height: 1.5;
+                border: 1px solid var(--border-color); color: var(--text-primary);
+                background: none; }
+        a.btn:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); opacity: 1; }
+        a.btn-open { border-color: var(--accent-green); color: var(--accent-green); }
+        a.btn-open:hover { background: color-mix(in srgb, var(--accent-green) 12%, transparent); }
+
+        /* ── Screen navigation (Instances / Catalog) ─────── */
+        .screen-nav { display: flex; gap: 0.25rem; margin-bottom: 1.25rem;
+                      border-bottom: 1px solid var(--border); }
+        .screen-tab { padding: 0.5rem 1rem; text-decoration: none; font-size: 14px;
+                      color: var(--text-secondary); border-bottom: 2px solid transparent;
+                      margin-bottom: -1px; }
+        .screen-tab:hover { color: var(--text-primary); }
+        .screen-tab-active { color: var(--text-primary); font-weight: 600;
+                             border-bottom-color: var(--accent, #89b4fa); }
+
+        /* ── Instances table ─────── */
+        .inst-summary { font-size: 13px; color: var(--text-secondary); margin-bottom: 0.75rem; }
+        .inst-summary b { color: var(--text-primary); }
+        .inst-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .inst-table th { text-align: left; padding: 0.45rem 0.6rem; font-weight: 600;
+                         color: var(--text-secondary); border-bottom: 1px solid var(--border);
+                         white-space: nowrap; }
+        .inst-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border);
+                         vertical-align: middle; }
+        .inst-table tr:hover td { background: var(--bg-hover, rgba(255,255,255,0.03)); }
+        .inst-name { font-weight: 600; color: var(--text-primary); }
+        .inst-mono { font-family: 'Cascadia Code','Fira Code','Consolas',monospace; }
+        .inst-actions { white-space: nowrap; display: flex; gap: 0.3rem; flex-wrap: wrap; }
+        .inst-empty { color: var(--text-secondary); padding: 1.5rem 0; }
+        .state-pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 10px;
+                      font-size: 12px; font-weight: 600; }
+        .state-READY { background: rgba(64,160,96,0.18); color: #4ec07a; }
+        .state-STARTING { background: rgba(200,160,60,0.18); color: #d7b45a; }
+        .state-FAILED { background: rgba(200,70,70,0.18); color: #e06060; }
+        .state-STOPPED { background: rgba(128,128,128,0.18); color: var(--text-secondary); }
+
+        /* ── Instance detail ─────── */
+        .detail-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+                       margin-bottom: 0.5rem; }
+        .detail-grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem;
+                       font-size: 13px; margin: 0.75rem 0 1.25rem; }
+        .detail-grid dt { color: var(--text-secondary); }
+        .detail-grid dd { margin: 0; color: var(--text-primary); }
+        .detail-log { background: var(--bg-code, rgba(0,0,0,0.25)); border: 1px solid var(--border);
+                      border-radius: 6px; padding: 0.6rem 0.8rem; font-size: 12px;
+                      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+                      white-space: pre-wrap; word-break: break-all; max-height: 60vh;
+                      overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -600,140 +653,12 @@
 
 <main>
 
-    <!-- Management Services -->
-    <p class="section-label">Management Services</p>
-    {#for svc in managementServices}
-    <div class="session-card" id="session-{svc.toolName}-{svc.port}">
-        <div class="session-head">
-            {#if svc.accessUrl}
-            <a class="session-name" href="{svc.accessUrl}" target="_blank">{svc.toolName}</a>
-            {#else}
-            <span class="session-name">{svc.toolName}</span>
-            {/if}
-            <span class="session-port">:{svc.port}</span>
-            <span class="badge badge-{svc.state}">{svc.state}</span>
-            <div class="session-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-                {#if svc.github}
-                <button class="btn btn-download" id="btn-download-{svc.toolName}"
-                        onclick="downloadTool('{svc.toolName}')">Download Latest</button>
-                <span class="download-status" id="download-status-{svc.toolName}"></span>
-                {/if}
-                {#if svc.state.isStopped() || svc.state.isFailed()}
-                <button class="btn btn-start" onclick="mgmtStart('{svc.toolName}', {svc.port})">Start</button>
-                {#else}
-                <button class="btn btn-stop" onclick="mgmtStop('{svc.toolName}', {svc.port})">Stop</button>
-                {/if}
-            </div>
-        </div>
-        {#if svc.state.isStarting() && svc.progressLog}
-        <div class="session-log" id="log-{svc.toolName}-{svc.port}">
-            {#for line in svc.progressLog}{line}<br>{/for}
-        </div>
-        {/if}
-    </div>
-    {/for}
+    <nav class="screen-nav">
+        <a href="/" class="screen-tab{#if screen == 'instances'} screen-tab-active{/if}">Instances</a>
+        <a href="/catalog" class="screen-tab{#if screen == 'catalog'} screen-tab-active{/if}">Catalog</a>
+    </nav>
 
-    <!-- Active Sessions -->
-    {#if activeSessions}
-    <p class="section-label">Active Sessions</p>
-    <div class="tab-bar" id="session-tab-bar"></div>
-    <div id="session-tab-panes">
-    {#for svc in activeSessions}
-    <div class="session-card" id="session-{svc.toolName}-{svc.port}"
-         draggable="true">
-        <div class="session-head">
-            {#if svc.accessUrl}
-            <a class="session-name" href="{svc.accessUrl}" target="_blank">{svc.toolName}</a>
-            {#else}
-            <span class="session-name">{svc.toolName}</span>
-            {/if}
-            <span class="session-port">:{svc.port}</span>
-            <span class="badge badge-{svc.state}">{svc.state}</span>
-            <div style="margin-left:auto; display:flex; gap:6px; align-items:center;">
-                <button class="btn btn-stop" onclick="stopSession('{svc.toolName}', {svc.port}, this)">Stop</button>
-                <button class="btn-menu" onclick="openSessionMenu(event,'{svc.toolName}',{svc.port})">⋮</button>
-            </div>
-        </div>
-        {#if svc.params}
-        <div class="session-params">
-            {#for entry in svc.params.entrySet()}{entry.key}: {entry.value}　{/for}
-        </div>
-        {/if}
-        {#if svc.state.isStarting() && svc.progressLog}
-        <div class="session-log" id="log-{svc.toolName}-{svc.port}">
-            {#for line in svc.progressLog}{line}<br>{/for}
-        </div>
-        {/if}
-        {#if svc.memoIsFromTitle()}
-        <input type="text" class="memo-input"
-               readonly
-               title="Synced with the session title set at launch"
-               value="{svc.memo}"
-               data-tool-name="{svc.toolName}"
-               data-port="{svc.port}">
-        {#else}
-        <input type="text" class="memo-input"
-               placeholder="Add memo..."
-               value="{svc.memo}"
-               data-tool-name="{svc.toolName}"
-               data-port="{svc.port}">
-        {/if}
-    </div>
-    {/for}
-    </div>
-    <div id="session-menu-popup" class="session-menu-popup" style="display:none"></div>
-    {/if}
-
-    <!-- Launch Tools -->
-    {#if launchTools}
-    <p class="section-label">Launch Tools</p>
-    <div class="tool-grid">
-        {#for tool in launchTools}
-        <div class="tool-tile" id="tool-tile-{tool.name}">
-            <div class="tool-tile-name">{tool.displayName}</div>
-            {! Param form is rendered the same whether or not the jar is present, so the tile
-               layout never changes on jar presence — only the actions below differ. !}
-            {#for param in tool.params}
-            <div class="param-row">
-                <label class="param-label">{param.label}</label>
-                {#if param.type == "select"}
-                <select class="param-select" id="param-{tool.name}-{param.key}">
-                    {#for opt in param.options}
-                    <option value="{opt.value}">{opt.label}</option>
-                    {/for}
-                </select>
-                {#else if param.type == "dir"}
-                <div class="dir-row">
-                    <input type="text" class="param-input"
-                           id="param-{tool.name}-{param.key}"
-                           value="{param.defaultVal}">
-                    <button class="btn-browse"
-                            onclick="openDirBrowser('param-{tool.name}-{param.key}')">Browse</button>
-                </div>
-                {#else}
-                <input type="text" class="param-input"
-                       id="param-{tool.name}-{param.key}"
-                       value="{param.defaultVal}">
-                {/if}
-            </div>
-            {/for}
-            {#if tool.github}
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
-                <button class="btn btn-download" id="btn-download-{tool.name}"
-                        onclick="downloadTool('{tool.name}')">Download Release</button>
-                <button class="btn btn-download" id="btn-build-{tool.name}"
-                        onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
-                <span class="download-status" id="download-status-{tool.name}"></span>
-            </div>
-            {/if}
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
-                <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Launch</button>
-                <span class="tool-status" id="tool-status-{tool.name}">{tool.status}</span>
-            </div>
-        </div>
-        {/for}
-    </div>
-    {/if}
+{#insert body /}
 
 </main>
 

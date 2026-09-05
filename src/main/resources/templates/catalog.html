@@ -1,0 +1,48 @@
+{#include layout}
+{#body}
+    <div class="tool-grid">
+    {#for tool in launchTools}
+        <div class="tool-tile" id="tool-tile-{tool.name}">
+            <div class="tool-tile-name">{tool.displayName}</div>
+            <div class="tool-tile-status" id="tool-status-{tool.name}">{tool.status}</div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;">
+                <button class="btn btn-launch" onclick="toggleLaunchForm('{tool.name}')">Launch…</button>
+                {#if tool.github}
+                <button class="btn btn-download" onclick="downloadLatest('{tool.name}')">Download Latest</button>
+                <button class="btn btn-download" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
+                <span class="download-status" id="download-status-{tool.name}"></span>
+                {/if}
+            </div>
+
+            {! The parameter form is hidden until Launch… is pressed: ten tools' worth of forms
+               expanded at once is what made the single-page dashboard unreadable
+               (ControlDashboard_260905_oo01). !}
+            <div class="launch-form" id="launch-form-{tool.name}" style="display:none;margin-top:0.6rem;">
+                {#for param in tool.params}
+                <div class="param-row">
+                    <label class="param-label">{param.label}</label>
+                    {#if param.type == "select"}
+                    <select class="param-select" id="param-{tool.name}-{param.key}">
+                        {#for opt in param.options}
+                        <option value="{opt.value}"{#if opt.value == param.defaultVal} selected{/if}>{opt.label}</option>
+                        {/for}
+                    </select>
+                    {#else if param.type == "dir"}
+                    <div style="display:flex;gap:0.3rem;">
+                        <input type="text" class="param-input" id="param-{tool.name}-{param.key}" value="{param.defaultVal}">
+                        <button class="btn" onclick="openDirBrowser('param-{tool.name}-{param.key}')">…</button>
+                    </div>
+                    {#else}
+                    <input type="text" class="param-input" id="param-{tool.name}-{param.key}" value="{param.defaultVal}">
+                    {/if}
+                </div>
+                {/for}
+                <div style="margin-top:0.5rem;">
+                    <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Start</button>
+                </div>
+            </div>
+        </div>
+    {/for}
+    </div>
+{/body}
+{/include}
