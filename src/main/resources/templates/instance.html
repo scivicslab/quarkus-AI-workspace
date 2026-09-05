@@ -25,8 +25,24 @@
         {/if}
     </dl>
 
-    {! The log is read from the file, so it is here whether or not the instance is still running
-       (ControlDashboard_260905_oo01). !}
+    {! What this instance is doing, and the parts it divides that into. The parts are the reason
+       to open this screen; the log below is the last resort for an instance that failed
+       (ActivitySummary_260905_oo01). !}
+    {#if activity}
+    <p class="section-label">Activity{#if activityAsOf} — as of {activityAsOf}{/if}</p>
+    <p class="detail-activity">{activity}</p>
+    {/if}
+
+    {#if parts}
+    <table class="settings-table" style="margin-bottom:1.5rem;">
+        <tbody>
+        {#for part in parts}
+            <tr><td class="inst-mono" style="white-space:nowrap;">{part.name}</td><td>{part.summary}</td></tr>
+        {/for}
+        </tbody>
+    </table>
+    {/if}
+
     <p class="section-label">Log — last {logLines} lines</p>
     <div class="detail-log">{#for line in log}{line}
 {/for}{#if !log}(no log file for {instance.toolName} on port {instance.port}){/if}</div>

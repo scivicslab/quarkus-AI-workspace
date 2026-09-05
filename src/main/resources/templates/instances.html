@@ -8,19 +8,18 @@
     <table class="inst-table">
         <thead>
             <tr>
-                <th>Name / Memo</th><th>Tool</th><th>Port</th><th>State</th>
-                <th>Started</th><th>Uptime</th><th>Actions</th>
+                <th>Tool</th><th>Port</th><th>State</th><th>Activity</th><th>Actions</th>
             </tr>
         </thead>
         <tbody>
         {#for i in instances}
             <tr data-tool="{i.toolName}" data-port="{i.port}">
-                <td class="inst-name">{#if i.memo}{i.memo}{#else}—{/if}</td>
-                <td>{i.toolName}</td>
+                <td class="inst-name">{i.toolName}</td>
                 <td class="inst-mono">{i.port}</td>
                 <td><span class="state-pill state-{i.state} cell-state">{i.state}</span></td>
-                <td class="inst-mono">{#if i.startedAt}{i.startedAt}{#else}—{/if}</td>
-                <td class="inst-mono">{#if i.uptime}{i.uptime}{#else}—{/if}</td>
+                {! What the instance says it is doing. Blank when it has no such endpoint or did
+                   not answer in time (ActivitySummary_260905_oo01). !}
+                <td class="inst-activity">{#if i.activity}{i.activity}{#else}—{/if}</td>
                 <td>
                     <div class="inst-actions">
                         {#if i.accessUrl}<a class="btn btn-open" href="{i.accessUrl}" target="_blank">Open</a>{/if}

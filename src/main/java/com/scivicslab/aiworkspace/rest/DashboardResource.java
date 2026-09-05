@@ -56,6 +56,9 @@ public class DashboardResource {
     @Inject
     ServiceBackend backend;
 
+    @Inject
+    ActivityProbe activityProbe;
+
     /**
      * The value appended to this portal's own script and stylesheet URLs, fixed for the life of the
      * process.
@@ -98,17 +101,20 @@ public class DashboardResource {
      * @param startedAt when it started, or {@code null}
      * @param uptime    how long it has been up, e.g. {@code "2h 13m"}, or {@code null}
      * @param params    the launch parameters
+     * @param activity  what the instance says it is doing, or {@code ""}
+     * @param activityAsOf when it said that, or {@code ""}
      */
     public record InstanceRow(String toolName, int port, String memo, String state,
                               String accessUrl, String startedAt, String uptime,
-                              java.util.Map<String, String> params) {}
+                              java.util.Map<String, String> params,
+                              String activity, String activityAsOf) {}
 
     /** Instances — what is running. */
     @GET
     @Path("/instances")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance instances() {
-        List<InstanceRow> rows = rows();
+        List<InstanceRow> rows = withActivity(rows());
         return instances
             .data("screen", "instances")
             .data("version", appVersion)
@@ -157,13 +163,19 @@ public class DashboardResource {
                 .findFirst()
                 // Not in the list any more: it stopped, and its log file is the reason to be here.
                 .orElse(new InstanceRow(tool, port, "", SessionState.STOPPED.name(),
-                                        null, null, null, java.util.Map.of()));
+                                        null, null, null, java.util.Map.of(), "", ""));
+        ActivityProbe.Activity activity = row.accessUrl() == null ? ActivityProbe.Activity.none()
+                : activityProbe.askAll(java.util.Map.of("one", row.accessUrl()))
+                        .getOrDefault("one", ActivityProbe.Activity.none());
         return instance
             .data("screen", "instances")
             .data("version", appVersion)
             .data("assetVersion", assetVersion)
             .data("imageTag", imageTag.orElse(""))
             .data("instance", row)
+            .data("activity", activity.summary())
+            .data("activityAsOf", activity.asOf())
+            .data("parts", activity.parts())
             .data("logLines", wanted)
             .data("log", backend.getServiceLogs(tool, port, wanted));
     }
@@ -196,6 +208,33 @@ public class DashboardResource {
             .data("workingDir", System.getProperty("user.dir", "—"));
     }
 
+    /**
+     * Fills in what each running instance says it is doing.
+     *
+     * <p>Only {@code READY} instances are asked: there is nothing on the other end of a port that
+     * is still opening or already closed. All are asked at once, and one that does not answer
+     * leaves its cell blank ({@code ActivitySummary_260905_oo01}).</p>
+     */
+    private List<InstanceRow> withActivity(List<InstanceRow> rows) {
+        java.util.Map<String, String> ask = new java.util.LinkedHashMap<>();
+        for (InstanceRow r : rows) {
+            if (SessionState.READY.name().equals(r.state()) && r.accessUrl() != null) {
+                ask.put(r.toolName() + ":" + r.port(), r.accessUrl());
+            }
+        }
+        if (ask.isEmpty()) return rows;
+
+        java.util.Map<String, ActivityProbe.Activity> answers = activityProbe.askAll(ask);
+        List<InstanceRow> out = new ArrayList<>(rows.size());
+        for (InstanceRow r : rows) {
+            ActivityProbe.Activity a = answers.get(r.toolName() + ":" + r.port());
+            out.add(a == null ? r
+                    : new InstanceRow(r.toolName(), r.port(), r.memo(), r.state(), r.accessUrl(),
+                                      r.startedAt(), r.uptime(), r.params(), a.summary(), a.asOf()));
+        }
+        return out;
+    }
+
     /** Every instance the backend knows about, management services and launched tools alike. */
     private List<InstanceRow> rows() {
         DashboardModel model = backend.getDashboardModel();
@@ -209,7 +248,8 @@ public class DashboardResource {
                     s.toolName(), s.port(), s.memo() == null ? "" : s.memo(),
                     String.valueOf(s.state()), s.accessUrl(),
                     s.startedAt(), uptimeOf(s.startedAt()),
-                    s.params() == null ? java.util.Map.of() : s.params()));
+                    s.params() == null ? java.util.Map.of() : s.params(),
+                    "", ""));
         }
         // By port. The backend hands these over grouped by tool, in the order the tools are defined
         // and then the order instances were launched, which is neither of the two orders someone
