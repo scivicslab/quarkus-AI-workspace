@@ -188,6 +188,16 @@ public class ProcessSupervisor {
                 pb.environment().put("MCP_GATEWAY_URL", gatewayUrl);
             }
 
+            // Where the GPU work goes. quarkus-gpu-broker stands once in front of the cluster's
+            // GPU nodes and need not run on this machine, so a tool cannot assume an address for
+            // it. This portal is the one place that knows, and it tells each tool it launches,
+            // the same way it tells them where the MCP gateway is. A tool started with this
+            // unset keeps whatever fixed node it was written to use.
+            String brokerUrl = gpuBrokerUrl();
+            if (brokerUrl != null) {
+                pb.environment().put("GPU_BROKER_URL", brokerUrl);
+            }
+
             java.io.File workingDir = resolveWorkingDir();
             if (workingDir != null) {
                 pb.directory(workingDir);
@@ -541,6 +551,24 @@ public class ProcessSupervisor {
             HTTP_CLIENT = HttpClient.newHttpClient();
         }
         return HTTP_CLIENT;
+    }
+
+    /**
+     * The GPU broker's address as this portal was configured with it, or {@code null} when it was
+     * not configured.
+     *
+     * <p>Read the same way {@link #gatewayUrl()} reads the gateway's: the system property first,
+     * so a single JVM argument can point one run somewhere else, then the environment. Resolved
+     * per launch rather than held in a field, so a portal restart is all it takes to move every
+     * tool to a different broker.</p>
+     *
+     * @return the broker base URL, or {@code null} if none is configured
+     */
+    private String gpuBrokerUrl() {
+        String url = System.getProperty("gpu.broker.url");
+        if (url != null && !url.isBlank()) return url;
+        url = System.getenv("GPU_BROKER_URL");
+        return (url != null && !url.isBlank()) ? url : null;
     }
 
     private String gatewayUrl() {
