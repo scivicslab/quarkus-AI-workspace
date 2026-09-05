@@ -9,7 +9,7 @@
     <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
         {#if instance.accessUrl}<a class="btn btn-open" href="{instance.accessUrl}" target="_blank">Open</a>{/if}
         <button class="btn btn-stop" onclick="stopTool('{instance.toolName}', {instance.port})">Stop</button>
-        <a class="btn" href="/">Back to Instances</a>
+        <a class="btn" href="/instances">Back to Instances</a>
     </div>
 
     <dl class="detail-grid">

@@ -3,21 +3,34 @@
     <div class="tool-grid">
     {#for tool in launchTools}
         <div class="tool-tile" id="tool-tile-{tool.name}">
-            <div class="tool-tile-name">{tool.displayName}</div>
-            <div class="tool-tile-status" id="tool-status-{tool.name}">{tool.status}</div>
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;">
-                <button class="btn btn-launch" onclick="toggleLaunchForm('{tool.name}')">Launch…</button>
+            <div class="tool-head">
+                {#if tool.icon}
+                {! The tool serves its own icon. Which file differs by tool, so try the svg, then
+                   the ico, then give up and show the letter underneath. !}
+                <img class="tool-icon" src="{tool.icon}favicon.svg" alt=""
+                     onerror="toolIconFallback(this, '{tool.icon}')">
+                {#else}
+                <span class="tool-icon tool-icon-letter">{tool.displayName.charAt(0)}</span>
+                {/if}
+                <div>
+                    <div class="tool-tile-name">{tool.displayName}</div>
+                    <div class="tool-tile-status" id="tool-status-{tool.name}">{tool.status}</div>
+                </div>
+            </div>
+
+            <div class="tool-buttons">
+                <button class="btn btn-launch" onclick="toggleLaunchForm('{tool.name}')">Configure &amp; Start…</button>
                 {#if tool.github}
-                <button class="btn btn-download" onclick="downloadLatest('{tool.name}')">Download Latest</button>
+                <button class="btn btn-download" onclick="downloadLatest('{tool.name}')">Download Latest Release</button>
                 <button class="btn btn-download" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
                 {/if}
             </div>
 
-            {! The parameter form is hidden until Launch… is pressed: ten tools' worth of forms
-               expanded at once is what made the single-page dashboard unreadable
+            {! The parameter form is hidden until asked for: ten tools' worth of forms expanded at
+               once is what made the single-page dashboard unreadable
                (ControlDashboard_260905_oo01). !}
-            <div class="launch-form" id="launch-form-{tool.name}" style="display:none;margin-top:0.6rem;">
+            <div class="launch-form" id="launch-form-{tool.name}" style="display:none;">
                 {#for param in tool.params}
                 <div class="param-row">
                     <label class="param-label">{param.label}</label>
@@ -37,9 +50,7 @@
                     {/if}
                 </div>
                 {/for}
-                <div style="margin-top:0.5rem;">
-                    <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Start</button>
-                </div>
+                <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Start</button>
             </div>
         </div>
     {/for}

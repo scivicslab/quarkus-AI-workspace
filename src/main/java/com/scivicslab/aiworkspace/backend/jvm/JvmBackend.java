@@ -707,8 +707,30 @@ public class JvmBackend implements ServiceBackend {
     }
 
     private ToolView toToolView(AiWorkspaceConfig.ToolDefinition tool) {
-        return new ToolView(tool.name(), tool.name(), "", buildParams(tool.params()),
+        return new ToolView(tool.name(), tool.name(), iconBaseOf(tool), buildParams(tool.params()),
                             tool.github() != null ? tool.github() : "", liveStatus(tool));
+    }
+
+    /**
+     * The base URL to fetch a tool's own favicon from, or {@code ""} when there is nowhere to fetch
+     * it from.
+     *
+     * <p>These tools are web applications and each already serves its own icon; there is no icon
+     * file here to keep in step with them. What there is not, is a way to ask a tool that is not
+     * running — so a tool with no running instance has no icon, and the Catalog shows a letter in
+     * its place ({@code ControlDashboard_260905_oo01}).</p>
+     *
+     * <p>Which file it is differs by tool — html-saurus answers {@code /favicon.ico} and the chat
+     * UIs answer {@code /favicon.svg} — so the base is returned and the page tries both.</p>
+     */
+    private String iconBaseOf(AiWorkspaceConfig.ToolDefinition tool) {
+        CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
+        if (list == null) return "";
+        return list.stream()
+            .filter(s -> s.getState() == SessionState.READY)
+            .findFirst()
+            .map(s -> "http://localhost:" + s.getPort() + "/")
+            .orElse("");
     }
 
     /**

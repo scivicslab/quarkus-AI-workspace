@@ -1,0 +1,35 @@
+{#include layout}
+{#body}
+    <p class="section-label">What this portal passes to every tool it launches</p>
+    <table class="settings-table">
+        <thead><tr><th>Variable</th><th>Value</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="inst-mono">GPU_BROKER_URL</td>
+                <td class="inst-mono">{#if gpuBrokerUrl}{gpuBrokerUrl}{#else}<span class="settings-unset">not set</span>{/if}</td>
+                <td>Where GPU work goes. Unset means each tool keeps whatever fixed node it was written to use.</td>
+            </tr>
+            <tr>
+                <td class="inst-mono">AI_WORKSPACE_URL</td>
+                <td class="inst-mono">{aiWorkspaceUrl}</td>
+                <td>Where to ask which tools are running. Answered by <span class="inst-mono">GET /api/services</span>.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="section-label" style="margin-top:1.5rem;">This portal</p>
+    <table class="settings-table">
+        <tbody>
+            <tr><td class="inst-mono">version</td><td class="inst-mono">{version}</td></tr>
+            <tr><td class="inst-mono">port</td><td class="inst-mono">{portalPort}</td></tr>
+            <tr><td class="inst-mono">port range</td><td class="inst-mono">{portRange}</td></tr>
+            <tr><td class="inst-mono">working directory</td><td class="inst-mono">{workingDir}</td></tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top:1rem;font-size:13px;color:var(--text-secondary);">
+        These reach a tool only at the moment it is launched. A tool already running when a value
+        changed still holds the old one; restart it to hand it the new one.
+    </p>
+{/body}
+{/include}

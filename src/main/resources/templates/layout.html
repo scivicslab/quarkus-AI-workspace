@@ -579,6 +579,30 @@
         a.btn-open { border-color: var(--accent-green); color: var(--accent-green); }
         a.btn-open:hover { background: color-mix(in srgb, var(--accent-green) 12%, transparent); }
 
+        /* ── Catalog tile ─────── */
+        /* Top-aligned, not centred: a tool running seven instances has a status three lines tall,
+           and centring put its icon beside the middle line instead of at the top-left corner. */
+        .tool-head { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.6rem; }
+        .tool-icon { width: 28px; height: 28px; object-fit: contain; flex: none; border-radius: 4px; }
+        .tool-icon-letter { display: flex; align-items: center; justify-content: center;
+                            background: var(--bg-tertiary); color: var(--text-secondary);
+                            font-weight: 700; font-size: 15px; }
+        /* One button per line: three buttons of different widths wrapped into a ragged block. */
+        .tool-buttons { display: flex; flex-direction: column; align-items: stretch; gap: 0.35rem; }
+        .tool-buttons .btn { width: 100%; text-align: center; }
+        .launch-form { margin-top: 0.7rem; border-top: 1px solid var(--border-color);
+                       padding-top: 0.7rem; }
+        .launch-form .btn-launch { width: 100%; margin-top: 0.5rem; }
+
+        /* ── Settings ─────── */
+        .settings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .settings-table th { text-align: left; padding: 0.45rem 0.6rem; font-weight: 600;
+                             color: var(--text-secondary); border-bottom: 1px solid var(--border-color);
+                             white-space: nowrap; }
+        .settings-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border-color);
+                             vertical-align: top; }
+        .settings-unset { color: var(--text-secondary); font-style: italic; }
+
         /* ── Screen navigation (Instances / Catalog) ─────── */
         .screen-nav { display: flex; gap: 0.25rem; margin-bottom: 1.25rem;
                       border-bottom: 1px solid var(--border); }
@@ -654,8 +678,9 @@
 <main>
 
     <nav class="screen-nav">
-        <a href="/" class="screen-tab{#if screen == 'instances'} screen-tab-active{/if}">Instances</a>
-        <a href="/catalog" class="screen-tab{#if screen == 'catalog'} screen-tab-active{/if}">Catalog</a>
+        <a href="/" class="screen-tab{#if screen == 'catalog'} screen-tab-active{/if}">Catalog</a>
+        <a href="/instances" class="screen-tab{#if screen == 'instances'} screen-tab-active{/if}">Instances</a>
+        <a href="/settings" class="screen-tab{#if screen == 'settings'} screen-tab-active{/if}">Settings</a>
     </nav>
 
 {#insert body /}
@@ -689,6 +714,14 @@
             localStorage.setItem(KEY, t);
         });
     })();
+</script>
+<script>
+    // A tool's icon: try its favicon.svg, then its favicon.ico, then leave the letter in place.
+    function toolIconFallback(img, base) {
+        if (img.dataset.triedIco) { img.remove(); return; }
+        img.dataset.triedIco = '1';
+        img.src = base + 'favicon.ico';
+    }
 </script>
 <script src="static/app.js"></script>
 </body>

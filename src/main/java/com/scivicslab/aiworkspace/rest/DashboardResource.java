@@ -27,9 +27,11 @@ import java.util.Optional;
  * The three screens of the control dashboard ({@code ControlDashboard_260905_oo01}).
  *
  * <ul>
- *   <li>{@code /} — Instances: what is running, as a table</li>
- *   <li>{@code /catalog} — Catalog: what can be launched</li>
+ *   <li>{@code /} — Catalog: what can be launched. The first screen, because launching something
+ *       is what someone opens this portal to do.</li>
+ *   <li>{@code /instances} — Instances: what is running, as a table</li>
  *   <li>{@code /instances/{tool}/{port}} — one instance: its settings and its log</li>
+ *   <li>{@code /settings} — what this portal hands to every tool it launches</li>
  * </ul>
  *
  * <p>They were one page. The two questions "what can I launch" and "what is running" are asked at
@@ -47,6 +49,9 @@ public class DashboardResource {
 
     @Inject
     Template instance;
+
+    @Inject
+    Template settings;
 
     @Inject
     ServiceBackend backend;
@@ -82,8 +87,9 @@ public class DashboardResource {
                               String accessUrl, String startedAt, String uptime,
                               java.util.Map<String, String> params) {}
 
-    /** Instances — the screen opened most often, so it is the one at the root. */
+    /** Instances — what is running. */
     @GET
+    @Path("/instances")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance instances() {
         List<InstanceRow> rows = rows();
@@ -98,9 +104,8 @@ public class DashboardResource {
             .data("stopped", count(rows, SessionState.STOPPED));
     }
 
-    /** Catalog — what can be launched, with each tool's form hidden until Launch is pressed. */
+    /** Catalog — what can be launched, with each tool's form hidden until it is asked for. */
     @GET
-    @Path("/catalog")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance catalog() {
         return catalog
@@ -144,6 +149,33 @@ public class DashboardResource {
             .data("log", backend.getServiceLogs(tool, port, wanted));
     }
 
+    /**
+     * Settings — the values this portal resolved and hands to each tool it launches.
+     *
+     * <p>Read-only, and read the same way {@code ProcessSupervisor} reads them at launch, so what
+     * is shown here is what a tool started now would receive ({@code ServiceDirectory_260905_oo01}).</p>
+     */
+    @GET
+    @Path("/settings")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance settings() {
+        String broker = System.getProperty("gpu.broker.url");
+        if (broker == null || broker.isBlank()) broker = System.getenv("GPU_BROKER_URL");
+        String portalPort = System.getProperty("quarkus.http.port", "28000").trim();
+        int start;
+        try { start = Integer.parseInt(portalPort); } catch (NumberFormatException e) { start = -1; }
+        return settings
+            .data("screen", "settings")
+            .data("version", appVersion)
+            .data("imageTag", imageTag.orElse(""))
+            .data("gpuBrokerUrl", broker == null || broker.isBlank() ? "" : broker.replaceAll("/+$", ""))
+            .data("aiWorkspaceUrl", "http://localhost:" + portalPort)
+            .data("portalPort", portalPort)
+            .data("portRange", start < 0 ? "—"
+                    : "reserved " + (start + 1) + "-" + (start + 9) + ", pool " + (start + 10) + "-" + (start + 50))
+            .data("workingDir", System.getProperty("user.dir", "—"));
+    }
+
     /** Every instance the backend knows about, management services and launched tools alike. */
     private List<InstanceRow> rows() {
         DashboardModel model = backend.getDashboardModel();
@@ -159,6 +191,11 @@ public class DashboardResource {
                     s.startedAt(), uptimeOf(s.startedAt()),
                     s.params() == null ? java.util.Map.of() : s.params()));
         }
+        // By port. The backend hands these over grouped by tool, in the order the tools are defined
+        // and then the order instances were launched, which is neither of the two orders someone
+        // reading the table has in mind. The port is the one column that is unique per row and that
+        // a reader already knows a value of when looking for a specific instance.
+        rows.sort(java.util.Comparator.comparingInt(InstanceRow::port));
         return rows;
     }
 
