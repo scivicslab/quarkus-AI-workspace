@@ -3,23 +3,15 @@ package com.scivicslab.aiworkspace.model;
 import java.util.List;
 
 /**
- * Dashboard model — three-section layout plus MCP Gateway status.
+ * Dashboard model — three-section layout.
  *
- * - managementServices: autoStart=true tools (e.g. mcp-gateway), empty in EXTERNAL mode
+ * - managementServices: autoStart=true tools
  * - activeSessions:     all running/starting tool instances
  * - launchTools:        tools that can be launched with user-provided parameters
- * - mcpGateway:         current MCP Gateway mode and active URL (Internal / External)
  */
 public record DashboardModel(
     List<SessionView> managementServices,
     List<SessionView> activeSessions,
-    List<ToolView> launchTools,
-    McpGatewayStatus mcpGateway
+    List<ToolView> launchTools
 ) {
-    /** Backwards-compatible constructor: defaults mcpGateway to null. */
-    public DashboardModel(List<SessionView> managementServices,
-                          List<SessionView> activeSessions,
-                          List<ToolView> launchTools) {
-        this(managementServices, activeSessions, launchTools, null);
-    }
 }

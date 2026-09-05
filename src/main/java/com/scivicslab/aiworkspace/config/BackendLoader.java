@@ -50,7 +50,7 @@ public class BackendLoader {
         return new AiWorkspaceConfig.ToolDefinition(
             e.name(), e.jarFileName(), e.defaultPort(),
             e.autoStart(), e.fixedPort(), e.singleInstance(),
-            args, jvmArgs, e.params(), e.gatewayMcpProp(), e.githubRepo()
+            args, jvmArgs, e.params(), e.githubRepo()
         );
     }
 }

@@ -22,51 +22,51 @@ class JvmBackendTest {
         @Test
         @DisplayName("full absolute path in args matches")
         void fullAbsolutePath_matches() {
-            String[] args = {"-Dquarkus.http.port=28081", "-jar", "/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar"};
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            String[] args = {"-Dquarkus.http.port=28081", "-jar", "/home/devteam/ai-toolkit/quarkus-chat-ui.jar"};
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", args)).isTrue();
         }
 
         @Test
         @DisplayName("bare filename in args matches when resolvedJar is absolute")
         void bareFilename_matchesAbsoluteResolvedJar() {
-            // Gateway started with relative path; quarkus-AI-workspace resolves to absolute
-            String[] args = {"-Dquarkus.http.port=28081", "-jar", "quarkus-mcp-gateway.jar"};
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            // Tool started with relative path; quarkus-AI-workspace resolves to absolute
+            String[] args = {"-Dquarkus.http.port=28081", "-jar", "quarkus-chat-ui.jar"};
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", args)).isTrue();
         }
 
         @Test
         @DisplayName("path ending with /filename in args matches")
         void relativeSubdir_matches() {
-            String[] args = {"-jar", "toolkit/quarkus-mcp-gateway.jar"};
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isTrue();
+            String[] args = {"-jar", "toolkit/quarkus-chat-ui.jar"};
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", args)).isTrue();
         }
 
         @Test
         @DisplayName("different jar name does not match")
         void differentJar_noMatch() {
-            String[] args = {"-jar", "quarkus-chat-ui.jar"};
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
+            String[] args = {"-jar", "html-saurus.jar"};
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", args)).isFalse();
         }
 
         @Test
         @DisplayName("empty args array does not match")
         void emptyArgs_noMatch() {
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", new String[0])).isFalse();
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", new String[0])).isFalse();
         }
 
         @Test
         @DisplayName("partial filename substring does not match as bare filename")
         void partialFilename_noMatch() {
-            // "gateway.jar" should not match "quarkus-mcp-gateway.jar"
-            String[] args = {"-jar", "gateway.jar"};
-            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar", args)).isFalse();
+            // "chat-ui.jar" should not match "quarkus-chat-ui.jar"
+            String[] args = {"-jar", "chat-ui.jar"};
+            assertThat(JvmBackend.jarMatches("/home/devteam/ai-toolkit/quarkus-chat-ui.jar", args)).isFalse();
         }
 
         @Test
         @DisplayName("resolvedJar is a bare filename — full path in args matches via contains")
         void resolvedJarBareFilename_fullPathInArgs_matches() {
-            String[] args = {"-jar", "/some/path/quarkus-mcp-gateway.jar"};
-            assertThat(JvmBackend.jarMatches("quarkus-mcp-gateway.jar", args)).isTrue();
+            String[] args = {"-jar", "/some/path/quarkus-chat-ui.jar"};
+            assertThat(JvmBackend.jarMatches("quarkus-chat-ui.jar", args)).isTrue();
         }
     }
 
@@ -81,7 +81,7 @@ class JvmBackendTest {
         @Test
         @DisplayName("absolute path is returned unchanged")
         void absolutePath_unchanged() {
-            String path = "/home/devteam/ai-toolkit/quarkus-mcp-gateway.jar";
+            String path = "/home/devteam/ai-toolkit/quarkus-chat-ui.jar";
             assertThat(ProcessSupervisor.resolveJarPath(path)).isEqualTo(path);
         }
 
@@ -89,8 +89,8 @@ class JvmBackendTest {
         @DisplayName("relative path is resolved against user.dir")
         void relativePath_resolvedAgainstUserDir() {
             String userDir = System.getProperty("user.dir");
-            String result = ProcessSupervisor.resolveJarPath("quarkus-mcp-gateway.jar");
-            assertThat(result).isEqualTo(userDir + "/quarkus-mcp-gateway.jar");
+            String result = ProcessSupervisor.resolveJarPath("quarkus-chat-ui.jar");
+            assertThat(result).isEqualTo(userDir + "/quarkus-chat-ui.jar");
         }
 
         @Test

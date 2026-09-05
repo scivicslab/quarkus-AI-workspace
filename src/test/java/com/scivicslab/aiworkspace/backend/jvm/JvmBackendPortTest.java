@@ -47,7 +47,7 @@ class JvmBackendPortTest {
     private static AiWorkspaceConfig.ToolDefinition tool(String name, int port, boolean fixedPort) {
         return new AiWorkspaceConfig.ToolDefinition(
             name, name + ".jar", port, false, fixedPort, false,
-            List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), List.of(), null);
     }
 
     @Test

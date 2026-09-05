@@ -57,7 +57,6 @@ public final class ToolRegistryLoader {
                 strList(entry.get("args")),
                 strList(entry.get("jvmArgs")),
                 parseParams(entry.get("params")),
-                str(entry.get("gatewayMcpProp")),
                 strList(entry.get("dependsOn")),
                 strList(entry.get("modules"))
             ));

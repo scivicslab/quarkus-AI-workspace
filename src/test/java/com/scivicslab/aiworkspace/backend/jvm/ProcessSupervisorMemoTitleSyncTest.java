@@ -19,7 +19,7 @@ class ProcessSupervisorMemoTitleSyncTest {
     private static AiWorkspaceConfig.ToolDefinition minimalConfig() {
         return new AiWorkspaceConfig.ToolDefinition(
                 "test-tool", null, 0, false, false, false,
-                List.of(), List.of(), List.of(), null, null);
+                List.of(), List.of(), List.of(), null);
     }
 
     private static SessionView view(Map<String, String> launchParams, String storedMemo) {

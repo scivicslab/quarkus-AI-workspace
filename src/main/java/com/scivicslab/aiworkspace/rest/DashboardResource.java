@@ -46,7 +46,6 @@ public class DashboardResource {
             .data("imageTag", imageTag.orElse(""))
             .data("managementServices", model.managementServices())
             .data("activeSessions", model.activeSessions())
-            .data("launchTools", model.launchTools())
-            .data("mcpGateway", model.mcpGateway());
+            .data("launchTools", model.launchTools());
     }
 }

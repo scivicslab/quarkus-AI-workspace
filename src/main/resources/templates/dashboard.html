@@ -6,7 +6,7 @@
     <title>AI Workspace</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <style>
-        /* ── Themes (same variable set as MCP Gateway) ─────── */
+        /* ── Themes ─────── */
         :root, [data-theme="dark-catppuccin"] {
             --bg-primary:   #1e1e2e;
             --bg-secondary: #313244;
@@ -689,7 +689,6 @@
     <p class="section-label">Launch Tools</p>
     <div class="tool-grid">
         {#for tool in launchTools}
-        {#if !tool.name.equals("mcp-gateway") && !tool.name.equals("quarkus-mcp-gateway")}
         <div class="tool-tile" id="tool-tile-{tool.name}">
             <div class="tool-tile-name">{tool.displayName}</div>
             {! Param form is rendered the same whether or not the jar is present, so the tile
@@ -732,42 +731,7 @@
                 <span class="tool-status" id="tool-status-{tool.name}">{tool.status}</span>
             </div>
         </div>
-        {/if}
         {/for}
-        {#if mcpGateway}
-        <div class="tool-tile" id="tool-tile-mcp-gateway-mode">
-            <div class="tool-tile-name">🛰️ MCP Gateway</div>
-            <div class="param-row">
-                <label class="param-label">Mode</label>
-                <div style="font-size:13px;color:var(--text-primary);">
-                    {#if mcpGateway.mode == "EXTERNAL"}External
-                    {#else if mcpGateway.mode == "INTERNAL_READY"}Internal (running)
-                    {#else if mcpGateway.mode == "INTERNAL_STARTING"}Internal (starting…)
-                    {#else if mcpGateway.mode == "INTERNAL_FAILED"}Internal (failed)
-                    {#else}Internal (stopped)
-                    {/if}
-                </div>
-            </div>
-            <div class="param-row">
-                <label class="param-label">Active URL</label>
-                <div style="font-size:12px;color:var(--text-secondary);font-family:'Cascadia Code','Fira Code','Consolas',monospace;word-break:break-all;">
-                    {#if mcpGateway.activeUrl}{mcpGateway.activeUrl}{#else}—{/if}
-                </div>
-            </div>
-            <div class="param-row">
-                <label class="param-label">External URL</label>
-                <input type="text" class="param-input" id="param-mcp-gateway-external-url"
-                       placeholder="http://localhost:28001"
-                       value="{#if mcpGateway.mode == 'EXTERNAL'}{mcpGateway.activeUrl}{/if}">
-            </div>
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.3rem;">
-                <button class="btn btn-launch" onclick="useExternalGateway()">Launch</button>
-                {#if mcpGateway.mode == "EXTERNAL"}
-                <button class="btn btn-stop" onclick="useInternalGateway()">Switch to Team Subprocess</button>
-                {/if}
-            </div>
-        </div>
-        {/if}
     </div>
     {/if}
 

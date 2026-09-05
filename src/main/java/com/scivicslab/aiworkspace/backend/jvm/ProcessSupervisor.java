@@ -62,13 +62,6 @@ public class ProcessSupervisor {
      */
     private volatile File logFile;
 
-    /**
-     * MCP Gateway URL injected by JvmBackend at launch time.
-     * Set via {@link #setGatewayUrl(String)} before calling {@link #start()}.
-     * Exposed to the child process as the {@code MCP_GATEWAY_URL} environment variable.
-     */
-    private String gatewayUrl;
-    private volatile String registeredGatewayName;
 
     public ProcessSupervisor(AiWorkspaceConfig.ToolDefinition config,
                              int port,
@@ -76,10 +69,6 @@ public class ProcessSupervisor {
         this.config = config;
         this.port = port;
         this.launchParams = Collections.unmodifiableMap(launchParams);
-    }
-
-    public void setGatewayUrl(String url) {
-        this.gatewayUrl = url;
     }
 
     public int getPort() {
@@ -129,7 +118,6 @@ public class ProcessSupervisor {
         if (adoptSessionId != null && !adoptSessionId.isBlank()) {
             supervisor.cachedAccessUrl = "/session/" + adoptSessionId + "-" + config.name() + "-" + port + "/";
         }
-        supervisor.registerWithGateway();
         Thread.ofVirtual().start(supervisor::tailLogFile);
         Thread.ofVirtual().start(supervisor::watchAdoptedProcess);
         logger.info("Adopted " + config.name() + ":" + port + " (PID " + pid + ")");
@@ -184,15 +172,10 @@ public class ProcessSupervisor {
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile); // truncates existing file for fresh log
 
-            if (gatewayUrl != null && !gatewayUrl.isBlank()) {
-                pb.environment().put("MCP_GATEWAY_URL", gatewayUrl);
-            }
-
             // Where the GPU work goes. quarkus-gpu-broker stands once in front of the cluster's
             // GPU nodes and need not run on this machine, so a tool cannot assume an address for
-            // it. This portal is the one place that knows, and it tells each tool it launches,
-            // the same way it tells them where the MCP gateway is. A tool started with this
-            // unset keeps whatever fixed node it was written to use.
+            // it. This portal is the one place that knows, and it tells each tool it launches.
+            // A tool started with this unset keeps whatever fixed node it was written to use.
             String brokerUrl = gpuBrokerUrl();
             if (brokerUrl != null) {
                 pb.environment().put("GPU_BROKER_URL", brokerUrl);
@@ -220,7 +203,6 @@ public class ProcessSupervisor {
 
     public synchronized void stop() {
         deregisterFromK8sPups();
-        unregisterFromGateway();
         stopping = true;
 
         if (process != null && process.isAlive()) {
@@ -353,15 +335,6 @@ public class ProcessSupervisor {
             }
         }
 
-        // Inject MCP gateway URL for the agent loop.
-        // Self MCP endpoint is intentionally excluded: including it exposed submitPrompt
-        // as an MCP tool, causing the agent loop to re-submit the user prompt back to itself.
-        if (config.gatewayMcpProp() != null && !config.gatewayMcpProp().isBlank()) {
-            if (gatewayUrl != null && !gatewayUrl.isBlank()) {
-                command.add("-D" + config.gatewayMcpProp() + "=" + gatewayUrl);
-            }
-        }
-
         if (hasPositionalArgs) {
             // Positional-arg mode (e.g. html-saurus): no -Dquarkus.http.port, tool handles port itself
             if (!isNative) {
@@ -423,8 +396,7 @@ public class ProcessSupervisor {
                 if (stopping) return;
                 state = SessionState.READY;
                 logger.info(config.name() + ":" + port + " is READY");
-                registerWithGateway();
-                registerWithK8sPups();
+                        registerWithK8sPups();
                 return;
             }
             try {
@@ -530,7 +502,7 @@ public class ProcessSupervisor {
     /**
      * Resolves a jar path. If the path is already absolute, returns it as-is.
      * Otherwise resolves relative to the directory containing quarkus-AI-workspace.jar
-     * (i.e. user.dir at startup), so yaml entries like "quarkus-mcp-gateway.jar"
+     * (i.e. user.dir at startup), so yaml entries like "html-saurus.jar"
      * work without any path prefix or environment variable.
      */
     static String resolveJarPath(String path) {
@@ -541,117 +513,6 @@ public class ProcessSupervisor {
     }
 
     // ---------------------------------------------------------------
-    // MCP Gateway integration
-    // ---------------------------------------------------------------
-
-    // Lazy init: avoids HttpClientFacade in GraalVM native image heap
-    private static volatile HttpClient HTTP_CLIENT;
-    private static HttpClient httpClient() {
-        if (HTTP_CLIENT == null) {
-            HTTP_CLIENT = HttpClient.newHttpClient();
-        }
-        return HTTP_CLIENT;
-    }
-
-    /**
-     * The GPU broker's address as this portal was configured with it, or {@code null} when it was
-     * not configured.
-     *
-     * <p>Read the same way {@link #gatewayUrl()} reads the gateway's: the system property first,
-     * so a single JVM argument can point one run somewhere else, then the environment. Resolved
-     * per launch rather than held in a field, so a portal restart is all it takes to move every
-     * tool to a different broker.</p>
-     *
-     * @return the broker base URL, or {@code null} if none is configured
-     */
-    private String gpuBrokerUrl() {
-        String url = System.getProperty("gpu.broker.url");
-        if (url != null && !url.isBlank()) return url;
-        url = System.getenv("GPU_BROKER_URL");
-        return (url != null && !url.isBlank()) ? url : null;
-    }
-
-    private String gatewayUrl() {
-        String url = System.getProperty("mcp.gateway.url");
-        if (url != null && !url.isBlank()) return url;
-        url = System.getenv("MCP_GATEWAY_URL");
-        return (url != null && !url.isBlank()) ? url : null;
-    }
-
-    private void registerWithGateway() {
-        String gwUrl = gatewayUrl();
-        if (gwUrl == null) return;
-
-        String name = resolveMcpServerName();
-        registeredGatewayName = name;
-        String url  = "http://localhost:" + externalPort();
-        String body = "{\"name\":\"" + name + "\","
-            + "\"url\":\"" + url + "\","
-            + "\"description\":\"" + name + "\"}";
-
-        try {
-            HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(gwUrl + "/api/servers"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-            httpClient().sendAsync(req, HttpResponse.BodyHandlers.discarding())
-                .thenAccept(r -> logger.info("Gateway registered: " + name + " (HTTP " + r.statusCode() + ")"))
-                .exceptionally(e -> { logger.warning("Gateway registration failed for " + name + ": " + e.getMessage()); return null; });
-        } catch (Exception e) {
-            logger.warning("Gateway registration failed for " + name + ": " + e.getMessage());
-        }
-    }
-
-    private void unregisterFromGateway() {
-        String gwUrl = gatewayUrl();
-        if (gwUrl == null) return;
-
-        String name = registeredGatewayName != null ? registeredGatewayName : config.name() + "-" + port;
-
-        try {
-            HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(gwUrl + "/api/servers/" + name))
-                .DELETE()
-                .build();
-            httpClient().sendAsync(req, HttpResponse.BodyHandlers.discarding())
-                .thenAccept(r -> logger.info("Gateway unregistered: " + name + " (HTTP " + r.statusCode() + ")"))
-                .exceptionally(e -> { logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage()); return null; });
-        } catch (Exception e) {
-            logger.warning("Gateway unregistration failed for " + name + ": " + e.getMessage());
-        }
-    }
-
-    private static final Pattern SERVER_NAME_PATTERN =
-        Pattern.compile("\"serverInfo\"\\s*:\\s*\\{[^}]*\"name\"\\s*:\\s*\"([^\"]+)\"");
-
-    private String resolveMcpServerName() {
-        String mcpUrl = "http://localhost:" + externalPort() + "/mcp";
-        String initBody = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
-            + "\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},"
-            + "\"clientInfo\":{\"name\":\"ai-workspace\",\"version\":\"1.0\"}}}";
-        try {
-            HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(mcpUrl))
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(initBody))
-                .timeout(Duration.ofSeconds(3))
-                .build();
-            HttpResponse<String> resp = httpClient().send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-                Matcher m = SERVER_NAME_PATTERN.matcher(resp.body());
-                if (m.find()) {
-                    String baseName = m.group(1);
-                    String portSuffix = "-" + port;
-                    return baseName.endsWith(portSuffix) ? baseName : baseName + portSuffix;
-                }
-            }
-        } catch (Exception e) {
-            logger.fine("Could not probe MCP name for " + config.name() + ":" + port + ", using fallback");
-        }
-        return config.name() + "-" + port;
-    }
 
     // ---------------------------------------------------------------
     // k8s-pups sub-tool registration
@@ -665,6 +526,34 @@ public class ProcessSupervisor {
     private String pupsSessionId() {
         String id = System.getenv("PUPS_SESSION_ID");
         return (id != null && !id.isBlank()) ? id : null;
+    }
+
+    /** One HTTP client for this process, used by the registrations below. */
+    private static volatile HttpClient HTTP_CLIENT;
+
+    private static HttpClient httpClient() {
+        if (HTTP_CLIENT == null) {
+            HTTP_CLIENT = HttpClient.newHttpClient();
+        }
+        return HTTP_CLIENT;
+    }
+
+    /**
+     * The GPU broker's address as this portal was configured with it, or {@code null} when it was
+     * not configured.
+     *
+     * <p>The system property first, so a single JVM argument can point one run somewhere else,
+     * then the environment. Resolved per launch rather than held in a field, so a portal restart is
+     * all it takes to move every tool to a different broker
+     * ({@code ServiceDirectory_260905_oo01}).</p>
+     *
+     * @return the broker base URL, or {@code null} if none is configured
+     */
+    private String gpuBrokerUrl() {
+        String url = System.getProperty("gpu.broker.url");
+        if (url != null && !url.isBlank()) return url;
+        url = System.getenv("GPU_BROKER_URL");
+        return (url != null && !url.isBlank()) ? url : null;
     }
 
     private void registerWithK8sPups() {

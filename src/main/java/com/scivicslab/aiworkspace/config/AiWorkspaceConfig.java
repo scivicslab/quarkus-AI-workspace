@@ -37,8 +37,7 @@ public record AiWorkspaceConfig(
         java.util.List<String> args,
         java.util.List<String> jvmArgs,   // raw JVM flags (e.g. -Xmx4g) inserted before -D props
         java.util.List<ParamDefinition> params,
-        String gatewayMcpProp,  // if set, -D{gatewayMcpProp}={gatewayUrl}/mcp/_all is injected at launch
-        String github           // GitHub repo in "owner/repo" format for download-latest feature
+            String github           // GitHub repo in "owner/repo" format for download-latest feature
     ) {}
 
     /** A user-configurable parameter shown in the tool launch tile. */

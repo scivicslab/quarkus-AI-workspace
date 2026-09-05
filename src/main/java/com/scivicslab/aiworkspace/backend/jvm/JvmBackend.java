@@ -2,7 +2,6 @@ package com.scivicslab.aiworkspace.backend.jvm;
 
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
 import com.scivicslab.aiworkspace.model.DashboardModel;
-import com.scivicslab.aiworkspace.model.McpGatewayStatus;
 import com.scivicslab.aiworkspace.model.ParamDefinition;
 import com.scivicslab.aiworkspace.model.SessionState;
 import com.scivicslab.aiworkspace.model.SessionView;
@@ -53,13 +52,6 @@ public class JvmBackend implements ServiceBackend {
     /** -1 when port-range mode is inactive (legacy mode). */
     private int rangeStart = -1;
     private int rangeEnd   = -1;
-
-    /**
-     * External MCP Gateway URL, set via {@link #useExternalGateway(String)}.
-     * When non-null, propagated to child processes as MCP_GATEWAY_URL instead of
-     * the team-dedicated subprocess URL. Cleared by {@link #useInternalGateway()}.
-     */
-    private volatile String externalMcpGatewayUrl;
 
     /** Tools in the registry that have not yet been downloaded to ~/works/. */
 
@@ -365,97 +357,13 @@ public class JvmBackend implements ServiceBackend {
         int port = choosePort(def, params);
 
         ProcessSupervisor supervisor = new ProcessSupervisor(def, port, params);
-        supervisor.setGatewayUrl(resolveGatewayUrl().orElse(null));
         list.add(supervisor);
         supervisor.start();
     }
 
-    /**
-     * Returns the MCP Gateway base URL to inject into newly-launched child processes.
-     *
-     * <ul>
-     *   <li>External mode: returns the URL set via {@link #useExternalGateway(String)}.</li>
-     *   <li>Internal mode: returns the team-dedicated subprocess URL only when that
-     *       subprocess is in {@link SessionState#READY}. While starting / failed / stopped,
-     *       returns {@link Optional#empty()} so the env var is not set on the child.</li>
-     * </ul>
-     */
-    public Optional<String> resolveGatewayUrl() {
-        if (externalMcpGatewayUrl != null && !externalMcpGatewayUrl.isBlank()) {
-            return Optional.of(externalMcpGatewayUrl);
-        }
-        return findMcpGatewayTool().flatMap(tool -> {
-            CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
-            if (list == null) return Optional.empty();
-            return list.stream()
-                .filter(s -> s.getState() == SessionState.READY)
-                .findFirst()
-                .map(s -> "http://localhost:" + s.getPort());
-        });
-    }
 
-    /**
-     * Locates the team-dedicated MCP Gateway tool definition. Convention:
-     * the autoStart=true + fixedPort=true tool is the gateway (typically named "mcp-gateway").
-     */
-    private Optional<AiWorkspaceConfig.ToolDefinition> findMcpGatewayTool() {
-        if (config == null || config.jvm() == null) return Optional.empty();
-        return config.jvm().tools().stream()
-            .filter(t -> t.autoStart() && t.fixedPort())
-            .findFirst();
-    }
 
-    /**
-     * Switch to External mode: stop the team-dedicated MCP Gateway subprocess (if running)
-     * and adopt the given external URL as the MCP Gateway for newly-launched tools.
-     *
-     * @throws ServiceException if the URL is blank
-     */
-    public void useExternalGateway(String url) throws ServiceException {
-        if (url == null || url.isBlank()) {
-            throw new ServiceException("External MCP Gateway URL must not be blank");
-        }
-        String normalised = url.trim();
-        // Stop team-dedicated subprocess (if any) before switching
-        findMcpGatewayTool().ifPresent(tool -> {
-            CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
-            if (list != null) {
-                for (ProcessSupervisor s : List.copyOf(list)) {
-                    if (s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED) {
-                        s.stop();
-                    }
-                }
-                list.removeIf(s -> s.getState() == SessionState.STOPPED
-                                || s.getState() == SessionState.FAILED);
-            }
-        });
-        this.externalMcpGatewayUrl = normalised;
-        logger.info("MCP Gateway switched to EXTERNAL mode: " + normalised);
-    }
 
-    /**
-     * Switch back to Internal mode: clear the external URL and start the
-     * team-dedicated MCP Gateway subprocess. No-op if already in Internal mode
-     * with a running subprocess.
-     */
-    public void useInternalGateway() throws ServiceException {
-        this.externalMcpGatewayUrl = null;
-        Optional<AiWorkspaceConfig.ToolDefinition> toolOpt = findMcpGatewayTool();
-        if (toolOpt.isEmpty()) {
-            logger.warning("useInternalGateway: no MCP Gateway tool definition found");
-            return;
-        }
-        AiWorkspaceConfig.ToolDefinition tool = toolOpt.get();
-        CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(tool.name());
-        boolean alreadyRunning = list != null && list.stream().anyMatch(
-            s -> s.getState() == SessionState.READY || s.getState() == SessionState.STARTING);
-        if (alreadyRunning) {
-            logger.info("MCP Gateway switched to INTERNAL mode (subprocess already running)");
-            return;
-        }
-        startService(tool.name(), Map.of());
-        logger.info("MCP Gateway switched to INTERNAL mode (subprocess started)");
-    }
 
     @Override
     public void stopService(String toolName, int port) throws ServiceException {
@@ -483,24 +391,17 @@ public class JvmBackend implements ServiceBackend {
         List<ToolView> launchTools = new ArrayList<>();
 
         if (config == null || config.jvm() == null) {
-            return new DashboardModel(managementServices, activeSessions, launchTools, buildMcpGatewayStatus());
+            return new DashboardModel(managementServices, activeSessions, launchTools);
         }
-
-        boolean inExternal = externalMcpGatewayUrl != null && !externalMcpGatewayUrl.isBlank();
 
         for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             CopyOnWriteArrayList<ProcessSupervisor> list = instances.getOrDefault(tool.name(), new CopyOnWriteArrayList<>());
 
             if (tool.autoStart()) {
-                // MCP Gateway (autoStart + fixedPort) tile is handled via Launch Tools + mcpGateway status,
-                // so suppress it from Management Services entirely when in EXTERNAL mode.
-                boolean isMcpGateway = tool.fixedPort();
                 List<ProcessSupervisor> active = list.stream()
                     .filter(s -> s.getState() != SessionState.STOPPED && s.getState() != SessionState.FAILED)
                     .toList();
-                if (isMcpGateway && inExternal) {
-                    // In EXTERNAL mode the gateway subprocess is not running and the tile lives in Launch Tools
-                } else if (active.isEmpty()) {
+                if (active.isEmpty()) {
                     managementServices.add(stoppedView(tool));
                 } else {
                     for (ProcessSupervisor s : active) managementServices.add(s.toSessionView((name, p) -> "http://localhost:" + p + "/"));
@@ -527,44 +428,10 @@ public class JvmBackend implements ServiceBackend {
 
         // Every tool comes from the registry (via config) in declaration order, so launchTools is
         // already ordered; jar presence no longer splits or reshuffles the tiles.
-        return new DashboardModel(managementServices, activeSessions, launchTools, buildMcpGatewayStatus());
+        return new DashboardModel(managementServices, activeSessions, launchTools);
     }
 
-    /**
-     * Builds the MCP Gateway status for the dashboard.
-     * Reflects EXTERNAL mode if set, otherwise the team-dedicated subprocess state.
-     */
-    private McpGatewayStatus buildMcpGatewayStatus() {
-        if (externalMcpGatewayUrl != null && !externalMcpGatewayUrl.isBlank()) {
-            return new McpGatewayStatus("EXTERNAL", externalMcpGatewayUrl);
-        }
-        Optional<AiWorkspaceConfig.ToolDefinition> toolOpt = findMcpGatewayTool();
-        if (toolOpt.isEmpty()) {
-            // MCP Gateway retired: no gateway tool is defined, so the dashboard tile
-            // ({#if mcpGateway}) is hidden by returning null.
-            return null;
-        }
-        CopyOnWriteArrayList<ProcessSupervisor> list = instances.get(toolOpt.get().name());
-        if (list == null || list.isEmpty()) {
-            return new McpGatewayStatus("INTERNAL_STOPPED", null);
-        }
-        // Pick highest-priority state: READY > STARTING > FAILED > STOPPED
-        SessionState best = SessionState.STOPPED;
-        ProcessSupervisor pick = null;
-        for (ProcessSupervisor s : list) {
-            SessionState st = s.getState();
-            if (st == SessionState.READY) { best = st; pick = s; break; }
-            if (st == SessionState.STARTING && best != SessionState.READY) { best = st; pick = s; }
-            else if (st == SessionState.FAILED && best != SessionState.READY && best != SessionState.STARTING) { best = st; pick = s; }
-        }
-        return switch (best) {
-            case READY    -> new McpGatewayStatus("INTERNAL_READY",
-                                pick != null ? "http://localhost:" + pick.getPort() : null);
-            case STARTING -> new McpGatewayStatus("INTERNAL_STARTING", null);
-            case FAILED   -> new McpGatewayStatus("INTERNAL_FAILED", null);
-            default       -> new McpGatewayStatus("INTERNAL_STOPPED", null);
-        };
-    }
+
 
     @Override
     public void updateMemo(String toolName, int port, String memo) {

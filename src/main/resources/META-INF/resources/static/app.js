@@ -363,37 +363,6 @@
     };
 
     // ---------------------------------------------------------------
-    // MCP Gateway mode switching
-    // ---------------------------------------------------------------
-
-    window.useExternalGateway = async function () {
-        const input = document.getElementById('param-mcp-gateway-external-url');
-        const url = input ? input.value.trim() : '';
-        if (!url) { alert('External URL is required'); return; }
-        const r = await fetch('api/mcp-gateway/use-external', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
-        });
-        if (r.ok) {
-            location.reload();
-        } else {
-            const body = await r.json().catch(() => ({}));
-            alert('Failed to switch to external MCP Gateway: ' + (body.error || r.status));
-        }
-    };
-
-    window.useInternalGateway = async function () {
-        const r = await fetch('api/mcp-gateway/use-internal', { method: 'POST' });
-        if (r.ok) {
-            location.reload();
-        } else {
-            const body = await r.json().catch(() => ({}));
-            alert('Failed to switch to internal MCP Gateway: ' + (body.error || r.status));
-        }
-    };
-
-    // ---------------------------------------------------------------
     // Tool session actions
     // ---------------------------------------------------------------
 

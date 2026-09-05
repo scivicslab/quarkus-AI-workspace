@@ -120,14 +120,6 @@ class E2EHttp {
         return postBody(urlStr, json, "application/json");
     }
 
-    /** Extract the first MCP gateway URL from chat-ui /api/config JSON. */
-    static String extractGatewayUrl(String configJson) {
-        int start = configJson.indexOf("\"agentLoopMcpUrls\":\"");
-        if (start < 0) throw new AssertionError("agentLoopMcpUrls not found in config: " + configJson);
-        start += "\"agentLoopMcpUrls\":\"".length();
-        int end = configJson.indexOf("\"", start);
-        return configJson.substring(start, end).split(",")[0].trim();
-    }
 
     /**
      * Polls /api/status until the named tool is READY and its accessUrl is populated,
@@ -156,7 +148,7 @@ class E2EHttp {
         throw new AssertionError(toolName + " accessUrl not available within " + timeoutMs + "ms");
     }
 
-    /** Waits for the named management service (e.g. "quarkus-mcp-gateway") to reach READY state. */
+    /** Waits for the named management service to reach READY state. */
     static void waitForManagementServiceReady(int portalPort, String serviceName, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
