@@ -5,6 +5,7 @@ import com.scivicslab.aiworkspace.model.SessionState;
 import com.scivicslab.aiworkspace.model.SessionView;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -62,6 +63,17 @@ public class ProcessSupervisor {
      */
     private volatile File logFile;
 
+    /**
+     * When this instance's process started, or {@code null} while it has not.
+     *
+     * <p>The one thing the Instances table needs that nothing was keeping
+     * ({@code ControlDashboard_260905_oo01}): how long a tool has been up. For a process this
+     * supervisor started, it is the moment {@code start()} launched it. For one adopted at portal
+     * startup, that moment is in the past and belongs to a portal that is gone, so it is read from
+     * the operating system instead.</p>
+     */
+    private volatile java.time.Instant startedAt;
+
 
     public ProcessSupervisor(AiWorkspaceConfig.ToolDefinition config,
                              int port,
@@ -98,6 +110,58 @@ public class ProcessSupervisor {
      * Returns the log file path for a given tool/port combination.
      * Deterministic name so it can be located after portal restart.
      */
+    /**
+     * The last {@code lines} lines of a tool instance's log file, or an empty list when there is no
+     * such file.
+     *
+     * <p>Static, and reading the file rather than a supervisor's buffer, because the case it exists
+     * for is the one where there is no supervisor: an instance that stopped or failed is dropped
+     * from the instance list, and its in-memory buffer goes with it, while the file it wrote stays
+     * on disk. "Why did it fail" is asked after it failed ({@code ControlDashboard_260905_oo01}).</p>
+     *
+     * <p>Read backwards from the end of the file. The largest of these files measured 152 MB, so
+     * the whole of one is never held in memory to take the tail of it.</p>
+     *
+     * @param toolName the tool's name
+     * @param port     the port that instance ran on
+     * @param lines    how many lines from the end
+     * @return those lines, oldest first
+     */
+    static List<String> tailLogFile(String toolName, int port, int lines) {
+        File file = logFileFor(toolName, port);
+        if (!file.isFile() || lines <= 0) return List.of();
+        java.util.ArrayDeque<String> tail = new java.util.ArrayDeque<>();
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r")) {
+            long pos = raf.length();
+            java.io.ByteArrayOutputStream line = new java.io.ByteArrayOutputStream();
+            while (pos > 0 && tail.size() < lines) {
+                pos--;
+                raf.seek(pos);
+                int c = raf.read();
+                if (c == '\n') {
+                    tail.addFirst(reversedUtf8(line));
+                    line.reset();
+                } else if (c != '\r') {
+                    line.write(c);
+                }
+            }
+            if (tail.size() < lines && line.size() > 0) tail.addFirst(reversedUtf8(line));
+        } catch (IOException e) {
+            logger.warning("Could not read " + file + ": " + e.getMessage());
+            return List.of();
+        }
+        return List.copyOf(tail);
+    }
+
+    /** The bytes were collected backwards; reverse them before decoding. */
+    private static String reversedUtf8(java.io.ByteArrayOutputStream collected) {
+        byte[] b = collected.toByteArray();
+        for (int i = 0, j = b.length - 1; i < j; i++, j--) {
+            byte t = b[i]; b[i] = b[j]; b[j] = t;
+        }
+        return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     static File logFileFor(String toolName, int port) {
         return new File(LOG_DIR, toolName + "-" + port + ".log");
     }
@@ -112,6 +176,9 @@ public class ProcessSupervisor {
         ProcessSupervisor supervisor = new ProcessSupervisor(config, port, Map.of());
         supervisor.adoptedHandle = ProcessHandle.of(pid).orElse(null);
         supervisor.state = SessionState.READY;
+        // The moment is the OS's, not this portal's: this process outlived the portal that started it.
+        supervisor.startedAt = supervisor.adoptedHandle == null ? null
+                : supervisor.adoptedHandle.info().startInstant().orElse(null);
         supervisor.logFile = logFileFor(config.name(), port);
         // Reconstruct access URL locally — k8s-pups resources still exist from before restart
         String adoptSessionId = System.getenv("PUPS_SESSION_ID");
@@ -193,6 +260,7 @@ public class ProcessSupervisor {
             }
 
             process = pb.start();
+            startedAt = java.time.Instant.now();
             state = SessionState.STARTING;
 
             Thread.ofVirtual().start(this::tailLogFile);
@@ -260,7 +328,8 @@ public class ProcessSupervisor {
             launchParams,
             effectiveMemo,
             getRecentLogs(20),
-            config.github()
+            config.github(),
+            startedAt == null ? null : startedAt.toString()
         );
     }
 

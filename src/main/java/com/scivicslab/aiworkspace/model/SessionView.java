@@ -17,7 +17,8 @@ public record SessionView(
     Map<String, String> params, // launch parameters (workdir, provider, etc.)
     String memo,
     List<String> progressLog,   // recent log lines, shown while STARTING
-    String github                // "owner/repo" for Download Latest button, null if not configured
+    String github,               // "owner/repo" for Download Latest button, null if not configured
+    String startedAt             // ISO-8601 instant the process started, null when it has not
 ) {
     /**
      * True when this session was launched with a non-blank "title" param, in which case

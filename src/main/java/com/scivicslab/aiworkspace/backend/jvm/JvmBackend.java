@@ -375,13 +375,22 @@ public class JvmBackend implements ServiceBackend {
         target.stop();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Falls back to the log file when no supervisor holds this instance any more. A stopped or
+     * failed instance is dropped from the instance list, taking its in-memory buffer with it, and
+     * its log is exactly what someone asks for at that point
+     * ({@code ControlDashboard_260905_oo01}).</p>
+     */
     @Override
     public List<String> getServiceLogs(String toolName, int port, int lines) {
         return instances.getOrDefault(toolName, new CopyOnWriteArrayList<>()).stream()
             .filter(s -> s.getPort() == port)
             .findFirst()
             .map(s -> s.getRecentLogs(lines))
-            .orElse(List.of());
+            .filter(logs -> !logs.isEmpty())
+            .orElseGet(() -> ProcessSupervisor.tailLogFile(toolName, port, lines));
     }
 
     @Override
@@ -693,7 +702,7 @@ public class JvmBackend implements ServiceBackend {
         int port = tool.port();
         return new SessionView(
             tool.name(), port, tool.name(), "",
-            SessionState.STOPPED, null, Map.of(), "", List.of(), tool.github()
+            SessionState.STOPPED, null, Map.of(), "", List.of(), tool.github(), null
         );
     }
 
