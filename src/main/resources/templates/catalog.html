@@ -1,5 +1,14 @@
 {#include layout}
 {#body}
+    {! GitHub is asked here and nowhere else. Its REST API allows sixty requests an hour from one
+       address without authentication, and there are ten tools, so asking on every draw would use
+       them up (ToolVersions_260907_oo01). !}
+    <div class="versions-bar">
+        <button class="btn btn-small" id="btn-refresh-versions" onclick="refreshVersions()">Refresh versions</button>
+        <span class="versions-asof" id="versions-asof">{#if versionsFetchedAt}as of {versionsFetchedAt}{/if}</span>
+        <span class="versions-failed" id="versions-failed">{#if versionsFailed}could not read: {versionsFailed}{/if}</span>
+    </div>
+
     <div class="tool-grid">
     {#for tool in launchTools}
         <div class="tool-tile" id="tool-tile-{tool.name}">
@@ -15,6 +24,23 @@
                 <div>
                     <div class="tool-tile-name">{tool.displayName}</div>
                     <div class="tool-tile-status" id="tool-status-{tool.name}">{tool.status}</div>
+                </div>
+            </div>
+
+            <div class="tool-versions">
+                {#if !tool.library}
+                <div class="tool-version-row">
+                    <span class="tool-version-name">Installed</span>
+                    <span class="tool-version-value" id="version-installed-{tool.name}">{tool.installed}</span>
+                </div>
+                {/if}
+                <div class="tool-version-row">
+                    <span class="tool-version-name">Latest release</span>
+                    <span class="tool-version-value" id="version-release-{tool.name}">{tool.latestRelease}</span>
+                </div>
+                <div class="tool-version-row">
+                    <span class="tool-version-name">Latest SNAPSHOT</span>
+                    <span class="tool-version-value" id="version-snapshot-{tool.name}">{tool.latestSnapshot}</span>
                 </div>
             </div>
 

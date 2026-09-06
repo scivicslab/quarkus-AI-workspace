@@ -619,6 +619,47 @@
      * added, but nothing defined it, so pressing it did nothing at all and the status line
      * next to it stayed empty.
      */
+    /**
+     * Asks the server to read every tool's repository, and writes the two versions it learns into
+     * the tiles.
+     *
+     * <p>This is the only thing on the Catalog screen that reaches GitHub. The versions stay as
+     * they are until this is pressed again; the Installed line is not touched here, since the
+     * server reads it from the works directory on every draw.
+     */
+    window.refreshVersions = async function () {
+        const btn = document.getElementById('btn-refresh-versions');
+        const asOf = document.getElementById('versions-asof');
+        const failedEl = document.getElementById('versions-failed');
+        if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+        if (failedEl) failedEl.textContent = '';
+        try {
+            const r = await fetch('/api/versions/refresh', { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || !data.success) {
+                if (failedEl) failedEl.textContent = 'could not read: ' + (data.error || 'request failed');
+                return;
+            }
+            Object.keys(data.versions || {}).forEach(function (name) {
+                const v = data.versions[name];
+                const release = document.getElementById('version-release-' + name);
+                const snapshot = document.getElementById('version-snapshot-' + name);
+                // A tool whose repository could not be read keeps what it had, so only write a
+                // value the server actually returned.
+                if (release && v.latestRelease) release.textContent = v.latestRelease;
+                if (snapshot && v.latestSnapshot) snapshot.textContent = v.latestSnapshot;
+            });
+            if (asOf) asOf.textContent = 'as of ' + new Date().toLocaleString();
+            if (failedEl && (data.failed || []).length > 0) {
+                failedEl.textContent = 'could not read: ' + data.failed.join(', ');
+            }
+        } catch (e) {
+            if (failedEl) failedEl.textContent = 'could not read: ' + e.message;
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Refresh versions'; }
+        }
+    };
+
     window.downloadLatest = async function(name) {
         const btn = document.getElementById('btn-download-' + name);
         const status = document.getElementById('download-status-' + name);

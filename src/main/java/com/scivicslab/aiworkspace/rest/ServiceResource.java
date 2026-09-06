@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -39,6 +40,9 @@ public class ServiceResource {
 
     @Inject
     ServiceBackend backend;
+
+    @Inject
+    com.scivicslab.aiworkspace.version.ToolVersionStore toolVersionStore;
 
     @Inject
     com.scivicslab.aiworkspace.build.SnapshotBuildService snapshotBuilder;
@@ -233,6 +237,32 @@ public class ServiceResource {
      * <p>Returns immediately with a {@code jobId}; poll {@code /build-status/{jobId}}
      * for progress, since the Maven build takes minutes.
      */
+    /**
+     * Asks GitHub what version every tool's repository states, and holds the answers.
+     *
+     * <p>Nothing here happens when a screen is drawn: GitHub's REST API allows sixty requests an
+     * hour from one address without authentication, and the registry has ten entries. This runs
+     * when the {@code Refresh versions} button is pressed, and what it learns is kept until the
+     * button is pressed again ({@code ToolVersions_260907_oo01}).
+     *
+     * <p>Each repository is answered on its own. One that cannot be read is named in
+     * {@code failed}; the others' versions are replaced regardless.
+     */
+    @POST
+    @Path("/versions/refresh")
+    public Response refreshVersions() {
+        List<String> failed = toolVersionStore.refresh();
+        Map<String, Map<String, String>> versions = new LinkedHashMap<>();
+        toolVersionStore.all().forEach((tool, v) -> versions.put(tool, Map.of(
+                "latestRelease", v.latestRelease(),
+                "latestSnapshot", v.latestSnapshot())));
+        return Response.ok(Map.of(
+                "success", true,
+                "fetchedAt", String.valueOf(toolVersionStore.fetchedAt()),
+                "failed", failed,
+                "versions", versions)).build();
+    }
+
     @POST
     @Path("/tool/{name}/build-snapshot")
     public Response buildSnapshot(@PathParam("name") String name) {

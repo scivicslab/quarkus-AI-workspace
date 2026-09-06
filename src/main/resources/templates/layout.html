@@ -397,6 +397,19 @@
             color: var(--text-secondary);
             margin-bottom: 4px;
         }
+        .versions-bar {
+            display: flex; align-items: center; gap: .6rem;
+            margin: 0 0 .8rem 0; font-size: .82em;
+        }
+        .versions-asof { color: var(--text-secondary); }
+        .versions-failed { color: var(--accent-red); }
+
+        .tool-versions { margin: .5rem 0 .6rem 0; font-size: .82em; }
+        .tool-version-row { display: flex; gap: .5rem; line-height: 1.5; }
+        /* The three names line up on the left so the three versions line up on the right. */
+        .tool-version-name { width: 8.5rem; flex: none; color: var(--text-secondary); }
+        .tool-version-value { font-family: monospace; }
+
         .param-input, .param-select {
             width: 100%;
             border: 1px solid var(--border-color);

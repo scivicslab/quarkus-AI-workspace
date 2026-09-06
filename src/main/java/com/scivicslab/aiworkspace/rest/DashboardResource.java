@@ -89,6 +89,12 @@ public class DashboardResource {
     @ConfigProperty(name = "ai-workspace.image-tag")
     Optional<String> imageTag;
 
+    @Inject
+    com.scivicslab.aiworkspace.version.InstalledVersionReader installedVersionReader;
+
+    @Inject
+    com.scivicslab.aiworkspace.version.ToolVersionStore toolVersionStore;
+
     /**
      * One row of the Instances table: a {@link SessionView} plus the uptime the screen shows, which
      * is a difference between two instants and so cannot be a field on the view itself.
@@ -108,6 +114,26 @@ public class DashboardResource {
                               String accessUrl, String startedAt, String uptime,
                               java.util.Map<String, String> params,
                               String activity, String activityAsOf) {}
+
+    /**
+     * One tile of the Catalog screen: a {@link com.scivicslab.aiworkspace.model.ToolView} plus the
+     * three versions the tile shows, which are read per screen rather than held on the view.
+     *
+     * @param name           the tool
+     * @param displayName    what the tile is headed with
+     * @param icon           where the tool serves its own icon, or {@code null}
+     * @param params         the launch parameters
+     * @param github         owner and name of its repository, or {@code null}
+     * @param status         the status line under the name
+     * @param library        true when the tool has no jar file of its own to install
+     * @param installed      the version the symbolic link in the works directory points at, or ""
+     * @param latestRelease  the version of the newest release's tag, or ""
+     * @param latestSnapshot the version the default branch's pom.xml declares, or ""
+     */
+    public record CatalogTile(String name, String displayName, String icon,
+                              java.util.List<com.scivicslab.aiworkspace.model.ParamDefinition> params,
+                              String github, String status, boolean library,
+                              String installed, String latestRelease, String latestSnapshot) {}
 
     /** Instances — what is running. */
     @GET
@@ -136,7 +162,47 @@ public class DashboardResource {
             .data("version", appVersion)
             .data("assetVersion", assetVersion)
             .data("imageTag", imageTag.orElse(""))
-            .data("launchTools", backend.getDashboardModel().launchTools());
+            .data("launchTools", catalogTiles())
+            .data("versionsFetchedAt", fetchedAtText())
+            .data("versionsFailed", String.join(", ", toolVersionStore.failedTools()));
+    }
+
+    /**
+     * Builds one tile per launchable tool, with the three versions filled in.
+     *
+     * <p>The installed version is read from the works directory every time this screen is drawn,
+     * because reading a symbolic link costs nothing. The other two come from what was held by the
+     * last {@code Refresh versions}, because reading them costs a request to GitHub
+     * ({@code ToolVersions_260907_oo01}).
+     */
+    private List<CatalogTile> catalogTiles() {
+        java.util.Map<String, com.scivicslab.aiworkspace.config.ToolRegistryEntry> registry =
+            new java.util.LinkedHashMap<>();
+        for (var e : com.scivicslab.aiworkspace.config.ToolRegistryLoader.load()) {
+            registry.put(e.name(), e);
+        }
+
+        List<CatalogTile> tiles = new ArrayList<>();
+        for (var tool : backend.getDashboardModel().launchTools()) {
+            var entry = registry.get(tool.name());
+            boolean library = entry != null && entry.library();
+            String installed = (entry == null || library)
+                ? ""
+                : installedVersionReader.read(entry.jarFileName());
+            var remote = toolVersionStore.get(tool.name());
+            tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.icon(), tool.params(),
+                                      tool.github(), tool.status(), library,
+                                      installed, remote.latestRelease(), remote.latestSnapshot()));
+        }
+        return tiles;
+    }
+
+    /** When the versions were last fetched, for the line beside the button, or "" if never. */
+    private String fetchedAtText() {
+        var at = toolVersionStore.fetchedAt();
+        if (at == null) return "";
+        return java.time.LocalDateTime.ofInstant(at, java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
     }
 
     /**
