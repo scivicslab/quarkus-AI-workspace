@@ -56,6 +56,12 @@ tools:
       # broker, not a bare vLLM node IP/hostname. Leave blank to fall back to the value hardcoded
       # in application.properties (currently http://localhost:28005).
       - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      # Publishes the conversations so a parent interpreter — Turing Workflow Editor — can drive
+      # them (WorkflowTab_260906_oo01). Off by default: whatever reaches the published port can
+      # drive a conversation, and through it read and write under ~/works. The published port is
+      # not configured; it is this instance's HTTP port plus 1000, bound to 127.0.0.1. Give the
+      # editor this instance's HTTP port in its "Child Nodes" field, not that derived number.
+      - {key: distributed, label: "Publish conversations to a parent interpreter (true/false)", type: text, default: "false", jvmProp: "chat-ui.distributed.enabled"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: html-saurus
@@ -75,6 +81,11 @@ tools:
     jvmArgs: ["-Xmx2g"]
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
+      # The processes whose actors a workflow may name, as name=host:port, comma-separated. The
+      # port is the child's HTTP port — the one shown for that instance — not the port its actors
+      # answer on, which both sides derive from it (RemoteChildActor_260906_oo01). A workflow then
+      # writes "actor: chat-ui:project1/chat-01.chat". Blank means no child nodes.
+      - {key: childNodes, label: "Child Nodes (name=host:httpPort, comma-separated)", type: text, default: "", jvmProp: "workflow-editor.child-nodes"}
 
   - name: code-raptor
     jar: code-raptor.jar
