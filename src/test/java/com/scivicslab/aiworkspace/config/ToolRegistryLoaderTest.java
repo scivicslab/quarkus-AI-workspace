@@ -134,10 +134,17 @@ class ToolRegistryLoaderTest {
         assertEquals("chat-ui-with-audit-trail.jar", e.jarFileName());
         assertEquals("scivicslab/chat-ui-with-audit-trail", e.githubRepo());
         assertEquals(28030, e.defaultPort());
-        assertTrue(e.dependsOn().isEmpty(), "still a bare Quarkus shell, no turing-workflow dependency yet");
-        assertEquals(2, e.params().size(), "vLLM Endpoint placeholder + port");
+        assertTrue(e.dependsOn().isEmpty(),
+                "every library it needs is a released artifact, so a snapshot build resolves them"
+                        + " from Maven Central instead of building them from source first");
+        assertEquals(3, e.params().size(), "vLLM Endpoint, publish-to-parent switch, port");
         assertEquals("servers", e.params().get(0).key());
         assertEquals("chat-ui.servers", e.params().get(0).jvmProp(),
                 "matches quarkus-chat-ui's own property name, since the left panel embeds its markup verbatim");
+        assertEquals("distributed", e.params().get(1).key());
+        assertEquals("chat-ui.distributed.enabled", e.params().get(1).jvmProp());
+        assertEquals("false", e.params().get(1).defaultVal(),
+                "publishing the conversations lets whatever reaches that port read and write"
+                        + " under ~/works, so it is off unless asked for");
     }
 }

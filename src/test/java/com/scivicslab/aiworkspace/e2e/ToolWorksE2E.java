@@ -17,9 +17,9 @@ import java.util.Map;
  * functional UI elements and API responses via Playwright and HTTP.
  *
  * Scenarios:
- *   1+2. chat-ui: #prompt-input visible and enabled; /api/config agentLoopMcpUrls non-empty and correct
- *   3.   html-saurus: portal lists doc_ projects; clicking a project link opens an actual document page
- *   4.   turing-workflow-editor: #stepsContainer and #runBtn are visible
+ *   1. chat-ui: #prompt-input visible and enabled
+ *   2. html-saurus: portal lists doc_ projects; clicking a project link opens an actual document page
+ *   3. turing-workflow-editor: #fileMenuBtn and #workflowDescription are visible
  *
  * Run via AiWorkspaceE2ERunner.
  */
@@ -72,24 +72,15 @@ class ToolWorksE2E {
                 throw new AssertionError("chat-ui: #login-screen must be hidden in single-user mode");
         }
 
-        // Scenario 2: verify chat-ui was launched with correct per-tool MCP URL.
-        // AI-workspace's own log contains the "Executing:" line showing the exact command.
-        // The MCP URL must be per-tool (http://localhost:<chatUiPort>/mcp), NOT /mcp/_all.
-        String log = Files.readString(portal.logFile().toPath());
-        String expectedMcpUrl = "http://localhost:" + chatUiPort + "/mcp";
-        if (!log.contains("chat-ui.agent-loop.mcp-urls"))
-            throw new AssertionError(
-                "chat-ui not launched with MCP URL property — chat-ui.agent-loop.mcp-urls missing from command");
-        if (!log.contains(expectedMcpUrl))
-            throw new AssertionError(
-                "chat-ui MCP URL does not contain per-tool endpoint '" + expectedMcpUrl + "'");
-        if (log.contains("/mcp/_all"))
-            throw new AssertionError(
-                "chat-ui launched with wrong MCP endpoint /mcp/_all — should be per-tool URL");
+        // A second scenario used to read AI-workspace's own log and require that chat-ui had
+        // been launched with -Dchat-ui.agent-loop.mcp-urls pointing at its own /mcp endpoint.
+        // The MCP gateway was removed in 32487fb and nothing sets that property any more, so
+        // the check asked for something the product no longer does. The three tests that
+        // reached a tool through the gateway were rewritten in 4f3aab2; this one was missed.
 
         E2EHttp.post(portalPort, "/api/tool/quarkus-chat-ui/" + chatUiPort + "/stop", Map.of());
         E2EHttp.waitForToolStopped(portalPort, "quarkus-chat-ui", 10_000);
-        System.out.println("  [chat-ui] PASSED (prompt usable + correct per-tool MCP URL)");
+        System.out.println("  [chat-ui] PASSED (prompt usable)");
     }
 
     // Scenario 3: html-saurus portal lists projects; clicking a project link opens an actual document page
@@ -134,14 +125,18 @@ class ToolWorksE2E {
             page.navigate("http://localhost:" + editorPort,
                     new Page.NavigateOptions().setWaitUntil(WaitUntilState.LOAD));
 
-            if (!page.locator("#stepsContainer").isVisible())
-                throw new AssertionError("turing-workflow-editor: #stepsContainer must be visible");
-            if (!page.locator("#runBtn").isVisible())
-                throw new AssertionError("turing-workflow-editor: #runBtn must be visible");
+            // Not #stepsContainer: it is an empty <div> until a workflow is loaded, so it has
+            // no box and never counts as visible. Not #runBtn: this editor has no element by
+            // that name — running is driven from #paramExecute inside the side panel, which is
+            // closed to begin with.
+            if (!page.locator("#fileMenuBtn").isVisible())
+                throw new AssertionError("turing-workflow-editor: #fileMenuBtn must be visible");
+            if (!page.locator("#workflowDescription").isVisible())
+                throw new AssertionError("turing-workflow-editor: #workflowDescription must be visible");
         }
 
         E2EHttp.post(portalPort, "/api/tool/turing-workflow-editor/" + editorPort + "/stop", Map.of());
         E2EHttp.waitForToolStopped(portalPort, "turing-workflow-editor", 10_000);
-        System.out.println("  [turing-workflow-editor] PASSED (editor canvas and run button visible)");
+        System.out.println("  [turing-workflow-editor] PASSED (file menu and description box visible)");
     }
 }

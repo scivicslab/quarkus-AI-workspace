@@ -332,6 +332,35 @@
                 stateEl.textContent = svc.state;
                 stateEl.className = 'state-pill state-' + svc.state + ' cell-state';
             }
+            applyOpenLink(row, svc);
+        }
+    }
+
+    /**
+     * Adds, updates or removes a row's Open link.
+     *
+     * An instance has no address until it is READY, so the server renders the link only for the
+     * rows that had one at the time the page was drawn. Without this, an instance that becomes
+     * READY while the page is open shows READY and no way to open it, and the person who just
+     * started it has to reload the page to get the link.
+     */
+    function applyOpenLink(row, svc) {
+        const actions = row.querySelector('.inst-actions');
+        if (!actions) return;
+        let open = actions.querySelector('a.btn-open');
+        if (svc.accessUrl) {
+            if (!open) {
+                open = document.createElement('a');
+                open.className = 'btn btn-open';
+                open.target = '_blank';
+                open.textContent = 'Open';
+                actions.prepend(open);
+            }
+            if (open.getAttribute('href') !== svc.accessUrl) {
+                open.setAttribute('href', svc.accessUrl);
+            }
+        } else if (open) {
+            open.remove();
         }
     }
 
@@ -419,6 +448,34 @@
         }
     };
 
+    /**
+     * Stops one instance from the Instances page or from an instance's own page.
+     *
+     * The Instances table renders one row per instance, keyed by data-tool and data-port, and
+     * the row is removed once the server confirms the stop. An instance's own page has no such
+     * row, so it reloads and lets the server say what is left. Paths are written from the root
+     * because the templates already link that way (href="/instances/...").
+     */
+    window.stopTool = async function (toolName, port) {
+        const row = document.querySelector(
+            'tr[data-tool="' + toolName + '"][data-port="' + port + '"]');
+        const btn = row ? row.querySelector('.btn-stop') : document.querySelector('.btn-stop');
+        if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
+        let ok = false;
+        try {
+            const r = await fetch('/api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
+            ok = r.ok;
+        } catch (e) {
+            ok = false;
+        }
+        if (ok) {
+            if (row) { row.remove(); } else { location.reload(); }
+        } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'Stop'; }
+            alert('Failed to stop ' + toolName + ' on port ' + port);
+        }
+    };
+
     // ---------------------------------------------------------------
     // Memo update (on blur)
     // ---------------------------------------------------------------
@@ -438,8 +495,11 @@
 
         buildTabs();
 
-        // Start polling
-        setTimeout(pollStatus, POLL_SLOW);
+        // Ask once straight away: someone who has just launched something opens this page while
+        // it is still STARTING, and waiting a minute to say so shows them a state that is
+        // already wrong. pollStatus then picks its own interval — five seconds while anything
+        // is starting, a minute once nothing is.
+        pollStatus();
     });
 
     // ---------------------------------------------------------------
@@ -552,6 +612,40 @@
 
     // Build the tool from GitHub source (clone → mvn install → copy uber-jar to ~/works).
     // The build runs on the server as a background job; we poll for its state.
+    /**
+     * Downloads the latest GitHub release of one tool and repoints ~/works/<jar> at it.
+     *
+     * The Catalog's "Download Latest Release" button has called this since the button was
+     * added, but nothing defined it, so pressing it did nothing at all and the status line
+     * next to it stayed empty.
+     */
+    window.downloadLatest = async function(name) {
+        const btn = document.getElementById('btn-download-' + name);
+        const status = document.getElementById('download-status-' + name);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Downloading…';
+        status.textContent = '';
+        status.style.color = '';
+        try {
+            const r = await fetch('api/tool/' + encodeURIComponent(name) + '/download', { method: 'POST' });
+            const data = await r.json();
+            if (r.ok && data.success) {
+                status.textContent = '\u2713 ' + (data.version || 'downloaded') + ' (' + (data.file || '') + ')';
+                status.style.color = 'var(--accent-green)';
+            } else {
+                status.textContent = '\u2717 ' + (data.error || 'download failed');
+                status.style.color = 'var(--accent-red)';
+            }
+        } catch (e) {
+            status.textContent = '\u2717 ' + e.message;
+            status.style.color = 'var(--accent-red)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Download Latest Release';
+        }
+    };
+
     window.buildSnapshot = async function(name) {
         const btn = document.getElementById('btn-build-' + name);
         const status = document.getElementById('download-status-' + name);

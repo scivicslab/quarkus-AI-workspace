@@ -21,8 +21,8 @@
             <div class="tool-buttons">
                 <button class="btn btn-launch" onclick="toggleLaunchForm('{tool.name}')">Configure &amp; Start…</button>
                 {#if tool.github}
-                <button class="btn btn-download" onclick="downloadLatest('{tool.name}')">Download Latest Release</button>
-                <button class="btn btn-download" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
+                <button class="btn btn-download" id="btn-download-{tool.name}" onclick="downloadLatest('{tool.name}')">Download Latest Release</button>
+                <button class="btn btn-download" id="btn-build-{tool.name}" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
                 {/if}
             </div>

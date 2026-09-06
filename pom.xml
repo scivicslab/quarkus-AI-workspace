@@ -57,18 +57,11 @@
             <artifactId>quarkus-rest-qute</artifactId>
         </dependency>
 
-        <!-- POJO-actor -->
-        <dependency>
-            <groupId>com.scivicslab</groupId>
-            <artifactId>pojo-actor</artifactId>
-            <version>3.0.1</version>
-        </dependency>
-
         <!-- pluggable-cli: reflection-free CLI parsing (no-reflection, no picocli) -->
         <dependency>
             <groupId>com.scivicslab</groupId>
             <artifactId>pluggable-cli</artifactId>
-            <version>1.0.0</version>
+            <version>1.1.1</version>
         </dependency>
 
         <!-- Test -->

@@ -18,27 +18,38 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * E2E: tool startup sequence with fixed ports 28200-28213.
+ * E2E: tool startup sequence, over fourteen consecutive ports from a free base P.
  *
- * Step 1: AI workspace starts on 28200
- * Step 2: chat-ui launched via portal lands on 28210, the first port of the dynamic
- *         pool — 28201-28209 are the reserved band (PortConvention_260719_oo01) and
+ * Step 1: AI workspace starts on P
+ * Step 2: chat-ui launched via portal lands on P+10, the first port of the dynamic
+ *         pool — P+1 to P+9 are the reserved band (PortConvention_260719_oo01) and
  *         belong to the search services, which are not launched here
- * Step 3a: chat-ui started externally on 28211 is NOT adopted into portal sessions
- * Step 3b: chat-ui started externally on 28212 is NOT adopted into portal sessions
- * Step 4: turing-workflow-editor skips occupied 28211 and 28212, lands on 28213;
+ * Step 3a: chat-ui started externally on P+11 is NOT adopted into portal sessions
+ * Step 3b: chat-ui started externally on P+12 is NOT adopted into portal sessions
+ * Step 4: turing-workflow-editor skips occupied P+11 and P+12, lands on P+13;
  *         accessUrl navigates to the workflow editor, not the chat UI
  *
- * The MCP gateway used to occupy 28201 and be waited for between steps 1 and 2. It no
- * longer exists, and the ports below moved off the numbers that assumed it.
+ * The MCP gateway used to occupy P+1 and be waited for between steps 1 and 2. It no
+ * longer exists, and the offsets below moved off the numbers that assumed it.
+ *
+ * P was 28200 until the base was asked for at run time. What this checks is the shape of
+ * the convention — reserved band, then pool, skipping what is taken — and one fixed number
+ * only decides whose port it collides with. 28200 is english-drill's, and the portal died
+ * on startup rather than the test saying so.
  */
 class ToolStartupSequenceE2E {
 
-    private static final int PORTAL_PORT    = 28200;
-    private static final int CHAT_UI_PORT   = 28210;
-    private static final int EXTERNAL_PORT  = 28211;
-    private static final int EXTERNAL_PORT2 = 28212;
-    private static final int EDITOR_PORT    = 28213;
+    /** Offsets from the base, per PortConvention_260719_oo01. */
+    private static final int CHAT_UI_OFFSET   = 10;
+    private static final int EXTERNAL_OFFSET  = 11;
+    private static final int EXTERNAL2_OFFSET = 12;
+    private static final int EDITOR_OFFSET    = 13;
+
+    private int PORTAL_PORT;
+    private int CHAT_UI_PORT;
+    private int EXTERNAL_PORT;
+    private int EXTERNAL_PORT2;
+    private int EDITOR_PORT;
 
     private static final long TOOL_TIMEOUT_MS    = 60_000;
     private static final long STARTUP_TIMEOUT_MS = 30_000;
@@ -55,6 +66,12 @@ class ToolStartupSequenceE2E {
         System.out.println("--- ToolStartupSequenceE2E ---");
         Path jarsDir   = E2EConfig.testJarsDir();
         Path configPath = E2EConfig.configYaml();
+
+        PORTAL_PORT    = E2EConfig.findFreePortBase(20);
+        CHAT_UI_PORT   = PORTAL_PORT + CHAT_UI_OFFSET;
+        EXTERNAL_PORT  = PORTAL_PORT + EXTERNAL_OFFSET;
+        EXTERNAL_PORT2 = PORTAL_PORT + EXTERNAL2_OFFSET;
+        EDITOR_PORT    = PORTAL_PORT + EDITOR_OFFSET;
 
         // Step 1
         System.out.println("  [step 1] starting AI workspace on " + PORTAL_PORT + "...");
@@ -155,18 +172,20 @@ class ToolStartupSequenceE2E {
     private static void verifyWorkflowEditorPage(Browser browser, String accessUrl, int expectedPort) {
         try (Page page = browser.newPage()) {
             page.navigate(accessUrl, new Page.NavigateOptions().setWaitUntil(WaitUntilState.LOAD));
-            // Wait up to 10s for the workflow editor to render its main container
-            page.locator("#stepsContainer").waitFor(
+            // Wait up to 10s for the workflow editor to draw its header. Not #runBtn: this
+            // editor has no element by that name — running is driven from #paramExecute
+            // inside the side panel, which is closed to begin with.
+            page.locator("#fileMenuBtn").waitFor(
                     new Locator.WaitForOptions().setTimeout(10_000));
 
-            if (!page.locator("#stepsContainer").isVisible())
+            if (!page.locator("#fileMenuBtn").isVisible())
                 throw new AssertionError(
                         "turing-workflow-editor accessUrl must open the workflow editor " +
-                        "(#stepsContainer not visible — wrong page opened). " +
+                        "(#fileMenuBtn not visible — wrong page opened). " +
                         "url=" + page.url() + " accessUrl=" + accessUrl);
-            if (!page.locator("#runBtn").isVisible())
+            if (!page.locator("#workflowDescription").isVisible())
                 throw new AssertionError(
-                        "turing-workflow-editor: #runBtn not visible. url=" + page.url());
+                        "turing-workflow-editor: #workflowDescription not visible. url=" + page.url());
             if (page.locator("#prompt-input").isVisible())
                 throw new AssertionError(
                         "turing-workflow-editor accessUrl opened chat UI (#prompt-input visible). " +
@@ -189,7 +208,7 @@ class ToolStartupSequenceE2E {
         throw new AssertionError("Service did not respond at " + url + " within " + timeoutMs + "ms");
     }
 
-    private static void verifyNotInSessions(int port) throws Exception {
+    private void verifyNotInSessions(int port) throws Exception {
         String status = E2EHttp.get(PORTAL_PORT, "/api/status");
         JsonNode root = MAPPER.readTree(status);
         for (JsonNode session : root.path("activeSessions")) {
