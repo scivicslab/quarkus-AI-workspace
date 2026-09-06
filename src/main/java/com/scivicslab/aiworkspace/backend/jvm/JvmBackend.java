@@ -72,7 +72,9 @@ public class JvmBackend implements ServiceBackend {
             }
         }
         if (rangeStart < 0) {
-            String httpPort = System.getProperty("quarkus.http.port", "28000").trim();
+            // Resolved configuration, not the system property: the port can also come from
+            // application.properties or the environment (PortalPort).
+            String httpPort = String.valueOf(com.scivicslab.aiworkspace.config.PortalPort.number());
             try {
                 rangeStart = Integer.parseInt(httpPort);
                 rangeEnd   = rangeStart + 50;

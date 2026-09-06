@@ -258,7 +258,7 @@ public class DashboardResource {
     public TemplateInstance settings() {
         String broker = System.getProperty("gpu.broker.url");
         if (broker == null || broker.isBlank()) broker = System.getenv("GPU_BROKER_URL");
-        String portalPort = System.getProperty("quarkus.http.port", "28000").trim();
+        String portalPort = String.valueOf(com.scivicslab.aiworkspace.config.PortalPort.number());
         int start;
         try { start = Integer.parseInt(portalPort); } catch (NumberFormatException e) { start = -1; }
         return settings

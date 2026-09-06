@@ -623,7 +623,7 @@ public class ProcessSupervisor {
      * @return e.g. {@code http://localhost:28000}
      */
     private static String ownBaseUrl() {
-        return "http://localhost:" + System.getProperty("quarkus.http.port", "28000").trim();
+        return com.scivicslab.aiworkspace.config.PortalPort.baseUrl();
     }
 
     /**

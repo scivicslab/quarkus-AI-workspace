@@ -75,7 +75,7 @@ public class AiWorkspaceMain implements QuarkusApplication {
         @Inject ServiceBackend backend;
 
         void onStart(@Observes StartupEvent e) {
-            String httpPort = System.getProperty("quarkus.http.port", "28000");
+            String httpPort = String.valueOf(com.scivicslab.aiworkspace.config.PortalPort.number());
             String accessHost = System.getProperty("ai-workspace.access.host", "localhost");
 
             String sep = "━".repeat(54);
