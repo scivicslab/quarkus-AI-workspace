@@ -627,37 +627,113 @@
      * they are until this is pressed again; the Installed line is not touched here, since the
      * server reads it from the works directory on every draw.
      */
+    /**
+     * Opens or closes one instance's detail under its row.
+     *
+     * <p>The log is read the first time the row is opened, not when the page is drawn: reading
+     * eleven log files to show none of them costs the same as showing them all
+     * (SingleScreenAgain_260907_oo01).
+     */
+    window.toggleInstanceDetail = async function (toolName, port) {
+        const key = toolName + '-' + port;
+        const row = document.getElementById('detail-row-' + key);
+        if (!row) return;
+
+        const wasHidden = row.style.display === 'none';
+        row.style.display = wasHidden ? 'table-row' : 'none';
+        if (!wasHidden) return;
+
+        const logEl = document.getElementById('detail-log-' + key);
+        if (!logEl || logEl.dataset.loaded === 'yes') return;
+        logEl.textContent = 'Reading…';
+        try {
+            const r = await fetch('/api/tool/' + encodeURIComponent(toolName) + '/' + port + '/logs?lines=50');
+            const data = await r.json();
+            const lines = data.logs || [];
+            logEl.textContent = lines.length > 0
+                ? lines.join('\n')
+                : '(no log file for ' + toolName + ' on port ' + port + ')';
+            logEl.dataset.loaded = 'yes';
+        } catch (e) {
+            logEl.textContent = 'Could not read the log: ' + e.message;
+        }
+    };
+
+    // The Instances screen's own address now redirects here with ?detail=<tool>-<port>, so the
+    // row it named opens by itself.
+    document.addEventListener('DOMContentLoaded', function () {
+        const asked = new URLSearchParams(location.search).get('detail');
+        if (!asked) return;
+        const row = document.getElementById('detail-row-' + asked);
+        if (!row) return;
+        const dash = asked.lastIndexOf('-');
+        window.toggleInstanceDetail(asked.substring(0, dash), asked.substring(dash + 1));
+        row.scrollIntoView({ block: 'center' });
+    });
+
+    /** Between one repository and the next, so that seven of them do not go out at once. */
+    const BETWEEN_REPOSITORIES_MS = 3000;
+
+    /**
+     * Asks GitHub about each tool's repository in turn and writes each answer into its tile as it
+     * arrives.
+     *
+     * One request per tool rather than one for all of them: reading all of them in one request
+     * took thirty-five seconds during which nothing on the screen moved, and there was no way to
+     * tell it apart from a request that had stopped answering. The button now counts, and each
+     * tile fills in as its answer comes back.
+     *
+     * A tool whose repository could not be read keeps what it had and is named underneath. The
+     * run carries on to the next tool either way.
+     */
     window.refreshVersions = async function () {
         const btn = document.getElementById('btn-refresh-versions');
         const asOf = document.getElementById('versions-asof');
         const failedEl = document.getElementById('versions-failed');
-        if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+
+        // Only the tiles that name a repository; the rest have nothing to ask about.
+        const names = Array.from(document.querySelectorAll('.tool-tile[data-github]'))
+            .map(function (tile) { return tile.id.replace('tool-tile-', ''); });
+        if (names.length === 0) return;
+
+        if (btn) btn.disabled = true;
         if (failedEl) failedEl.textContent = '';
-        try {
-            const r = await fetch('/api/versions/refresh', { method: 'POST' });
-            const data = await r.json();
-            if (!r.ok || !data.success) {
-                if (failedEl) failedEl.textContent = 'could not read: ' + (data.error || 'request failed');
-                return;
+        const failed = [];
+
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            if (btn) btn.textContent = 'Reading… ' + (i + 1) + ' / ' + names.length;
+
+            const release = document.getElementById('version-release-' + name);
+            const snapshot = document.getElementById('version-snapshot-' + name);
+            const heldRelease = release ? release.textContent : '';
+            const heldSnapshot = snapshot ? snapshot.textContent : '';
+            if (release) release.textContent = 'reading…';
+            if (snapshot) snapshot.textContent = 'reading…';
+
+            try {
+                const r = await fetch('/api/versions/refresh/' + encodeURIComponent(name), { method: 'POST' });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.error || 'request failed');
+                // An empty answer is GitHub saying there is no release, not that it went
+                // unasked. Those must not look the same on the screen.
+                if (release) release.textContent = data.latestRelease || 'no release yet';
+                if (snapshot) snapshot.textContent = data.latestSnapshot || 'no snapshot yet';
+                if (asOf) asOf.textContent = 'as of ' + new Date().toLocaleString();
+            } catch (e) {
+                // Put back what the tile was showing: the tool still holds those versions.
+                if (release) release.textContent = heldRelease;
+                if (snapshot) snapshot.textContent = heldSnapshot;
+                failed.push(name);
+                if (failedEl) failedEl.textContent = 'could not read: ' + failed.join(', ');
             }
-            Object.keys(data.versions || {}).forEach(function (name) {
-                const v = data.versions[name];
-                const release = document.getElementById('version-release-' + name);
-                const snapshot = document.getElementById('version-snapshot-' + name);
-                // A tool whose repository could not be read keeps what it had, so only write a
-                // value the server actually returned.
-                if (release && v.latestRelease) release.textContent = v.latestRelease;
-                if (snapshot && v.latestSnapshot) snapshot.textContent = v.latestSnapshot;
-            });
-            if (asOf) asOf.textContent = 'as of ' + new Date().toLocaleString();
-            if (failedEl && (data.failed || []).length > 0) {
-                failedEl.textContent = 'could not read: ' + data.failed.join(', ');
+
+            if (i < names.length - 1) {
+                await new Promise(function (done) { setTimeout(done, BETWEEN_REPOSITORIES_MS); });
             }
-        } catch (e) {
-            if (failedEl) failedEl.textContent = 'could not read: ' + e.message;
-        } finally {
-            if (btn) { btn.disabled = false; btn.textContent = 'Refresh versions'; }
         }
+
+        if (btn) { btn.disabled = false; btn.textContent = 'Refresh versions'; }
     };
 
     window.downloadLatest = async function(name) {
