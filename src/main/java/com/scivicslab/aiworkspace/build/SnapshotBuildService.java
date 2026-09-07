@@ -203,6 +203,29 @@ public class SnapshotBuildService {
         done.add(name);
     }
 
+    /**
+     * The commands that bring an existing checkout up to the remote's default branch, discarding
+     * whatever the last build left behind.
+     *
+     * <p>The reset names {@code origin/HEAD}, not {@code @{u}}. Those are different things: one is
+     * the branch the remote says is its default, the other is whatever branch this checkout
+     * happens to track. They differ the moment the default branch is renamed — the tracked branch
+     * is pruned away, {@code @{u}} resolves to nothing, and git exits 128. That is what happened
+     * when {@code scivicslab/quarkus-gpu-broker} went from {@code master} to {@code main}.
+     *
+     * <p>{@code set-head --auto} asks the remote which branch is the default and rewrites
+     * {@code origin/HEAD} to match, so a rename since the last build is picked up here rather than
+     * needing the checkout to be thrown away.
+     *
+     * @return the commands, to be run in the checkout in order
+     */
+    static List<String[]> updateCommands() {
+        return List.of(
+            new String[]{"git", "fetch", "--all", "--prune"},
+            new String[]{"git", "remote", "set-head", "origin", "--auto"},
+            new String[]{"git", "reset", "--hard", "origin/HEAD"});
+    }
+
     private Path cloneOrUpdate(ActorRef<BuildJobActor> job, String githubRepo) throws Exception {
         Path buildRoot = Path.of(expand(buildDirTemplate));
         Files.createDirectories(buildRoot);
@@ -214,9 +237,9 @@ public class SnapshotBuildService {
         if (Files.isDirectory(repoDir.resolve(".git"))) {
             job.tell(j -> j.step("git pull"));
             job.tell(j -> j.append("Updating existing checkout: " + repoDir));
-            // Discard local drift, then fast-forward to the remote's default branch.
-            exec(job, repoDir, "git", "fetch", "--all", "--prune");
-            exec(job, repoDir, "git", "reset", "--hard", "@{u}");
+            for (String[] command : updateCommands()) {
+                exec(job, repoDir, command);
+            }
         } else {
             job.tell(j -> j.step("git clone"));
             String base = gitBaseUrl.endsWith("/")
