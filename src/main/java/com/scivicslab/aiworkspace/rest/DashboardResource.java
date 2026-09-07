@@ -54,21 +54,8 @@ public class DashboardResource {
     @Inject
     ActivityProbe activityProbe;
 
-    /**
-     * The value appended to this portal's own script and stylesheet URLs, fixed for the life of the
-     * process.
-     *
-     * <p>Quarkus serves everything under {@code META-INF/resources} with
-     * {@code cache-control: public, immutable, max-age=86400}, and a browser holding an
-     * {@code immutable} response does not ask again — it runs yesterday's script for a day. The
-     * dashboard reloading itself every five seconds was fixed and kept happening, because the fix
-     * was in a script the browser was not fetching.</p>
-     *
-     * <p>These files can only change when the process is replaced, so the moment this process
-     * started is the right value: a restart gives each of them a new URL, and nothing changes
-     * underneath a running page.</p>
-     */
-    private final String assetVersion = String.valueOf(System.currentTimeMillis());
+    @Inject
+    com.scivicslab.aiworkspace.web.AssetVersion assetVersionBean;
 
     /** How many lines of an instance's log the detail screen shows. */
     private static final int DETAIL_LOG_LINES = 200;
@@ -146,7 +133,7 @@ public class DashboardResource {
         return dashboard
             .data("screen", "dashboard")
             .data("version", appVersion)
-            .data("assetVersion", assetVersion)
+            .data("assetVersion", assetVersionBean.value())
             .data("imageTag", imageTag.orElse(""))
             .data("instances", rows)
             .data("running", count(rows, SessionState.READY))
@@ -239,7 +226,7 @@ public class DashboardResource {
         return settings
             .data("screen", "settings")
             .data("version", appVersion)
-            .data("assetVersion", assetVersion)
+            .data("assetVersion", assetVersionBean.value())
             .data("imageTag", imageTag.orElse(""))
             .data("gpuBrokerUrl", broker == null || broker.isBlank() ? "" : broker.replaceAll("/+$", ""))
             .data("aiWorkspaceUrl", "http://localhost:" + portalPort)

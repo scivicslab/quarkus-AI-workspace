@@ -65,6 +65,24 @@
             <version>4.0.0</version>
         </dependency>
 
+        <!-- H2: reads the merged conversation-log database. The conversation logs are written by
+             other programs through plugin-log-db; this portal only reads the merged result
+             (ConversationLogSearchPlacement_260908_oo01). -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.224</version>
+        </dependency>
+
+        <!-- plugin-log-db: LogMerger, the same code the log-merge subcommand runs. The portal is
+             the only process that is always up, so the merge is started here
+             (ConversationLogSearchPlacement_260908_oo01). -->
+        <dependency>
+            <groupId>com.scivicslab.turingworkflow.plugins</groupId>
+            <artifactId>plugin-log-db</artifactId>
+            <version>4.0.0</version>
+        </dependency>
+
         <!-- pluggable-cli: reflection-free CLI parsing (no-reflection, no picocli) -->
         <dependency>
             <groupId>com.scivicslab</groupId>

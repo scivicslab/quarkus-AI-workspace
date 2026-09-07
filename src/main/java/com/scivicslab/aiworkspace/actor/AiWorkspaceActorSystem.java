@@ -38,12 +38,16 @@ public class AiWorkspaceActorSystem {
     private ActorSystem actorSystem;
     private ActorRef<ToolVersionActor> toolVersions;
     private ActorRef<BuildRegistryActor> buildRegistry;
+    private ActorRef<com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor>
+            conversationLogMerge;
 
     @PostConstruct
     void init() {
         actorSystem = new ActorSystem("ai-workspace");
         toolVersions = actorSystem.actorOf("tool-versions", new ToolVersionActor(fetcher));
         buildRegistry = actorSystem.actorOf("build-registry", new BuildRegistryActor());
+        conversationLogMerge = actorSystem.actorOf("conversation-log-merge",
+                new com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor());
         logger.info("AiWorkspaceActorSystem initialized");
     }
 
@@ -58,6 +62,12 @@ public class AiWorkspaceActorSystem {
     /** The actor holding what GitHub said about each tool's repository. */
     public ActorRef<ToolVersionActor> toolVersions() {
         return toolVersions;
+    }
+
+    /** The actor holding what the last merge of the conversation logs did. */
+    public ActorRef<com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor>
+            conversationLogMerge() {
+        return conversationLogMerge;
     }
 
     /** The actor holding which snapshot builds have been started. */

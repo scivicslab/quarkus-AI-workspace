@@ -1,0 +1,163 @@
+{#include layout}
+{#body}
+    <style>
+        .conv-search { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .conv-search input[type=text] {
+            flex: 1; padding: 0.5rem 0.7rem; font-size: 14px;
+            background: var(--bg-secondary); color: var(--text-primary);
+            border: 1px solid var(--border-color); border-radius: 4px;
+        }
+        .conv-search button {
+            padding: 0.5rem 1.1rem; font-size: 14px; cursor: pointer;
+            background: var(--accent-blue); color: var(--bg-primary);
+            border: none; border-radius: 4px; font-weight: 600;
+        }
+        .conv-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 1rem; }
+        .conv-merge {
+            display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+        }
+        .conv-merge button {
+            padding: 0.35rem 0.8rem; font-size: 13px; cursor: pointer;
+            background: var(--bg-tertiary); color: var(--text-primary);
+            border: 1px solid var(--border-color); border-radius: 4px;
+        }
+        .conv-merge button[disabled] { cursor: default; opacity: 0.6; }
+        .conv-merge-note { font-size: 12px; color: var(--text-secondary); }
+        .conv-merge-bad { color: var(--accent-red); }
+        .conv-error {
+            font-size: 13px; color: var(--accent-red); border: 1px solid var(--accent-red);
+            border-radius: 4px; padding: 0.5rem 0.7rem; margin-bottom: 1rem;
+        }
+        .conv-hit {
+            border: 1px solid var(--border-color); border-radius: 4px;
+            padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; background: var(--bg-secondary);
+        }
+        .conv-hit-head {
+            display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline;
+            font-size: 12px; color: var(--text-secondary); margin-bottom: 0.35rem;
+        }
+        .conv-hit-program { color: var(--accent-mauve); font-weight: 600; }
+        .conv-hit-snippet { font-size: 13px; line-height: 1.55; word-break: break-word; }
+        .conv-hit-toggle {
+            font-size: 12px; color: var(--accent-blue); cursor: pointer;
+            background: none; border: none; padding: 0; margin-top: 0.4rem;
+        }
+        .conv-hit-full {
+            display: none; margin-top: 0.5rem; padding: 0.5rem;
+            background: var(--code-bg); border-radius: 4px;
+            font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+            font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+            max-height: 30rem; overflow-y: auto;
+        }
+    </style>
+
+    <p class="section-label">Search every tool instance's conversations at once</p>
+
+    <form class="conv-search" method="get" action="/conversations">
+        <input type="text" name="q" value="{q}" placeholder="Words that appear in the conversation"
+               autofocus>
+        <button type="submit">Search</button>
+    </form>
+
+    <div class="conv-merge">
+        <form method="post" action="/conversations/merge">
+            {! Carried through the redirect so that collecting does not clear what was searched. !}
+            <input type="hidden" name="q" value="{q}">
+            <button type="submit" {#if merging}disabled{/if}>
+                {#if merging}Collecting…{#else}Collect new conversations{/if}
+            </button>
+        </form>
+        <span class="conv-merge-note">
+            {#if merging}
+                Reading every conversation database under
+                <span class="inst-mono">{scanDir}</span>.
+            {#else if lastMerge.ran}
+                Last collected {lastMerge.when} UTC from {lastMerge.sources} databases:
+                {lastMerge.merged} conversations added, {lastMerge.skipped} already here,
+                {lastMerge.turns} turns added.
+                {#if lastMerge.error}<span class="conv-merge-bad">{lastMerge.error}</span>{/if}
+                {#for problem in lastMerge.problems}
+                    <span class="conv-merge-bad">{problem}</span>
+                {/for}
+            {#else}
+                Nothing collected yet this run. Files named
+                <span class="inst-mono">{prefixes}</span> under
+                <span class="inst-mono">{scanDir}</span> are read.
+            {/if}
+        </span>
+    </div>
+
+    <p class="conv-meta">
+        {#if overview.present}
+            {overview.conversations} conversations, {overview.turns} turns
+            {#if overview.newest}· newest {overview.newest}{/if}
+            · <span class="inst-mono">{database}.mv.db</span>
+        {#else}
+            No merged database yet at <span class="inst-mono">{database}.mv.db</span>.
+            Press Collect new conversations to build it.
+        {/if}
+    </p>
+
+    {#if error}
+        <p class="conv-error">{error}</p>
+    {/if}
+
+    {#if searched && overview.present}
+        <p class="conv-meta">
+            {#if hits.isEmpty}
+                Nothing matched.
+            {#else if limited}
+                More than {limit} turns matched. Showing the newest {limit}.
+            {#else}
+                {hits.size} matching turns.
+            {/if}
+        </p>
+
+        {#for hit in hits}
+            <div class="conv-hit">
+                <div class="conv-hit-head">
+                    <span class="conv-hit-program">{hit.program}</span>
+                    <span>{hit.when}</span>
+                    <span class="inst-mono">{hit.conversation}</span>
+                    <span class="inst-mono">{hit.label}</span>
+                </div>
+                <div class="conv-hit-snippet">{hit.snippet}</div>
+                <button class="conv-hit-toggle" onclick="showTurn(this, {hit.logId})">
+                    Show the whole turn
+                </button>
+                <pre class="conv-hit-full" id="turn-{hit.logId}"></pre>
+            </div>
+        {/for}
+    {/if}
+
+    {#if merging}
+        <script>
+            // The merge runs on its own thread and the page is a snapshot of the moment it was
+            // drawn. Reload until the button comes back, so that the counts appear without anyone
+            // having to press anything.
+            setTimeout(() => window.location.reload(), 3000);
+        </script>
+    {/if}
+
+    <script>
+        // The whole turn is fetched on demand: a search can return a hundred turns, and a turn
+        // holds the entire request and response, which is far more text than a page needs upfront.
+        async function showTurn(button, logId) {
+            const box = document.getElementById('turn-' + logId);
+            if (box.style.display === 'block') {
+                box.style.display = 'none';
+                button.textContent = 'Show the whole turn';
+                return;
+            }
+            if (!box.textContent) {
+                box.textContent = 'Loading…';
+                const response = await fetch('/conversations/turn/' + logId);
+                box.textContent = response.ok ? await response.text() : 'Could not read this turn.';
+            }
+            box.style.display = 'block';
+            button.textContent = 'Hide';
+        }
+    </script>
+{/body}
+{/include}
