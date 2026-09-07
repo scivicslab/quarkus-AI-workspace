@@ -627,6 +627,50 @@
      * they are until this is pressed again; the Installed line is not touched here, since the
      * server reads it from the works directory on every draw.
      */
+    /**
+     * Opens or closes one instance's detail under its row.
+     *
+     * <p>The log is read the first time the row is opened, not when the page is drawn: reading
+     * eleven log files to show none of them costs the same as showing them all
+     * (SingleScreenAgain_260907_oo01).
+     */
+    window.toggleInstanceDetail = async function (toolName, port) {
+        const key = toolName + '-' + port;
+        const row = document.getElementById('detail-row-' + key);
+        if (!row) return;
+
+        const wasHidden = row.style.display === 'none';
+        row.style.display = wasHidden ? 'table-row' : 'none';
+        if (!wasHidden) return;
+
+        const logEl = document.getElementById('detail-log-' + key);
+        if (!logEl || logEl.dataset.loaded === 'yes') return;
+        logEl.textContent = 'Reading…';
+        try {
+            const r = await fetch('/api/tool/' + encodeURIComponent(toolName) + '/' + port + '/logs?lines=50');
+            const data = await r.json();
+            const lines = data.logs || [];
+            logEl.textContent = lines.length > 0
+                ? lines.join('\n')
+                : '(no log file for ' + toolName + ' on port ' + port + ')';
+            logEl.dataset.loaded = 'yes';
+        } catch (e) {
+            logEl.textContent = 'Could not read the log: ' + e.message;
+        }
+    };
+
+    // The Instances screen's own address now redirects here with ?detail=<tool>-<port>, so the
+    // row it named opens by itself.
+    document.addEventListener('DOMContentLoaded', function () {
+        const asked = new URLSearchParams(location.search).get('detail');
+        if (!asked) return;
+        const row = document.getElementById('detail-row-' + asked);
+        if (!row) return;
+        const dash = asked.lastIndexOf('-');
+        window.toggleInstanceDetail(asked.substring(0, dash), asked.substring(dash + 1));
+        row.scrollIntoView({ block: 'center' });
+    });
+
     window.refreshVersions = async function () {
         const btn = document.getElementById('btn-refresh-versions');
         const asOf = document.getElementById('versions-asof');

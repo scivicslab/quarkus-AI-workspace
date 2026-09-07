@@ -16,6 +16,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -42,13 +43,7 @@ import java.util.Optional;
 public class DashboardResource {
 
     @Inject
-    Template instances;
-
-    @Inject
-    Template catalog;
-
-    @Inject
-    Template instance;
+    Template dashboard;
 
     @Inject
     Template settings;
@@ -135,14 +130,21 @@ public class DashboardResource {
                               String github, String status, boolean library,
                               String installed, String latestRelease, String latestSnapshot) {}
 
-    /** Instances — what is running. */
+    /**
+     * The one screen: what is running, then what can be started, with each instance's own detail
+     * folded under its row.
+     *
+     * <p>These were three screens for two days. Starting a tool and watching it come up were on
+     * two of them, so one piece of work crossed a screen boundary, and whether a tool was already
+     * running could not be seen while deciding to start it
+     * ({@code SingleScreenAgain_260907_oo01}).</p>
+     */
     @GET
-    @Path("/instances")
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance instances() {
+    public TemplateInstance dashboard() {
         List<InstanceRow> rows = withActivity(rows());
-        return instances
-            .data("screen", "instances")
+        return dashboard
+            .data("screen", "dashboard")
             .data("version", appVersion)
             .data("assetVersion", assetVersion)
             .data("imageTag", imageTag.orElse(""))
@@ -150,21 +152,32 @@ public class DashboardResource {
             .data("running", count(rows, SessionState.READY))
             .data("starting", count(rows, SessionState.STARTING))
             .data("failed", count(rows, SessionState.FAILED))
-            .data("stopped", count(rows, SessionState.STOPPED));
-    }
-
-    /** Catalog — what can be launched, with each tool's form hidden until it is asked for. */
-    @GET
-    @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance catalog() {
-        return catalog
-            .data("screen", "catalog")
-            .data("version", appVersion)
-            .data("assetVersion", assetVersion)
-            .data("imageTag", imageTag.orElse(""))
+            .data("stopped", count(rows, SessionState.STOPPED))
             .data("launchTools", catalogTiles())
             .data("versionsFetchedAt", fetchedAtText())
             .data("versionsFailed", String.join(", ", toolVersionStore.failedTools()));
+    }
+
+    /**
+     * Where the Instances screen used to be.
+     *
+     * <p>Kept rather than removed: a browser tab left open on it, and anything that wrote the
+     * address down, would otherwise get a 404.</p>
+     */
+    @GET
+    @Path("/instances")
+    public Response instancesMoved() {
+        return Response.seeOther(java.net.URI.create("/")).build();
+    }
+
+    /**
+     * Where one instance's own screen used to be. The detail is now folded under that instance's
+     * row, and the name and port say which row to open.
+     */
+    @GET
+    @Path("/instances/{tool}/{port}")
+    public Response instanceMoved(@PathParam("tool") String tool, @PathParam("port") int port) {
+        return Response.seeOther(java.net.URI.create("/?detail=" + tool + "-" + port)).build();
     }
 
     /**
@@ -205,46 +218,7 @@ public class DashboardResource {
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
     }
 
-    /**
-     * One instance: what it was launched with, and its log.
-     *
-     * <p>The log is read through {@code getServiceLogs}, which falls back to the log file when the
-     * instance is no longer in the instance list — which is the state it is in when someone comes
-     * here to find out why it failed.</p>
-     *
-     * @param tool the tool name
-     * @param port the port that instance ran on
-     * @param lines how many log lines to show
-     * @return the detail screen
-     */
-    @GET
-    @Path("/instances/{tool}/{port}")
-    @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance instance(@PathParam("tool") String tool,
-                                     @PathParam("port") int port,
-                                     @QueryParam("lines") @DefaultValue("200") int lines) {
-        int wanted = lines > 0 ? lines : DETAIL_LOG_LINES;
-        InstanceRow row = rows().stream()
-                .filter(r -> r.toolName().equals(tool) && r.port() == port)
-                .findFirst()
-                // Not in the list any more: it stopped, and its log file is the reason to be here.
-                .orElse(new InstanceRow(tool, port, "", SessionState.STOPPED.name(),
-                                        null, null, null, java.util.Map.of(), "", ""));
-        ActivityProbe.Activity activity = row.accessUrl() == null ? ActivityProbe.Activity.none()
-                : activityProbe.askAll(java.util.Map.of("one", row.accessUrl()))
-                        .getOrDefault("one", ActivityProbe.Activity.none());
-        return instance
-            .data("screen", "instances")
-            .data("version", appVersion)
-            .data("assetVersion", assetVersion)
-            .data("imageTag", imageTag.orElse(""))
-            .data("instance", row)
-            .data("activity", activity.summary())
-            .data("activityAsOf", activity.asOf())
-            .data("parts", activity.parts())
-            .data("logLines", wanted)
-            .data("log", backend.getServiceLogs(tool, port, wanted));
-    }
+
 
     /**
      * Settings — the values this portal resolved and hands to each tool it launches.

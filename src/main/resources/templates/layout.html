@@ -694,10 +694,12 @@
 <main>
 
     <nav class="screen-nav">
-        <a href="/" class="screen-tab{#if screen == 'catalog'} screen-tab-active{/if}">Catalog</a>
-        <a href="/instances" class="screen-tab{#if screen == 'instances'} screen-tab-active{/if}">Instances</a>
-        <a href="/settings" class="screen-tab{#if screen == 'settings'} screen-tab-active{/if}">Settings</a>
-    </nav>
+    {! Two tabs went away when the three screens became one: what is running and what can be
+       started are on the same screen again (SingleScreenAgain_260907_oo01). Settings stays
+       apart — it is read neither while starting something nor while watching it. !}
+    <a href="/" class="screen-tab{#if screen == 'dashboard'} screen-tab-active{/if}">Dashboard</a>
+    <a href="/settings" class="screen-tab{#if screen == 'settings'} screen-tab-active{/if}">Settings</a>
+</nav>
 
 {#insert body /}
 

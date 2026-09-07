@@ -1,5 +1,64 @@
 {#include layout}
 {#body}
+    {! One screen, in the order the questions are asked: what is running, then what can be
+       started, and — under the row that is asked about — that instance's own detail
+       (SingleScreenAgain_260907_oo01). !}
+
+    <div class="inst-summary">
+        Running <b>{running}</b> · Starting <b>{starting}</b> · Failed <b>{failed}</b> · Stopped <b>{stopped}</b>
+    </div>
+
+    {#if instances}
+    <table class="inst-table">
+        <thead>
+            <tr>
+                <th>Tool</th><th>Port</th><th>State</th><th>Activity</th><th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {#for i in instances}
+            <tr data-tool="{i.toolName}" data-port="{i.port}">
+                <td class="inst-name">{#if i.memo}{i.memo}{#else}{i.toolName}{/if}</td>
+                <td class="inst-mono">{i.port}</td>
+                <td><span class="state-pill state-{i.state} cell-state">{i.state}</span></td>
+                {! What the instance says it is doing. Blank when it has no such endpoint or did
+                   not answer in time (ActivitySummary_260905_oo01). !}
+                <td class="inst-activity">{#if i.activity}{i.activity}{#else}—{/if}</td>
+                <td>
+                    <div class="inst-actions">
+                        {#if i.accessUrl}<a class="btn btn-open" href="{i.accessUrl}" target="_blank">Open</a>{/if}
+                        <button class="btn" id="btn-detail-{i.toolName}-{i.port}"
+                                onclick="toggleInstanceDetail('{i.toolName}', {i.port})">Detail</button>
+                        <button class="btn btn-stop" onclick="stopTool('{i.toolName}', {i.port})">Stop</button>
+                    </div>
+                </td>
+            </tr>
+            {! Folded until Detail is pressed. The log is fetched then, not when this page is
+               drawn: reading eleven log files to show none of them costs the same as showing
+               them all. !}
+            <tr class="inst-detail-row" id="detail-row-{i.toolName}-{i.port}" style="display:none;">
+                <td colspan="5">
+                    <dl class="detail-grid">
+                        <dt>Tool</dt><dd>{i.toolName}</dd>
+                        <dt>URL</dt><dd class="inst-mono">{#if i.accessUrl}{i.accessUrl}{#else}—{/if}</dd>
+                        <dt>Started</dt><dd class="inst-mono">{#if i.startedAt}{i.startedAt}{#else}—{/if}</dd>
+                        <dt>Uptime</dt><dd class="inst-mono">{#if i.uptime}{i.uptime}{#else}—{/if}</dd>
+                        {#if i.params}
+                        <dt>Launch params</dt>
+                        <dd>{#for entry in i.params.entrySet()}<span class="inst-mono">{entry.key}={entry.value}</span>　{/for}</dd>
+                        {/if}
+                    </dl>
+                    <p class="section-label">Log — last 50 lines</p>
+                    <div class="detail-log" id="detail-log-{i.toolName}-{i.port}">(press Detail to read)</div>
+                </td>
+            </tr>
+        {/for}
+        </tbody>
+    </table>
+    {#else}
+    <p class="inst-empty">Nothing is running. Start something below.</p>
+    {/if}
+
     {! GitHub is asked here and nowhere else. Its REST API allows sixty requests an hour from one
        address without authentication, and there are ten tools, so asking on every draw would use
        them up (ToolVersions_260907_oo01). !}
