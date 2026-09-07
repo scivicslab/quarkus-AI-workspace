@@ -88,7 +88,7 @@ public class DashboardResource {
     com.scivicslab.aiworkspace.version.InstalledVersionReader installedVersionReader;
 
     @Inject
-    com.scivicslab.aiworkspace.version.ToolVersionStore toolVersionStore;
+    com.scivicslab.aiworkspace.actor.AiWorkspaceActorSystem actors;
 
     /**
      * One row of the Instances table: a {@link SessionView} plus the uptime the screen shows, which
@@ -155,7 +155,8 @@ public class DashboardResource {
             .data("stopped", count(rows, SessionState.STOPPED))
             .data("launchTools", catalogTiles())
             .data("versionsFetchedAt", fetchedAtText())
-            .data("versionsFailed", String.join(", ", toolVersionStore.failedTools()));
+            .data("versionsFailed", String.join(", ",
+                    actors.toolVersions().ask(a -> a.failedTools()).join()));
     }
 
     /**
@@ -202,7 +203,7 @@ public class DashboardResource {
             String installed = (entry == null || library)
                 ? ""
                 : installedVersionReader.read(entry.jarFileName());
-            var remote = toolVersionStore.get(tool.name());
+            var remote = actors.toolVersions().ask(a -> a.get(tool.name())).join();
             tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.icon(), tool.params(),
                                       tool.github(), tool.status(), library,
                                       installed, remote.latestRelease(), remote.latestSnapshot()));
@@ -212,7 +213,7 @@ public class DashboardResource {
 
     /** When the versions were last fetched, for the line beside the button, or "" if never. */
     private String fetchedAtText() {
-        var at = toolVersionStore.fetchedAt();
+        var at = actors.toolVersions().ask(a -> a.fetchedAt()).join();
         if (at == null) return "";
         return java.time.LocalDateTime.ofInstant(at, java.time.ZoneId.systemDefault())
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));

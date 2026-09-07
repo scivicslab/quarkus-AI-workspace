@@ -42,7 +42,7 @@ public class ServiceResource {
     ServiceBackend backend;
 
     @Inject
-    com.scivicslab.aiworkspace.version.ToolVersionStore toolVersionStore;
+    com.scivicslab.aiworkspace.actor.AiWorkspaceActorSystem actors;
 
     @Inject
     com.scivicslab.aiworkspace.build.SnapshotBuildService snapshotBuilder;
@@ -251,14 +251,15 @@ public class ServiceResource {
     @POST
     @Path("/versions/refresh")
     public Response refreshVersions() {
-        List<String> failed = toolVersionStore.refresh();
+        // ask, not tell: the caller is an HTTP request that has to answer with the result.
+        List<String> failed = actors.toolVersions().ask(a -> a.refresh()).join();
         Map<String, Map<String, String>> versions = new LinkedHashMap<>();
-        toolVersionStore.all().forEach((tool, v) -> versions.put(tool, Map.of(
+        actors.toolVersions().ask(a -> a.all()).join().forEach((tool, v) -> versions.put(tool, Map.of(
                 "latestRelease", v.latestRelease(),
                 "latestSnapshot", v.latestSnapshot())));
         return Response.ok(Map.of(
                 "success", true,
-                "fetchedAt", String.valueOf(toolVersionStore.fetchedAt()),
+                "fetchedAt", String.valueOf(actors.toolVersions().ask(a -> a.fetchedAt()).join()),
                 "failed", failed,
                 "versions", versions)).build();
     }
