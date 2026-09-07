@@ -74,10 +74,12 @@
            browser can skip the ones with no repository instead of collecting a 404. !}
         <div class="tool-tile" id="tool-tile-{tool.name}"{#if tool.github} data-github="{tool.github}"{/if}>
             <div class="tool-head">
-                {! Read from the tool's own jar, not from a running instance, so it shows whether or
-                   not the tool is started. Falls back to the letter if the tool has no favicon. !}
-                <img class="tool-icon" src="/api/tool/{tool.name}/icon" alt=""
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='';">
+                {! A copy of the tool's own favicon, kept here in tool-icons/ rather than fetched from
+                   the tool at render time — a stopped tool has no running instance to ask, but the
+                   dashboard's own copy needs neither the tool's jar nor a running port. Tried as svg,
+                   then ico; a tool with neither file here shows the letter instead. !}
+                <img class="tool-icon" src="tool-icons/{tool.name}.svg" alt=""
+                     onerror="toolIconFallback(this, '{tool.name}')">
                 <span class="tool-icon tool-icon-letter" style="display:none">{tool.displayName.charAt(0)}</span>
                 <div>
                     <div class="tool-tile-name">{tool.displayName}</div>

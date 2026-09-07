@@ -131,26 +131,6 @@ public class ServiceResource {
         return Response.ok(Map.of("logs", logs)).build();
     }
 
-    /**
-     * Returns a tool's favicon, read from its own jar rather than from a running instance — so it is
-     * there whether or not the tool happens to be started right now.
-     */
-    @GET
-    @Path("/tool/{name}/icon")
-    @Produces({"image/svg+xml", "image/x-icon"})
-    public Response getToolIcon(@PathParam("name") String name) {
-        return backend.getToolIcon(name)
-            .map(icon -> Response.ok(icon.bytes(), icon.contentType())
-                .cacheControl(oneHourCache())
-                .build())
-            .orElse(Response.status(Response.Status.NOT_FOUND).build());
-    }
-
-    private static jakarta.ws.rs.core.CacheControl oneHourCache() {
-        jakarta.ws.rs.core.CacheControl cc = new jakarta.ws.rs.core.CacheControl();
-        cc.setMaxAge(3600);
-        return cc;
-    }
 
     // ---------------------------------------------------------------
 

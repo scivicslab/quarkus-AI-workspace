@@ -737,6 +737,14 @@
         });
     })();
 </script>
+<script>
+    // A tool's icon, from this portal's own tool-icons/: try .svg, then .ico, then show the letter.
+    function toolIconFallback(img, name) {
+        if (img.dataset.triedIco) { img.style.display = 'none'; img.nextElementSibling.style.display = ''; return; }
+        img.dataset.triedIco = '1';
+        img.src = 'tool-icons/' + name + '.ico';
+    }
+</script>
 <script src="static/app.js?v={assetVersion}"></script>
 </body>
 </html>
