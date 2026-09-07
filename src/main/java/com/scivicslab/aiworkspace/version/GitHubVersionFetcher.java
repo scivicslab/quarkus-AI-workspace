@@ -77,8 +77,9 @@ public class GitHubVersionFetcher {
      * Reads the version the default branch's {@code pom.xml} declares.
      *
      * <p>{@code HEAD} in the path resolves to whatever the repository's default branch is, so no
-     * branch name is written here: {@code scivicslab/quarkus-gpu-broker} is on {@code master} and
-     * {@code scivicslab/html-saurus} is on {@code main}.
+     * branch name is written here. Which branch that is has changed once already: the repositories
+     * under {@code scivicslab} were split between {@code master} and {@code main} and were renamed
+     * to {@code main}, and nothing here had to change.
      */
     private String fetchLatestSnapshot(String repository) throws Exception {
         HttpResponse<String> response = get(

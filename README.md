@@ -51,7 +51,7 @@ Open `http://localhost:28000` in your browser.
 
 ```bash
 mkdir ~/ai-toolkit && cd ~/ai-toolkit
-curl -LO https://raw.githubusercontent.com/scivicslab/quarkus-AI-workspace/master/start.sh
+curl -LO https://raw.githubusercontent.com/scivicslab/quarkus-AI-workspace/HEAD/start.sh
 bash start.sh [PORT]
 ```
 
