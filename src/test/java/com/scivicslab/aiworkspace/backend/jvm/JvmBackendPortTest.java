@@ -1,6 +1,7 @@
 package com.scivicslab.aiworkspace.backend.jvm;
 
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
+import com.scivicslab.pojoactor.core.ActorSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -106,8 +107,12 @@ class JvmBackendPortTest {
     @DisplayName("readyInstanceOn returns the READY instance on the reserved port (reuse basis)")
     void readyInstanceOn_adopted_returnsInstance() {
         AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
+        // The backend holds actor references now, so the supervisor is wrapped before it goes in.
+        // No watching threads are started here: this test only asks which instance is on a port.
+        ActorSystem system = new ActorSystem("readyInstanceOn-test");
         backend.instances.computeIfAbsent("html-saurus", k -> new CopyOnWriteArrayList<>())
-            .add(ProcessSupervisor.adopt(def, 28001, 12345L));
+            .add(system.actorOf("instance-html-saurus-28001",
+                                ProcessSupervisor.adopt(def, 28001, 12345L)));
 
         assertNotNull(backend.readyInstanceOn("html-saurus", 28001));
         assertNull(backend.readyInstanceOn("html-saurus", 28002));

@@ -1,5 +1,6 @@
 package com.scivicslab.aiworkspace.actor;
 
+import com.scivicslab.aiworkspace.backend.jvm.ProcessSupervisor;
 import com.scivicslab.aiworkspace.build.BuildJobActor;
 import com.scivicslab.aiworkspace.build.BuildRegistryActor;
 import com.scivicslab.aiworkspace.version.GitHubVersionFetcher;
@@ -76,6 +77,22 @@ public class AiWorkspaceActorSystem {
             buildRegistry.createChild("build-" + jobId, new BuildJobActor(jobId, tool));
         buildRegistry.tell(r -> r.put(jobId, job));
         return job;
+    }
+
+    /**
+     * Wraps one instance's supervisor in an actor.
+     *
+     * <p>Named after the tool and the port, which is what identifies an instance everywhere else.
+     * The caller keeps the reference; which instances exist is {@code JvmBackend}'s to know.
+     *
+     * @param supervisor the supervisor to hold
+     * @param toolName   the tool
+     * @param port       the port that instance listens on
+     * @return the instance's actor
+     */
+    public ActorRef<ProcessSupervisor> newInstance(ProcessSupervisor supervisor,
+                                                   String toolName, int port) {
+        return actorSystem.actorOf("instance-" + toolName + "-" + port, supervisor);
     }
 
     /** The system itself, for actors that are created while the portal runs. */

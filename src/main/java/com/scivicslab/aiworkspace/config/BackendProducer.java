@@ -14,10 +14,19 @@ public class BackendProducer {
 
     private static final Logger logger = Logger.getLogger(BackendProducer.class.getName());
 
+    @jakarta.inject.Inject
+    com.scivicslab.aiworkspace.actor.AiWorkspaceActorSystem actors;
+
     @Produces
     @ApplicationScoped
     public ServiceBackend produceBackend() {
         ServiceBackend backend = BackendLoader.loadBackend();
+        // The JVM backend wraps each instance's supervisor in an actor, and is built with new
+        // rather than by the container, so it is handed the actor system here
+        // (ActorBasedState_260907_oo01).
+        if (backend instanceof com.scivicslab.aiworkspace.backend.jvm.JvmBackend jvm) {
+            jvm.setActorSystem(actors);
+        }
         logger.info("Produced backend: " + backend.getBackendType());
         return backend;
     }

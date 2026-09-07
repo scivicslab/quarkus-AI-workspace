@@ -4,6 +4,7 @@ import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
 import com.scivicslab.aiworkspace.model.SessionState;
 import com.scivicslab.aiworkspace.model.SessionView;
 
+import com.scivicslab.pojoactor.core.ActorRef;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -51,17 +52,20 @@ public class ProcessSupervisor {
     private final CopyOnWriteArrayList<String> logBuffer = new CopyOnWriteArrayList<>();
     private String memo = "";
 
-    private volatile Process process;
-    private volatile ProcessHandle adoptedHandle;
-    private volatile SessionState state = SessionState.STOPPED;
-    private volatile boolean stopping = false;
-    private volatile String cachedAccessUrl;
+    // Plain fields, not volatile: one actor owns this object, so one thread at a time runs these
+    // methods. The threads that watch the child process reach them by telling that actor, not by
+    // assigning here (ActorBasedState_260907_oo01).
+    private Process process;
+    private ProcessHandle adoptedHandle;
+    private SessionState state = SessionState.STOPPED;
+    private boolean stopping = false;
+    private String cachedAccessUrl;
 
     /**
      * Log file for this instance. stdout+stderr of the child process are written here.
      * Using a file (not a pipe) means the child survives when the portal exits.
      */
-    private volatile File logFile;
+    private File logFile;
 
     /**
      * When this instance's process started, or {@code null} while it has not.
@@ -72,7 +76,7 @@ public class ProcessSupervisor {
      * startup, that moment is in the past and belongs to a portal that is gone, so it is read from
      * the operating system instead.</p>
      */
-    private volatile java.time.Instant startedAt;
+    private java.time.Instant startedAt;
 
 
     public ProcessSupervisor(AiWorkspaceConfig.ToolDefinition config,
@@ -185,14 +189,12 @@ public class ProcessSupervisor {
         if (adoptSessionId != null && !adoptSessionId.isBlank()) {
             supervisor.cachedAccessUrl = "/session/" + adoptSessionId + "-" + config.name() + "-" + port + "/";
         }
-        Thread.ofVirtual().start(supervisor::tailLogFile);
-        Thread.ofVirtual().start(supervisor::watchAdoptedProcess);
         logger.info("Adopted " + config.name() + ":" + port + " (PID " + pid + ")");
         return supervisor;
     }
 
-    private void watchAdoptedProcess() {
-        ProcessHandle handle = adoptedHandle;
+    private void watchAdoptedProcess(ActorRef<ProcessSupervisor> self) {
+        ProcessHandle handle = self.ask(s -> s.adoptedHandle).join();
         if (handle == null) return;
         try {
             handle.onExit().get();
@@ -200,17 +202,22 @@ public class ProcessSupervisor {
             Thread.currentThread().interrupt();
             return;
         }
-        if (!stopping && state == SessionState.READY) {
-            state = SessionState.FAILED;
-            logger.warning(config.name() + ":" + port + " (adopted, PID " + handle.pid() + ") exited unexpectedly");
-        }
+        self.tell(s -> s.adoptedProcessExited(handle.pid()));
+    }
+
+    /** An instance this portal adopted rather than started has exited. */
+    void adoptedProcessExited(long pid) {
+        if (stopping || state != SessionState.READY) return;
+        state = SessionState.FAILED;
+        logger.warning(config.name() + ":" + port
+            + " (adopted, PID " + pid + ") exited unexpectedly");
     }
 
     public void setMemo(String memo) {
         this.memo = memo != null ? memo : "";
     }
 
-    public synchronized void start() {
+    public void start(ActorRef<ProcessSupervisor> self) {
         if (process != null && process.isAlive()) {
             logger.info(config.name() + ":" + port + " is already running");
             return;
@@ -263,8 +270,10 @@ public class ProcessSupervisor {
             startedAt = java.time.Instant.now();
             state = SessionState.STARTING;
 
-            Thread.ofVirtual().start(this::tailLogFile);
-            Thread.ofVirtual().start(this::waitForPort);
+            // Waiting is what these two do, so they stay on virtual threads. What they learn,
+            // they tell the actor (ActorBasedState_260907_oo01).
+            Thread.ofVirtual().start(() -> tailLogFile(self));
+            Thread.ofVirtual().start(() -> waitForPort(self));
 
             logger.info("Started " + config.name() + " on port " + port
                 + (launchParams.isEmpty() ? "" : " params=" + launchParams));
@@ -275,7 +284,18 @@ public class ProcessSupervisor {
         }
     }
 
-    public synchronized void stop() {
+    /**
+     * Starts the two threads that watch an adopted instance.
+     *
+     * <p>Separate from {@link #adopt} because they need the actor's own reference, and that does
+     * not exist until the object they watch has been wrapped in one.
+     */
+    public void watchAdopted(ActorRef<ProcessSupervisor> self) {
+        Thread.ofVirtual().start(() -> tailLogFile(self));
+        Thread.ofVirtual().start(() -> watchAdoptedProcess(self));
+    }
+
+    public void stop() {
         deregisterFromK8sPups();
         stopping = true;
 
@@ -458,20 +478,23 @@ public class ProcessSupervisor {
         return null;
     }
 
-    private void waitForPort() {
+    /**
+     * Watches for the child's port to open, on a virtual thread.
+     *
+     * <p>The two things this decides — that the child died before opening its port, and that it is
+     * READY — are told to the actor rather than assigned here. Assigning here is what let a stop
+     * land between reading {@code stopping} and writing {@code READY}, marking a stopping instance
+     * ready ({@code ActorBasedState_260907_oo01}).
+     */
+    private void waitForPort(ActorRef<ProcessSupervisor> self) {
         for (int attempt = 0; attempt < PORT_CHECK_MAX_ATTEMPTS; attempt++) {
-            if (stopping) return;
-            if (process == null || !process.isAlive()) {
-                state = SessionState.FAILED;
-                logger.warning(config.name() + ":" + port + " process died before port opened"
-                    + (logFile != null ? " — see log: " + logFile : ""));
+            if (self.ask(s -> s.stopping).join()) return;
+            if (!self.ask(ProcessSupervisor::isProcessAlive).join()) {
+                self.tell(s -> s.diedBeforePortOpened());
                 return;
             }
             if (isTcpPortOpen(port)) {
-                if (stopping) return;
-                state = SessionState.READY;
-                logger.info(config.name() + ":" + port + " is READY");
-                        registerWithK8sPups();
+                self.tell(ProcessSupervisor::portOpened);
                 return;
             }
             try {
@@ -481,6 +504,32 @@ public class ProcessSupervisor {
                 return;
             }
         }
+        self.tell(ProcessSupervisor::timedOutWaitingForPort);
+    }
+
+    /** The child exited before its port ever opened. */
+    void diedBeforePortOpened() {
+        state = SessionState.FAILED;
+        logger.warning(config.name() + ":" + port + " process died before port opened"
+            + (logFile != null ? " — see log: " + logFile : ""));
+    }
+
+    /**
+     * The port opened.
+     *
+     * <p>Reads {@code stopping} and writes {@code state} in one go. A stop asked for meanwhile is
+     * another message to this same actor, and arrives either wholly before or wholly after.
+     */
+    void portOpened() {
+        if (stopping) return;
+        state = SessionState.READY;
+        logger.info(config.name() + ":" + port + " is READY");
+        registerWithK8sPups();
+    }
+
+    /** The port never opened within the attempts allowed. */
+    void timedOutWaitingForPort() {
+        if (stopping) return;
         logger.warning(config.name() + ":" + port + " timed out waiting for port"
             + (logFile != null ? " — see log: " + logFile : ""));
         state = SessionState.FAILED;
@@ -497,49 +546,53 @@ public class ProcessSupervisor {
      * - stopping is true (explicit stop requested), OR
      * - the process is no longer alive and no new data appears in the file
      */
-    private void tailLogFile() {
-        if (logFile == null) return;
+    private void tailLogFile(ActorRef<ProcessSupervisor> self) {
+        File file = self.ask(s -> s.logFile).join();
+        if (file == null) return;
 
         // Wait for the log file to be created by the child process
-        for (int i = 0; i < 100 && !logFile.exists(); i++) {
-            if (stopping) return;
+        for (int i = 0; i < 100 && !file.exists(); i++) {
+            if (self.ask(s -> s.stopping).join()) return;
             try { Thread.sleep(100); } catch (InterruptedException e) { return; }
         }
-        if (!logFile.exists()) return;
+        if (!file.exists()) return;
 
-        try (RandomAccessFile raf = new RandomAccessFile(logFile, "r")) {
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             while (true) {
                 String line = raf.readLine();
                 if (line != null) {
-                    addToLogBuffer(line);
+                    String read = line;
+                    self.tell(s -> s.addToLogBuffer(read));
                 } else {
                     // EOF on the current file content
-                    if (stopping) break;
-                    boolean alive = isProcessAlive();
-                    if (!alive) {
+                    if (self.ask(s -> s.stopping).join()) break;
+                    if (!self.ask(ProcessSupervisor::isProcessAlive).join()) {
                         // Process has exited — drain any remaining lines
                         Thread.sleep(300);
-                        while ((line = raf.readLine()) != null) addToLogBuffer(line);
+                        while ((line = raf.readLine()) != null) {
+                            String remaining = line;
+                            self.tell(s -> s.addToLogBuffer(remaining));
+                        }
                         break;
                     }
                     try { Thread.sleep(200); } catch (InterruptedException e) { break; }
                 }
             }
         } catch (Exception e) {
-            if (!stopping) {
+            if (!self.ask(s -> s.stopping).join()) {
                 logger.fine("Log tailing ended for " + config.name() + ":" + port
                     + " (" + e.getMessage() + ")");
             }
         }
     }
 
-    private boolean isProcessAlive() {
+    boolean isProcessAlive() {
         if (process != null) return process.isAlive();
         if (adoptedHandle != null) return adoptedHandle.isAlive();
         return false;
     }
 
-    private void addToLogBuffer(String line) {
+    void addToLogBuffer(String line) {
         if (line == null || line.isBlank()) return;
         // Skip stack trace noise but keep error lines
         if (line.startsWith("\tat ") || line.startsWith("\t...")) return;
