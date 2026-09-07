@@ -13,7 +13,6 @@ import java.util.List;
 public record ToolView(
     String name,
     String displayName,
-    String icon,
     List<ParamDefinition> params,
     String github,
     String status

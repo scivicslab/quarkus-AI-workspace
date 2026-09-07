@@ -125,7 +125,7 @@ public class DashboardResource {
      * @param latestRelease  the version of the newest release's tag, or ""
      * @param latestSnapshot the version the default branch's pom.xml declares, or ""
      */
-    public record CatalogTile(String name, String displayName, String icon,
+    public record CatalogTile(String name, String displayName,
                               java.util.List<com.scivicslab.aiworkspace.model.ParamDefinition> params,
                               String github, String status, boolean library,
                               String installed, String latestRelease, String latestSnapshot) {}
@@ -204,7 +204,7 @@ public class DashboardResource {
                 ? ""
                 : installedVersionReader.read(entry.jarFileName());
             var remote = actors.toolVersions().ask(a -> a.get(tool.name())).join();
-            tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.icon(), tool.params(),
+            tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.params(),
                                       tool.github(), tool.status(), library,
                                       installed, remote.latestRelease(), remote.latestSnapshot()));
         }

@@ -737,14 +737,6 @@
         });
     })();
 </script>
-<script>
-    // A tool's icon: try its favicon.svg, then its favicon.ico, then leave the letter in place.
-    function toolIconFallback(img, base) {
-        if (img.dataset.triedIco) { img.remove(); return; }
-        img.dataset.triedIco = '1';
-        img.src = base + 'favicon.ico';
-    }
-</script>
 <script src="static/app.js?v={assetVersion}"></script>
 </body>
 </html>

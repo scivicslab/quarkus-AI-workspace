@@ -1,6 +1,7 @@
 package com.scivicslab.aiworkspace.spi;
 
 import com.scivicslab.aiworkspace.model.DashboardModel;
+import com.scivicslab.aiworkspace.model.IconData;
 import com.scivicslab.aiworkspace.model.ToolView;
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
 
@@ -60,4 +61,11 @@ public interface ServiceBackend {
      * Used by the "Download Latest" feature.
      */
     default Optional<String> getJarFileName(String toolName) { return Optional.empty(); }
+
+    /**
+     * Returns the named tool's favicon, read directly out of its own jar — not from a running
+     * instance, so it is available whether or not the tool happens to be started right now.
+     * Empty if the tool, its jar, or a favicon inside the jar cannot be found.
+     */
+    default Optional<IconData> getToolIcon(String toolName) { return Optional.empty(); }
 }

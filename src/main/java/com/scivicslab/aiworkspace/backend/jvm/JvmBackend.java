@@ -2,6 +2,7 @@ package com.scivicslab.aiworkspace.backend.jvm;
 
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
 import com.scivicslab.aiworkspace.model.DashboardModel;
+import com.scivicslab.aiworkspace.model.IconData;
 import com.scivicslab.aiworkspace.model.ParamDefinition;
 import com.scivicslab.aiworkspace.model.SessionState;
 import com.scivicslab.aiworkspace.model.SessionView;
@@ -741,30 +742,55 @@ public class JvmBackend implements ServiceBackend {
     }
 
     private ToolView toToolView(AiWorkspaceConfig.ToolDefinition tool) {
-        return new ToolView(tool.name(), tool.name(), iconBaseOf(tool), buildParams(tool.params()),
+        return new ToolView(tool.name(), tool.name(), buildParams(tool.params()),
                             tool.github() != null ? tool.github() : "", liveStatus(tool));
     }
 
+    /** Where a tool's favicon lives inside its own jar, tried in order; first one found wins. */
+    private static final String[][] ICON_CANDIDATES = {
+        {"META-INF/resources/favicon.svg", "image/svg+xml"},
+        {"META-INF/resources/favicon.ico", "image/x-icon"},
+    };
+
     /**
-     * The base URL to fetch a tool's own favicon from, or {@code ""} when there is nowhere to fetch
-     * it from.
+     * Reads a tool's favicon straight out of its jar.
      *
-     * <p>These tools are web applications and each already serves its own icon; there is no icon
-     * file here to keep in step with them. What there is not, is a way to ask a tool that is not
-     * running — so a tool with no running instance has no icon, and the Catalog shows a letter in
-     * its place ({@code ControlDashboard_260905_oo01}).</p>
-     *
-     * <p>Which file it is differs by tool — html-saurus answers {@code /favicon.ico} and the chat
-     * UIs answer {@code /favicon.svg} — so the base is returned and the page tries both.</p>
+     * <p>Earlier this asked a running instance for its favicon over HTTP, so a tool with no running
+     * instance had no icon and the Catalog showed a letter in its place. But the icon is a property
+     * of the tool, not of any one instance's runtime state — a stopped tool is exactly as much a
+     * chat UI or a portal as a running one, and its favicon already sits in its jar as a static
+     * resource regardless. Reading it from there works whether or not anything is running, and it
+     * needs the jar to exist ({@link ProcessSupervisor#resolveJarPath}) rather than a live port to
+     * ask, which every launchable tool already resolves for its "Ready" / "Not downloaded" status.</p>
      */
-    private String iconBaseOf(AiWorkspaceConfig.ToolDefinition tool) {
-        List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(tool.name())).join();
-        if (list == null) return "";
-        return list.stream()
-            .filter(s -> s.ask(ProcessSupervisor::getState).join() == SessionState.READY)
-            .findFirst()
-            .map(s -> "http://localhost:" + s.ask(ProcessSupervisor::getPort).join() + "/")
-            .orElse("");
+    @Override
+    public Optional<IconData> getToolIcon(String toolName) {
+        AiWorkspaceConfig.ToolDefinition tool;
+        try {
+            tool = findTool(toolName);
+        } catch (ServiceException e) {
+            return Optional.empty();
+        }
+        String resolved = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
+        if (resolved == null || resolved.isBlank()) {
+            return Optional.empty();
+        }
+        java.io.File jarFile = new java.io.File(resolved);
+        if (!jarFile.exists()) {
+            return Optional.empty();
+        }
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jarFile)) {
+            for (String[] candidate : ICON_CANDIDATES) {
+                java.util.zip.ZipEntry entry = zip.getEntry(candidate[0]);
+                if (entry == null) continue;
+                try (var in = zip.getInputStream(entry)) {
+                    return Optional.of(new IconData(in.readAllBytes(), candidate[1]));
+                }
+            }
+        } catch (Exception e) {
+            logger.log(java.util.logging.Level.FINE, "Could not read favicon from " + resolved, e);
+        }
+        return Optional.empty();
     }
 
     /**
