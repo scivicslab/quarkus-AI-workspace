@@ -32,9 +32,6 @@ public class GitHubVersionFetcher {
             "</groupId>\\s*<artifactId>[^<]+</artifactId>\\s*<version>([^<]+)</version>",
             Pattern.DOTALL);
 
-    /** Between one repository and the next, so that ten of them do not go out at once. */
-    private static final Duration BETWEEN_REPOSITORIES = Duration.ofSeconds(3);
-
     private final HttpClient client = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(10))
@@ -46,9 +43,10 @@ public class GitHubVersionFetcher {
      * @throws Exception when neither could be read
      */
     public RemoteVersions fetch(String repository) throws Exception {
+        // No pause here: the caller reads one repository per request, and the browser leaves
+        // three seconds between them (ToolVersions_260907_oo01).
         String latestRelease = fetchLatestRelease(repository);
         String latestSnapshot = fetchLatestSnapshot(repository);
-        pause();
         return new RemoteVersions(latestRelease, latestSnapshot);
     }
 
@@ -100,11 +98,4 @@ public class GitHubVersionFetcher {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private void pause() {
-        try {
-            Thread.sleep(BETWEEN_REPOSITORIES.toMillis());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
 }

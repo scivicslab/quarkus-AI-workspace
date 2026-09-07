@@ -63,27 +63,54 @@ public class ToolVersionActor {
     }
 
     /**
-     * Asks GitHub about every registry entry that names a repository.
+     * Asks GitHub about one tool's repository.
      *
-     * <p>Each entry is answered on its own: one repository that cannot be read leaves the others'
-     * versions replaced, and leaves that one entry's previous versions in place.
+     * <p>One tool at a time, because the screen fills in one tile at a time. Reading all ten in
+     * one call took thirty-five seconds during which nothing on the screen moved
+     * ({@code ToolVersions_260907_oo01}).
      *
-     * @return the tools whose repository could not be read
+     * @param toolName the tool to read
+     * @return its two versions
+     * @throws IllegalArgumentException when no registry entry of that name names a repository
+     * @throws VersionFetchException when the repository could not be read; the tool keeps what
+     *         versions it already had
      */
-    public List<String> refresh() {
-        List<String> failed = new ArrayList<>();
+    public RemoteVersions refreshOne(String toolName) {
+        String repository = null;
         for (ToolRegistryEntry entry : ToolRegistryLoader.load()) {
-            if (entry.githubRepo() == null || entry.githubRepo().isBlank()) continue;
-            try {
-                byTool.put(entry.name(), fetcher.fetch(entry.githubRepo()));
-            } catch (Exception e) {
-                failed.add(entry.name());
-                logger.warning("Could not read versions for " + entry.name()
-                        + " (" + entry.githubRepo() + "): " + e.getMessage());
-            }
+            if (entry.name().equals(toolName)) { repository = entry.githubRepo(); break; }
         }
-        fetchedAt = Instant.now();
-        failedTools = List.copyOf(failed);
-        return failedTools;
+        if (repository == null || repository.isBlank()) {
+            throw new IllegalArgumentException("No GitHub repository configured for " + toolName);
+        }
+
+        try {
+            RemoteVersions versions = fetcher.fetch(repository);
+            byTool.put(toolName, versions);
+            fetchedAt = Instant.now();
+            forget(toolName);
+            return versions;
+        } catch (Exception e) {
+            remember(toolName);
+            logger.warning("Could not read versions for " + toolName
+                    + " (" + repository + "): " + e.getMessage());
+            throw new VersionFetchException(repository, e);
+        }
+    }
+
+    /** Adds a tool to the list of those whose repository could not be read. */
+    private void remember(String toolName) {
+        if (failedTools.contains(toolName)) return;
+        List<String> updated = new ArrayList<>(failedTools);
+        updated.add(toolName);
+        failedTools = List.copyOf(updated);
+    }
+
+    /** Removes a tool from that list, now that it has been read. */
+    private void forget(String toolName) {
+        if (!failedTools.contains(toolName)) return;
+        List<String> updated = new ArrayList<>(failedTools);
+        updated.remove(toolName);
+        failedTools = List.copyOf(updated);
     }
 }

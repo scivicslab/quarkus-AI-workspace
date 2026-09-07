@@ -70,7 +70,9 @@
 
     <div class="tool-grid">
     {#for tool in launchTools}
-        <div class="tool-tile" id="tool-tile-{tool.name}">
+        {! data-github marks the tiles that Refresh versions asks GitHub about, so the
+           browser can skip the ones with no repository instead of collecting a 404. !}
+        <div class="tool-tile" id="tool-tile-{tool.name}"{#if tool.github} data-github="{tool.github}"{/if}>
             <div class="tool-head">
                 {#if tool.icon}
                 {! The tool serves its own icon. Which file differs by tool, so try the svg, then
@@ -93,13 +95,15 @@
                     <span class="tool-version-value" id="version-installed-{tool.name}">{tool.installed}</span>
                 </div>
                 {/if}
+                {! Blank would mean two different things at once — that GitHub has not been asked,
+                   and that it was asked and there is no release. Say which. !}
                 <div class="tool-version-row">
                     <span class="tool-version-name">Latest release</span>
-                    <span class="tool-version-value" id="version-release-{tool.name}">{tool.latestRelease}</span>
+                    <span class="tool-version-value" id="version-release-{tool.name}">{#if tool.latestRelease.isEmpty()}not read yet{#else}{tool.latestRelease}{/if}</span>
                 </div>
                 <div class="tool-version-row">
                     <span class="tool-version-name">Latest SNAPSHOT</span>
-                    <span class="tool-version-value" id="version-snapshot-{tool.name}">{tool.latestSnapshot}</span>
+                    <span class="tool-version-value" id="version-snapshot-{tool.name}">{#if tool.latestSnapshot.isEmpty()}not read yet{#else}{tool.latestSnapshot}{/if}</span>
                 </div>
             </div>
 

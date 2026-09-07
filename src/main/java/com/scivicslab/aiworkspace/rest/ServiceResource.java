@@ -2,6 +2,7 @@ package com.scivicslab.aiworkspace.rest;
 
 import com.scivicslab.aiworkspace.model.DashboardModel;
 import com.scivicslab.aiworkspace.spi.ServiceBackend;
+import com.scivicslab.aiworkspace.version.RemoteVersions;
 import com.scivicslab.aiworkspace.spi.ServiceException;
 
 import jakarta.inject.Inject;
@@ -230,6 +231,47 @@ public class ServiceResource {
     }
 
     /**
+     * Asks GitHub what version one tool's repository states, and holds the answer.
+     *
+     * <p>Nothing here happens when a screen is drawn: GitHub's REST API allows sixty requests an
+     * hour from one address without authentication, and reading one repository costs two of them.
+     * This runs when the {@code Refresh versions} button is pressed, and what it learns is kept
+     * until the button is pressed again ({@code ToolVersions_260907_oo01}).
+     *
+     * <p>One tool per request. The browser asks for each tile in turn and writes the answer into
+     * that tile as it arrives, so the screen fills in from the top rather than staying still for
+     * the whole run. It also leaves three seconds between requests, which is why there is no pause
+     * on this side.
+     *
+     * <p>A repository that cannot be read answers {@code 502} and leaves that tool holding what it
+     * had; a name the registry does not know answers {@code 404}. Either way the browser goes on
+     * to the next tile.
+     */
+    @POST
+    @Path("/versions/refresh/{name}")
+    public Response refreshOneToolVersion(@PathParam("name") String name) {
+        try {
+            // ask, not tell: the caller is an HTTP request that has to answer with the result.
+            RemoteVersions versions = actors.toolVersions().ask(a -> a.refreshOne(name)).join();
+            return Response.ok(Map.of(
+                    "success", true,
+                    "tool", name,
+                    "latestRelease", versions.latestRelease(),
+                    "latestSnapshot", versions.latestSnapshot(),
+                    "fetchedAt", String.valueOf(actors.toolVersions().ask(a -> a.fetchedAt()).join())
+            )).build();
+        } catch (Exception e) {
+            // ask wraps what the actor threw, so the one the reader wants is one level down.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            int status = cause instanceof IllegalArgumentException ? 404 : 502;
+            return Response.status(status).entity(Map.of(
+                    "success", false,
+                    "tool", name,
+                    "error", String.valueOf(cause.getMessage()))).build();
+        }
+    }
+
+    /**
      * Starts a background build of the named tool from its GitHub source and installs
      * the resulting uber-jar into {@code ~/works/}. Use this instead of "Download Latest"
      * when the tool is only available as an unreleased {@code -SNAPSHOT}.
@@ -237,33 +279,6 @@ public class ServiceResource {
      * <p>Returns immediately with a {@code jobId}; poll {@code /build-status/{jobId}}
      * for progress, since the Maven build takes minutes.
      */
-    /**
-     * Asks GitHub what version every tool's repository states, and holds the answers.
-     *
-     * <p>Nothing here happens when a screen is drawn: GitHub's REST API allows sixty requests an
-     * hour from one address without authentication, and the registry has ten entries. This runs
-     * when the {@code Refresh versions} button is pressed, and what it learns is kept until the
-     * button is pressed again ({@code ToolVersions_260907_oo01}).
-     *
-     * <p>Each repository is answered on its own. One that cannot be read is named in
-     * {@code failed}; the others' versions are replaced regardless.
-     */
-    @POST
-    @Path("/versions/refresh")
-    public Response refreshVersions() {
-        // ask, not tell: the caller is an HTTP request that has to answer with the result.
-        List<String> failed = actors.toolVersions().ask(a -> a.refresh()).join();
-        Map<String, Map<String, String>> versions = new LinkedHashMap<>();
-        actors.toolVersions().ask(a -> a.all()).join().forEach((tool, v) -> versions.put(tool, Map.of(
-                "latestRelease", v.latestRelease(),
-                "latestSnapshot", v.latestSnapshot())));
-        return Response.ok(Map.of(
-                "success", true,
-                "fetchedAt", String.valueOf(actors.toolVersions().ask(a -> a.fetchedAt()).join()),
-                "failed", failed,
-                "versions", versions)).build();
-    }
-
     @POST
     @Path("/tool/{name}/build-snapshot")
     public Response buildSnapshot(@PathParam("name") String name) {
