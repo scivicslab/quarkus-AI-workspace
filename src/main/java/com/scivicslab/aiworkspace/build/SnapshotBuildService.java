@@ -19,12 +19,12 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import com.scivicslab.pojoactor.core.ActorRef;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
@@ -53,6 +53,9 @@ public class SnapshotBuildService {
      * (the "Download Latest" flow already reads them anonymously), so the default
      * is anonymous HTTPS — no SSH key required. Override for GitHub Enterprise or SSH.
      */
+    @jakarta.inject.Inject
+    com.scivicslab.aiworkspace.actor.AiWorkspaceActorSystem actors;
+
     @ConfigProperty(name = "ai-workspace.snapshot.git-base-url", defaultValue = "https://github.com")
     String gitBaseUrl;
 
@@ -78,46 +81,6 @@ public class SnapshotBuildService {
         defaultValue = "${user.dir}")
     String worksDirTemplate;
 
-    private final ConcurrentHashMap<String, BuildJob> jobs = new ConcurrentHashMap<>();
-
-    /** State of a snapshot build. */
-    public enum State { RUNNING, SUCCESS, FAILED }
-
-    /** A single snapshot-build job, updated in place as the build progresses. */
-    public static final class BuildJob {
-        final String id;
-        final String tool;
-        volatile State state = State.RUNNING;
-        volatile String step = "queued";
-        volatile String resultFile;   // versioned jar name once built
-        volatile String error;
-        final Deque<String> log = new ArrayDeque<>();
-
-        BuildJob(String id, String tool) {
-            this.id = id;
-            this.tool = tool;
-        }
-
-        public String id()          { return id; }
-        public String tool()        { return tool; }
-        public State state()        { return state; }
-        public String step()        { return step; }
-        public String resultFile()  { return resultFile; }
-        public String error()       { return error; }
-
-        /** @return the last {@code n} log lines, oldest first. */
-        public synchronized List<String> tail(int n) {
-            int size = log.size();
-            int skip = Math.max(0, size - n);
-            return log.stream().skip(skip).toList();
-        }
-
-        synchronized void append(String line) {
-            log.addLast(line);
-            while (log.size() > MAX_LOG_LINES) log.removeFirst();
-        }
-    }
-
     /**
      * Starts a build for {@code tool} and returns immediately.
      *
@@ -126,55 +89,57 @@ public class SnapshotBuildService {
      * @param jarFileName  the symlink name in ~/works/ (e.g. "quarkus-chat-ui.jar")
      * @return the created job, already RUNNING on a background thread
      */
-    public BuildJob start(String tool, String githubRepo, String jarFileName) {
-        BuildJob job = new BuildJob(UUID.randomUUID().toString(), tool);
-        jobs.put(job.id, job);
+    public ActorRef<BuildJobActor> start(String tool, String githubRepo, String jarFileName) {
+        String jobId = UUID.randomUUID().toString();
+        ActorRef<BuildJobActor> job = actors.newBuildJob(jobId, tool);
+        // The build runs on a virtual thread because waiting for Maven is its whole job. What it
+        // learns along the way it tells the actor; it never writes the state itself.
         Thread.ofVirtual().name("snapshot-build-" + tool).start(
             () -> run(job, githubRepo, jarFileName));
         return job;
     }
 
-    /** @return the tracked job, if any. */
-    public Optional<BuildJob> get(String jobId) {
-        return Optional.ofNullable(jobs.get(jobId));
+    /** @return the tracked build, if this portal started it. */
+    public Optional<ActorRef<BuildJobActor>> get(String jobId) {
+        return actors.buildRegistry().ask(r -> r.get(jobId)).join();
     }
 
     // ---------------------------------------------------------------
     // Build pipeline (background thread)
     // ---------------------------------------------------------------
 
-    private void run(BuildJob job, String githubRepo, String jarFileName) {
+    private void run(ActorRef<BuildJobActor> job, String githubRepo, String jarFileName) {
         try {
             buildDependencies(job);
             Path repoDir = cloneOrUpdate(job, githubRepo);
             build(job, repoDir, false, List.of()); // the tool itself is tested (project policy), full build
 
             if (jarFileName != null && !jarFileName.isBlank()) {
-                job.step = "locating jar";
+                job.tell(j -> j.step("locating jar"));
                 String jarBase = jarFileName.endsWith(".jar")
                     ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
                     : jarFileName;
                 Path uberJar = locateUberJar(repoDir, jarBase);
-                job.append("Found uber-jar: " + uberJar);
+                job.tell(j -> j.append("Found uber-jar: " + uberJar));
 
-                job.step = "installing to ~/works";
+                job.tell(j -> j.step("installing to ~/works"));
                 Path dest = installToWorks(job, uberJar, jarFileName);
-                job.resultFile = dest.getFileName().toString();
-                job.append("SUCCESS: installed " + dest);
-                logger.info("Snapshot build succeeded for " + job.tool + " → " + dest);
+                job.tell(j -> j.resultFile(dest.getFileName().toString()));
+                job.tell(j -> j.append("SUCCESS: installed " + dest));
+                logger.info("Snapshot build succeeded for " + job.ask(j -> j.tool()).join() + " → " + dest);
             } else {
                 // Library build: artifacts installed to ~/.m2 by mvn install; nothing to deploy.
-                job.append("Library build complete: artifacts installed to ~/.m2");
-                logger.info("Snapshot library build succeeded for " + job.tool);
+                job.tell(j -> j.append("Library build complete: artifacts installed to ~/.m2"));
+                logger.info("Snapshot library build succeeded for " + job.ask(j -> j.tool()).join());
             }
 
-            job.step = "done";
-            job.state = State.SUCCESS;
+            job.tell(j -> j.step("done"));
+            job.tell(j -> j.succeeded());
         } catch (Exception e) {
-            job.error = e.getMessage();
-            job.state = State.FAILED;
-            job.append("ERROR: " + e.getMessage());
-            logger.warning("Snapshot build failed for " + job.tool + ": " + e.getMessage());
+            job.tell(j -> j.failed(e.getMessage()));
+            
+            job.tell(j -> j.append("ERROR: " + e.getMessage()));
+            logger.warning("Snapshot build failed for " + job.ask(j -> j.tool()).join() + ": " + e.getMessage());
         }
     }
 
@@ -184,22 +149,23 @@ public class SnapshotBuildService {
      * Snapshot one-touch: an internal {@code -SNAPSHOT} dependency that is not published to Maven
      * Central is produced from source here instead of failing the tool's own dependency resolution.
      */
-    private void buildDependencies(BuildJob job) throws Exception {
-        List<ToolRegistryEntry> ordered = dependencyBuildOrder(job.tool);
+    private void buildDependencies(ActorRef<BuildJobActor> job) throws Exception {
+        List<ToolRegistryEntry> ordered = dependencyBuildOrder(job.ask(j -> j.tool()).join());
         if (ordered.isEmpty()) return;
-        job.append("Dependencies to build first (in order): "
-            + ordered.stream().map(ToolRegistryEntry::name).toList());
+        job.tell(j -> j.append("Dependencies to build first (in order): "
+            + ordered.stream().map(ToolRegistryEntry::name).toList()));
         for (ToolRegistryEntry dep : ordered) {
             if (dep.githubRepo() == null || dep.githubRepo().isBlank()) {
-                job.append("── Skipping dependency " + dep.name() + ": no github repo configured");
+                job.tell(j -> j.append("── Skipping dependency " + dep.name() + ": no github repo configured"));
                 continue;
             }
-            job.step = "dependency: " + dep.name();
-            job.append("────── Building dependency: " + dep.name() + " (" + dep.githubRepo() + ")");
+            job.tell(j -> j.step("dependency: " + dep.name()));
+            job.tell(j -> j.append("────── Building dependency: " + dep.name() + " (" + dep.githubRepo() + ")"));
             Path depDir = cloneOrUpdate(job, dep.githubRepo());
             build(job, depDir, true, dep.modules()); // library: mvn install to ~/.m2 (tests skipped, only needed modules)
         }
-        job.append("────── Dependencies ready; building " + job.tool);
+        String toolName = job.ask(j -> j.tool()).join();
+        job.tell(j -> j.append("────── Dependencies ready; building " + toolName));
     }
 
     /**
@@ -237,7 +203,7 @@ public class SnapshotBuildService {
         done.add(name);
     }
 
-    private Path cloneOrUpdate(BuildJob job, String githubRepo) throws Exception {
+    private Path cloneOrUpdate(ActorRef<BuildJobActor> job, String githubRepo) throws Exception {
         Path buildRoot = Path.of(expand(buildDirTemplate));
         Files.createDirectories(buildRoot);
         String leaf = githubRepo.contains("/")
@@ -246,32 +212,32 @@ public class SnapshotBuildService {
         Path repoDir = buildRoot.resolve(leaf);
 
         if (Files.isDirectory(repoDir.resolve(".git"))) {
-            job.step = "git pull";
-            job.append("Updating existing checkout: " + repoDir);
+            job.tell(j -> j.step("git pull"));
+            job.tell(j -> j.append("Updating existing checkout: " + repoDir));
             // Discard local drift, then fast-forward to the remote's default branch.
             exec(job, repoDir, "git", "fetch", "--all", "--prune");
             exec(job, repoDir, "git", "reset", "--hard", "@{u}");
         } else {
-            job.step = "git clone";
+            job.tell(j -> j.step("git clone"));
             String base = gitBaseUrl.endsWith("/")
                 ? gitBaseUrl.substring(0, gitBaseUrl.length() - 1)
                 : gitBaseUrl;
             String url = base + "/" + githubRepo + ".git";
-            job.append("Cloning " + url + " → " + repoDir);
+            job.tell(j -> j.append("Cloning " + url + " → " + repoDir));
             exec(job, buildRoot, "git", "clone", url, leaf);
         }
         return repoDir;
     }
 
-    private void build(BuildJob job, Path repoDir, boolean skipTests, List<String> modules) throws Exception {
-        job.step = "clean target";
+    private void build(ActorRef<BuildJobActor> job, Path repoDir, boolean skipTests, List<String> modules) throws Exception {
+        job.tell(j -> j.step("clean target"));
         // `mvn clean` is unreliable in these projects; remove target dirs directly.
         try (Stream<Path> tree = Files.walk(repoDir)) {
             tree.filter(p -> p.getFileName().toString().equals("target") && Files.isDirectory(p))
                 .sorted(Comparator.reverseOrder())
                 .forEach(SnapshotBuildService::deleteQuietly);
         }
-        job.step = "mvn install";
+        job.tell(j -> j.step("mvn install"));
         // Optionally pin the local repo onto persistent storage so the dependency cache survives Pod
         // re-creation (e.g. an NFS-backed ~/works/.m2). Empty -> Maven's default ~/.m2.
         // -Dgpg.skip=true: several tools sign artifacts with maven-gpg-plugin on `install` for
@@ -296,8 +262,8 @@ public class SnapshotBuildService {
         if (mavenRepoLocal.isPresent() && !mavenRepoLocal.get().isBlank()) {
             cmd.add("-Dmaven.repo.local=" + mavenRepoLocal.get().trim());
         }
-        job.append("Running " + String.join(" ", cmd)
-                + (skipTests ? " (tests skipped: dependency build)" : " (unit tests run; integration tests skipped)"));
+        job.tell(j -> j.append("Running " + String.join(" ", cmd)
+                + (skipTests ? " (tests skipped: dependency build)" : " (unit tests run; integration tests skipped)")));
         exec(job, repoDir, cmd.toArray(new String[0]));
     }
 
@@ -327,18 +293,18 @@ public class SnapshotBuildService {
         }
     }
 
-    private Path installToWorks(BuildJob job, Path uberJar, String jarFileName) throws Exception {
+    private Path installToWorks(ActorRef<BuildJobActor> job, Path uberJar, String jarFileName) throws Exception {
         Path worksDir = Path.of(expand(worksDirTemplate));
         Files.createDirectories(worksDir);
         String versioned = uberJar.getFileName().toString();
         Path dest = worksDir.resolve(versioned);
         Files.copy(uberJar, dest, StandardCopyOption.REPLACE_EXISTING);
-        job.append("Copied " + versioned + " → " + dest);
+        job.tell(j -> j.append("Copied " + versioned + " → " + dest));
 
         Path symlink = worksDir.resolve(jarFileName);
         Files.deleteIfExists(symlink);
         Files.createSymbolicLink(symlink, Path.of(versioned));
-        job.append("Symlink " + jarFileName + " → " + versioned);
+        job.tell(j -> j.append("Symlink " + jarFileName + " → " + versioned));
         return dest;
     }
 
@@ -346,8 +312,8 @@ public class SnapshotBuildService {
     // Process execution
     // ---------------------------------------------------------------
 
-    private void exec(BuildJob job, Path workingDir, String... command) throws Exception {
-        job.append("$ " + String.join(" ", command));
+    private void exec(ActorRef<BuildJobActor> job, Path workingDir, String... command) throws Exception {
+        job.tell(j -> j.append("$ " + String.join(" ", command)));
         ProcessBuilder pb = new ProcessBuilder(command)
             .directory(workingDir.toFile())
             .redirectErrorStream(true);
@@ -356,7 +322,10 @@ public class SnapshotBuildService {
                 new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
-                job.append(line);
+                // Fixed per iteration: the loop variable itself changes, and the actor reads it
+                // after this thread has moved on.
+                String printed = line;
+                job.tell(j -> j.append(printed));
             }
         }
         int code = p.waitFor();

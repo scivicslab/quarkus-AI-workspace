@@ -279,7 +279,9 @@ public class ServiceResource {
             return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
 
         var job = snapshotBuilder.start(name, github, jarName);
-        return Response.ok(Map.of("jobId", job.id(), "state", job.state().name())).build();
+        return Response.ok(Map.of(
+                "jobId", job.ask(j -> j.id()).join(),
+                "state", job.ask(j -> j.state()).join().name())).build();
     }
 
     /** Reports the progress of a snapshot build started via {@code build-snapshot}. */
@@ -291,13 +293,21 @@ public class ServiceResource {
             return Response.status(404).entity(Map.of("error", "Unknown build job " + jobId)).build();
 
         var job = jobOpt.get();
+        // One ask for the whole answer, so the reply cannot mix two moments of the build.
+        var snapshot = job.ask(j -> Map.of(
+                "jobId", j.id(),
+                "state", j.state().name(),
+                "step", j.step(),
+                "log", String.join("\n", j.tail(40)),
+                "file", j.resultFile() == null ? "" : j.resultFile(),
+                "error", j.error() == null ? "" : j.error())).join();
         Map<String, Object> body = new java.util.HashMap<>();
-        body.put("jobId", job.id());
-        body.put("state", job.state().name());
-        body.put("step", job.step());
-        body.put("log", String.join("\n", job.tail(40)));
-        if (job.resultFile() != null) body.put("file", job.resultFile());
-        if (job.error() != null) body.put("error", job.error());
+        body.put("jobId", snapshot.get("jobId"));
+        body.put("state", snapshot.get("state"));
+        body.put("step", snapshot.get("step"));
+        body.put("log", snapshot.get("log"));
+        if (!snapshot.get("file").isEmpty()) body.put("file", snapshot.get("file"));
+        if (!snapshot.get("error").isEmpty()) body.put("error", snapshot.get("error"));
         return Response.ok(body).build();
     }
 

@@ -2,6 +2,7 @@ package com.scivicslab.aiworkspace.build;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import com.scivicslab.pojoactor.core.ActorRef;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -81,22 +82,23 @@ public final class SnapshotBuildE2E {
         svc.buildDirTemplate = buildRoot.toString();
         svc.worksDirTemplate = worksRoot.toString();
 
-        SnapshotBuildService.BuildJob job = svc.start(TOOL, REPO, JAR);
+        ActorRef<BuildJobActor> job = svc.start(TOOL, REPO, JAR);
 
         // Poll until terminal. A clean chat-ui3 build is seconds; allow generous slack for the
         // git clone and dependency resolution.
-        SnapshotBuildService.State state = awaitTerminal(svc, job.id(), Duration.ofMinutes(8));
+        BuildJobActor.State state = awaitTerminal(svc, job.ask(j -> j.id()).join(), Duration.ofMinutes(8));
 
-        String log = String.join("\n", job.tail(800));
-        check(state == SnapshotBuildService.State.SUCCESS,
+        String log = String.join("\n", job.ask(j -> j.tail(800)).join());
+        check(state == BuildJobActor.State.SUCCESS,
                 "expected build state SUCCESS but was " + state + "\nlog tail:\n" + log);
 
         // The versioned uber-jar is installed into the works directory.
-        check(job.resultFile() != null, "resultFile() was null");
-        Path installed = worksRoot.resolve(job.resultFile());
+        String resultFile = job.ask(BuildJobActor::resultFile).join();
+        check(resultFile != null, "resultFile() was null");
+        Path installed = worksRoot.resolve(resultFile);
         check(Files.isRegularFile(installed), "installed uber-jar is missing: " + installed);
-        check(job.resultFile().startsWith("quarkus-chat-ui3-") && job.resultFile().endsWith(".jar"),
-                "unexpected resultFile name: " + job.resultFile());
+        check(resultFile.startsWith("quarkus-chat-ui3-") && resultFile.endsWith(".jar"),
+                "unexpected resultFile name: " + resultFile);
 
         // The installed jar is a valid, non-empty archive (not a truncated/corrupt copy).
         try (ZipFile zf = new ZipFile(installed.toFile())) {
@@ -106,8 +108,8 @@ public final class SnapshotBuildE2E {
         // The symlink <worksRoot>/<jar> points at the versioned file.
         Path symlink = worksRoot.resolve(JAR);
         check(Files.isSymbolicLink(symlink), "expected a symlink at " + symlink);
-        check(Files.readSymbolicLink(symlink).toString().equals(job.resultFile()),
-                "symlink target mismatch: " + Files.readSymbolicLink(symlink) + " != " + job.resultFile());
+        check(Files.readSymbolicLink(symlink).toString().equals(resultFile),
+                "symlink target mismatch: " + Files.readSymbolicLink(symlink) + " != " + resultFile);
     }
 
     private static void check(boolean condition, String message) {
@@ -144,17 +146,18 @@ public final class SnapshotBuildE2E {
         }
     }
 
-    private static SnapshotBuildService.State awaitTerminal(
+    private static BuildJobActor.State awaitTerminal(
             SnapshotBuildService svc, String jobId, Duration timeout) throws InterruptedException {
         Instant deadline = Instant.now().plus(timeout);
         while (Instant.now().isBefore(deadline)) {
-            SnapshotBuildService.BuildJob j = svc.get(jobId).orElseThrow();
-            if (j.state() != SnapshotBuildService.State.RUNNING) {
-                return j.state();
+            ActorRef<BuildJobActor> job = svc.get(jobId).orElseThrow();
+            BuildJobActor.State state = job.ask(BuildJobActor::state).join();
+            if (state != BuildJobActor.State.RUNNING) {
+                return state;
             }
             Thread.sleep(2000);
         }
-        return SnapshotBuildService.State.RUNNING; // timed out
+        return BuildJobActor.State.RUNNING; // timed out
     }
 
     private static void deleteRecursively(Path root) {
