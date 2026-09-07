@@ -76,7 +76,17 @@ public class ConversationLogMerge {
 
     /** @return the directory that is walked, for the screen to show */
     public String scanDirectory() {
-        return Path.of(scanDir).toAbsolutePath().toString();
+        return scanDirectoryPath().toAbsolutePath().toString();
+    }
+
+    /** @return the configured scan directory with {@code ${user.dir}} filled in */
+    private Path scanDirectoryPath() {
+        return Path.of(com.scivicslab.aiworkspace.config.PathTemplate.expand(scanDir));
+    }
+
+    /** @return the configured merge target with {@code ${user.dir}} filled in */
+    private Path targetPath() {
+        return Path.of(com.scivicslab.aiworkspace.config.PathTemplate.expand(targetPath));
     }
 
     /** @return the file-name prefixes a database must have to be merged, for the screen to show */
@@ -88,14 +98,14 @@ public class ConversationLogMerge {
     private ConversationLogMergeActor.Outcome run() {
         List<Path> sources;
         try {
-            sources = LogMerger.scan(Path.of(scanDir), prefixList());
+            sources = LogMerger.scan(scanDirectoryPath(), prefixList());
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Could not look for conversation databases", e);
             return new ConversationLogMergeActor.Outcome(now(), 0, 0, 0, 0, List.of(),
                     "Could not read " + scanDirectory() + ": " + e.getMessage());
         }
         try {
-            LogMerger.Report report = LogMerger.merge(Path.of(targetPath), sources);
+            LogMerger.Report report = LogMerger.merge(targetPath(), sources);
             LOG.info("Merged conversation logs: " + report.sessionsMerged() + " added, "
                     + report.sessionsSkipped() + " already there, from " + sources.size()
                     + " databases");

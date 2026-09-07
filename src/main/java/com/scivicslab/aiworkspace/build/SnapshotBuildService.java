@@ -364,9 +364,7 @@ public class SnapshotBuildService {
 
     /** Expands {@code ${user.home}} and {@code ${user.dir}} in a path template. */
     private static String expand(String template) {
-        return template
-            .replace("${user.home}", System.getProperty("user.home"))
-            .replace("${user.dir}", System.getProperty("user.dir"));
+        return com.scivicslab.aiworkspace.config.PathTemplate.expand(template);
     }
 
     private static long sizeQuietly(Path p) {

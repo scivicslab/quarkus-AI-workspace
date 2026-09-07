@@ -43,6 +43,11 @@ public class ConversationLogSearch {
             defaultValue = "${user.dir}/chat-ui-iolog-all")
     String dbPath;
 
+    /** @return the configured path with {@code ${user.dir}} and {@code ${user.home}} filled in */
+    private Path database() {
+        return Path.of(com.scivicslab.aiworkspace.config.PathTemplate.expand(dbPath));
+    }
+
     /** How much of the message is shown around the match. */
     private static final int SNIPPET_MARGIN = 140;
 
@@ -83,12 +88,12 @@ public class ConversationLogSearch {
 
     /** @return the merged database's path, for the screen to show */
     public String databasePath() {
-        return Path.of(dbPath).toAbsolutePath().toString();
+        return database().toAbsolutePath().toString();
     }
 
     /** @return whether the merged database file exists */
     public boolean present() {
-        return Files.isRegularFile(Path.of(dbPath + ".mv.db"));
+        return Files.isRegularFile(Path.of(database() + ".mv.db"));
     }
 
     /** @return how much the merged database holds, for the screen to show */
@@ -203,7 +208,7 @@ public class ConversationLogSearch {
      */
     private Connection open() throws Exception {
         return DriverManager.getConnection(
-                "jdbc:h2:" + Path.of(dbPath).toAbsolutePath() + ";AUTO_SERVER=TRUE");
+                "jdbc:h2:" + database().toAbsolutePath() + ";AUTO_SERVER=TRUE");
     }
 
     /**
