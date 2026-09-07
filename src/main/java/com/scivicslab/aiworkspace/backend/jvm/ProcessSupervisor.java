@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
 /**
@@ -49,7 +48,9 @@ public class ProcessSupervisor {
     private final AiWorkspaceConfig.ToolDefinition config;
     private final int port;
     private final Map<String, String> launchParams;
-    private final CopyOnWriteArrayList<String> logBuffer = new CopyOnWriteArrayList<>();
+    // An ordinary list: it is added to by addToLogBuffer and read by getRecentLogs, and both
+    // run inside this object's actor (ActorBasedState_260907_oo01).
+    private final List<String> logBuffer = new ArrayList<>();
     private String memo = "";
 
     // Plain fields, not volatile: one actor owns this object, so one thread at a time runs these

@@ -1,6 +1,7 @@
 package com.scivicslab.aiworkspace.backend.jvm;
 
 import com.scivicslab.aiworkspace.config.AiWorkspaceConfig;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.core.ActorSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,11 +32,16 @@ class JvmBackendPortTest {
     }
 
     private TestBackend backend;
+    private ActorSystem actorSystem;
 
     @BeforeEach
     void setUp() {
         System.setProperty("ai-workspace.port-range", "28000-28099");
         backend = new TestBackend();
+        // Which instances exist lives in an actor now, and the producer normally creates it. This
+        // test builds the backend directly, so it supplies one (ActorBasedState_260907_oo01).
+        actorSystem = new ActorSystem("jvm-backend-test");
+        backend.instances = actorSystem.actorOf("instances", new InstanceRegistryActor());
         // config.jvm()==null makes initialize() set the range then return before the port scan.
         backend.initialize(AiWorkspaceConfig.defaultConfig());
     }
@@ -43,6 +49,7 @@ class JvmBackendPortTest {
     @AfterEach
     void tearDown() {
         System.clearProperty("ai-workspace.port-range");
+        if (actorSystem != null) actorSystem.terminate();
     }
 
     private static AiWorkspaceConfig.ToolDefinition tool(String name, int port, boolean fixedPort) {
@@ -107,12 +114,11 @@ class JvmBackendPortTest {
     @DisplayName("readyInstanceOn returns the READY instance on the reserved port (reuse basis)")
     void readyInstanceOn_adopted_returnsInstance() {
         AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
-        // The backend holds actor references now, so the supervisor is wrapped before it goes in.
+        // The registry holds actor references now, so the supervisor is wrapped before it goes in.
         // No watching threads are started here: this test only asks which instance is on a port.
-        ActorSystem system = new ActorSystem("readyInstanceOn-test");
-        backend.instances.computeIfAbsent("html-saurus", k -> new CopyOnWriteArrayList<>())
-            .add(system.actorOf("instance-html-saurus-28001",
-                                ProcessSupervisor.adopt(def, 28001, 12345L)));
+        ActorRef<ProcessSupervisor> instance = actorSystem.actorOf(
+            "instance-html-saurus-28001", ProcessSupervisor.adopt(def, 28001, 12345L));
+        backend.instances.tell(r -> r.add("html-saurus", instance));
 
         assertNotNull(backend.readyInstanceOn("html-saurus", 28001));
         assertNull(backend.readyInstanceOn("html-saurus", 28002));

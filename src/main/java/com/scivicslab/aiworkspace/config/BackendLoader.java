@@ -30,10 +30,18 @@ public class BackendLoader {
             .toList();
         logger.info("Launchable tools: " + tools.size() + " / Registry: " + registry.size());
 
-        AiWorkspaceConfig config = toConfig(tools);
-        ServiceBackend backend = new JvmBackend();
-        backend.initialize(config);
-        return backend;
+        // Built, not initialised: JvmBackend keeps which instances exist in an actor, and cannot
+        // scan for them before it has been handed the actor system. The producer initialises it
+        // once it has (ActorBasedState_260907_oo01).
+        return new JvmBackend();
+    }
+
+    /** The configuration the backend is initialised with. */
+    public static AiWorkspaceConfig loadConfig() {
+        List<ToolRegistryEntry> tools = ToolRegistryLoader.load().stream()
+            .filter(e -> !e.library())
+            .toList();
+        return toConfig(tools);
     }
 
     static AiWorkspaceConfig toConfig(List<ToolRegistryEntry> entries) {

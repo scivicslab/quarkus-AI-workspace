@@ -27,6 +27,9 @@ public class BackendProducer {
         if (backend instanceof com.scivicslab.aiworkspace.backend.jvm.JvmBackend jvm) {
             jvm.setActorSystem(actors);
         }
+        // After the actor system, not before: initialize() scans for instances already running,
+        // and puts what it adopts into the registry actor.
+        backend.initialize(BackendLoader.loadConfig());
         logger.info("Produced backend: " + backend.getBackendType());
         return backend;
     }
