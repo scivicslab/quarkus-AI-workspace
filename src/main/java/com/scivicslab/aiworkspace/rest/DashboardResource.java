@@ -138,7 +138,11 @@ public class DashboardResource {
         for (String extension : ICON_EXTENSIONS) {
             String path = "/META-INF/resources/tool-icons/" + toolName + extension;
             if (getClass().getResource(path) != null) {
-                return "tool-icons/" + toolName + extension;
+                // Versioned for the same reason the scripts are: these files are served
+                // immutable for a day, and an icon redrawn between deploys kept showing as its
+                // old self in any browser that had already seen it. The icon can only change
+                // when the jar does, so the process start is the right version.
+                return "tool-icons/" + toolName + extension + "?v=" + assetVersionBean.value();
             }
         }
         return "";
