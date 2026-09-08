@@ -254,11 +254,21 @@ public class SnapshotBuildService {
 
     private void build(ActorRef<BuildJobActor> job, Path repoDir, boolean skipTests, List<String> modules) throws Exception {
         job.tell(j -> j.step("clean target"));
-        // `mvn clean` is unreliable in these projects; remove target dirs directly.
+        // `mvn clean` is unreliable in these projects; remove target dirs directly. The whole
+        // subtree, not the directory entry: deleteIfExists on a non-empty directory fails, so
+        // deleting only the entries named "target" left every old jar in place. locateUberJar
+        // picks the largest candidate, and a stale jar that grew past the fresh one was then
+        // installed as the build's result — a SUCCESS whose artifact was three days old.
         try (Stream<Path> tree = Files.walk(repoDir)) {
-            tree.filter(p -> p.getFileName().toString().equals("target") && Files.isDirectory(p))
-                .sorted(Comparator.reverseOrder())
-                .forEach(SnapshotBuildService::deleteQuietly);
+            List<Path> targets = tree
+                .filter(p -> p.getFileName().toString().equals("target") && Files.isDirectory(p))
+                .toList();
+            for (Path target : targets) {
+                try (Stream<Path> contents = Files.walk(target)) {
+                    contents.sorted(Comparator.reverseOrder())
+                            .forEach(SnapshotBuildService::deleteQuietly);
+                }
+            }
         }
         job.tell(j -> j.step("mvn install"));
         // Optionally pin the local repo onto persistent storage so the dependency cache survives Pod
