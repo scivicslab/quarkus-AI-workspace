@@ -220,6 +220,12 @@
             color: var(--accent-mauve);
             margin: 28px 0 12px;
         }
+        /* Puts the heading and the button that acts on that half on one line, so the button
+           reads as belonging to the section it refreshes rather than floating above the table. */
+        .section-head {
+            display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+        }
+        .section-head .section-label { margin-bottom: 12px; }
 
         /* ── Session card ────────────────────────────────────── */
         .session-card {
@@ -737,14 +743,6 @@
             localStorage.setItem(KEY, t);
         });
     })();
-</script>
-<script>
-    // A tool's icon, from this portal's own tool-icons/: try .svg, then .ico, then show the letter.
-    function toolIconFallback(img, name) {
-        if (img.dataset.triedIco) { img.style.display = 'none'; img.nextElementSibling.style.display = ''; return; }
-        img.dataset.triedIco = '1';
-        img.src = 'tool-icons/' + name + '.ico';
-    }
 </script>
 <script src="static/app.js?v={assetVersion}"></script>
 </body>

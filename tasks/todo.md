@@ -35,4 +35,12 @@
 - [x] 集約の実装を `LogMerger` として `plugin-log-db` に切り出し、`MergeLogsCLI` を委譲に変える
 - [x] `quarkus-AI-workspace` が `LogMerger` を直接呼ぶ（`ConversationLogMerge` と
       `ConversationLogMergeActor`、画面の Collect new conversations ボタン）
-- [ ] 本番の `quarkus-AI-workspace` を新しい jar で再起動する（ユーザーの指示待ち）
+- [x] 本番の `quarkus-AI-workspace`（ポート28000）を新しい jar で再起動し、初回の集約を実行
+- [x] 5つのリポジトリを push する（`quarkus-chat-ui` と `chat-ui-with-audit-trail` は
+      別セッションが先に push 済みだった）
+- [x] `quarkus-chat-ui` と `chat-ui-with-audit-trail` を Build Snapshot で入れ替える
+      （`~/works` の jar は新しい。稼働中のインスタンスは古い jar のまま動いている）
+- [x] 稼働中の会話インスタンス7つを全て新しい jar で再起動する
+- [ ] `chat-ui-with-audit-trail` の Activity が旧いセッション名を見つけられない問題
+      （ポート28012。`findResumableSession` は `chat-ui-conversation-<タブ識別子>` だけを探すが、
+      このデータベースには `chat-ui-conversation` という旧名のセッションしかない）

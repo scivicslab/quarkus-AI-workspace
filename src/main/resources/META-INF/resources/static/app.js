@@ -736,6 +736,80 @@
         if (btn) { btn.disabled = false; btn.textContent = 'Refresh versions'; }
     };
 
+    /**
+     * Brings the Instances half up to date without redrawing the page.
+     *
+     * Each row's state, what the instance says it is doing, and its uptime are read again and
+     * written into the cells that already exist, so an open Detail stays open and the Catalog
+     * half is left alone. A page reload does the same job and loses both.
+     *
+     * When the set of running instances has itself changed — something started or stopped
+     * elsewhere — there are rows to add or remove rather than cells to rewrite, and this reloads
+     * the page instead of showing a table that is right in its cells and wrong in its rows.
+     */
+    window.refreshInstances = async function () {
+        const btn = document.getElementById('btn-refresh-instances');
+        const asOf = document.getElementById('instances-asof');
+        const held = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+        if (asOf) asOf.textContent = '';
+
+        try {
+            const r = await fetch('instances/rows');
+            if (!r.ok) throw new Error('request failed');
+            const rows = await r.json();
+
+            const key = function (tool, port) { return tool + '\u0000' + port; };
+            const onScreen = Array.from(document.querySelectorAll('tr[data-tool][data-port]'));
+            const answered = new Set(rows.map(function (row) { return key(row.toolName, row.port); }));
+            const changed = onScreen.length !== rows.length || onScreen.some(function (tr) {
+                return !answered.has(key(tr.dataset.tool, Number(tr.dataset.port)));
+            });
+            if (changed) { window.location.reload(); return; }
+
+            const counts = { READY: 0, STARTING: 0, FAILED: 0, STOPPED: 0 };
+            rows.forEach(function (row) {
+                if (counts[row.state] !== undefined) counts[row.state] += 1;
+
+                const tr = document.querySelector(
+                    'tr[data-tool="' + row.toolName + '"][data-port="' + row.port + '"]');
+                if (!tr) return;
+
+                const pill = tr.querySelector('.cell-state');
+                if (pill) {
+                    pill.textContent = row.state;
+                    pill.className = 'state-pill state-' + row.state + ' cell-state';
+                }
+                const activity = tr.querySelector('.inst-activity');
+                if (activity) {
+                    activity.textContent = row.activity ? row.activity : '—';
+                    // An answer can be up to half an hour old, and the screen has to be able to
+                    // say so rather than presenting it as current.
+                    activity.title = row.activityAsOf ? 'as of ' + row.activityAsOf : '';
+                }
+                const detail = document.getElementById(
+                    'detail-row-' + row.toolName + '-' + row.port);
+                const uptime = detail ? detail.querySelector('.cell-uptime') : null;
+                if (uptime) uptime.textContent = row.uptime ? row.uptime : '—';
+            });
+
+            const write = function (cls, value) {
+                const el = document.querySelector(cls);
+                if (el) el.textContent = value;
+            };
+            write('.count-running', counts.READY);
+            write('.count-starting', counts.STARTING);
+            write('.count-failed', counts.FAILED);
+            write('.count-stopped', counts.STOPPED);
+
+            if (asOf) asOf.textContent = 'as of ' + new Date().toLocaleString();
+        } catch (e) {
+            if (asOf) asOf.textContent = 'could not read the instances: ' + e.message;
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = held || 'Refresh instances'; }
+        }
+    };
+
     window.downloadLatest = async function(name) {
         const btn = document.getElementById('btn-download-' + name);
         const status = document.getElementById('download-status-' + name);

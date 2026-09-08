@@ -103,7 +103,8 @@ public class DashboardResource {
      *
      * @param name           the tool
      * @param displayName    what the tile is headed with
-     * @param icon           where the tool serves its own icon, or {@code null}
+     * @param iconUrl        this portal's own copy of the tool's icon, or {@code ""} when it
+     *                       holds none and the tile shows the tool's initial instead
      * @param params         the launch parameters
      * @param github         owner and name of its repository, or {@code null}
      * @param status         the status line under the name
@@ -115,7 +116,33 @@ public class DashboardResource {
     public record CatalogTile(String name, String displayName,
                               java.util.List<com.scivicslab.aiworkspace.model.ParamDefinition> params,
                               String github, String status, boolean library,
-                              String installed, String latestRelease, String latestSnapshot) {}
+                              String installed, String latestRelease, String latestSnapshot,
+                              String iconUrl) {}
+
+    /** The extensions a tool icon may be held in, tried in this order. */
+    private static final List<String> ICON_EXTENSIONS = List.of(".svg", ".ico");
+
+    /**
+     * This portal's own copy of one tool's icon.
+     *
+     * <p>Which extension a tool's icon is held in is decided here rather than by the browser
+     * asking for one and falling back to the other on a 404. The browser cannot see which files
+     * exist, so a fallback chain makes it ask for a file it has no reason to expect: html-saurus
+     * has only an {@code .ico}, so every draw of the page logged a 404 for the {@code .svg} that
+     * was never there. This side can just look.</p>
+     *
+     * @param toolName the tool
+     * @return the URL the tile loads, or {@code ""} when this portal holds no icon for the tool
+     */
+    private String iconUrl(String toolName) {
+        for (String extension : ICON_EXTENSIONS) {
+            String path = "/META-INF/resources/tool-icons/" + toolName + extension;
+            if (getClass().getResource(path) != null) {
+                return "tool-icons/" + toolName + extension;
+            }
+        }
+        return "";
+    }
 
     /**
      * The one screen: what is running, then what can be started, with each instance's own detail
@@ -144,6 +171,30 @@ public class DashboardResource {
             .data("versionsFetchedAt", fetchedAtText())
             .data("versionsFailed", String.join(", ",
                     actors.toolVersions().ask(a -> a.failedTools()).join()));
+    }
+
+    /**
+     * The Instances half's rows, as they stand now.
+     *
+     * <p>The screen is drawn once, on the server, so its state and activity are the state and
+     * activity of the moment it was drawn. Reloading the page redraws both halves and closes any
+     * open detail; this answers the same question for the Instances half alone, so the Refresh
+     * instances button can bring the rows up to date and leave the rest of the screen alone.</p>
+     *
+     * <p>Asking each instance what it is doing is what makes this slow — a stopped instance costs
+     * the probe's whole deadline. That is why it is a button rather than a poll.</p>
+     *
+     * <p>Under {@code /instances/} rather than {@code /api/}: {@code ServiceResource} is rooted at
+     * {@code /api}, and a root resource claims its whole subtree — an {@code /api/...} path
+     * declared on this class is never reached, and answers 404.</p>
+     *
+     * @return one entry per running instance, in the same order the table shows them
+     */
+    @GET
+    @Path("/instances/rows")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<InstanceRow> instanceRows() {
+        return withActivity(rows());
     }
 
     /**
@@ -193,7 +244,8 @@ public class DashboardResource {
             var remote = actors.toolVersions().ask(a -> a.get(tool.name())).join();
             tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.params(),
                                       tool.github(), tool.status(), library,
-                                      installed, remote.latestRelease(), remote.latestSnapshot()));
+                                      installed, remote.latestRelease(), remote.latestSnapshot(),
+                                      iconUrl(tool.name())));
         }
         return tiles;
     }
