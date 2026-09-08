@@ -405,11 +405,11 @@
         }
         /* The rule above it separates what is running from what can be started: the bar and
            everything below it is the second of those. */
-        .versions-bar {
-            display: flex; align-items: center; gap: .6rem;
-            margin: 1.4rem 0 .9rem 0; padding-top: 1.4rem;
+        /* The line that separates the two halves. On the section head itself, above its
+           heading, so the heading and its button stay together below it. */
+        .section-divided {
+            margin-top: 1.4rem; padding-top: 1.4rem;
             border-top: 1px solid var(--border-color);
-            font-size: .82em;
         }
         .versions-asof { color: var(--text-secondary); }
         .versions-failed { color: var(--accent-red); }

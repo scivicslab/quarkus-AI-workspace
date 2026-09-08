@@ -68,12 +68,14 @@
     <p class="inst-empty">Nothing is running. Start something below.</p>
     {/if}
 
-    <h2 class="section-label" id="catalog-heading">Catalog — what can be started</h2>
-
-    {! GitHub is asked here and nowhere else. Its REST API allows sixty requests an hour from one
+    {! The dividing line marks where one half ends and the other begins, so it sits above the
+       heading, not between the heading and its button. The button shares the heading's row,
+       the same shape as the Instances half above.
+       GitHub is asked here and nowhere else. Its REST API allows sixty requests an hour from one
        address without authentication, and there are ten tools, so asking on every draw would use
        them up (ToolVersions_260907_oo01). !}
-    <div class="versions-bar">
+    <div class="section-head section-divided">
+        <h2 class="section-label" id="catalog-heading">Catalog — what can be started</h2>
         <button class="btn btn-small" id="btn-refresh-versions" onclick="refreshVersions()">Refresh versions</button>
         <span class="versions-asof" id="versions-asof">{#if versionsFetchedAt}as of {versionsFetchedAt}{/if}</span>
         <span class="versions-failed" id="versions-failed">{#if versionsFailed}could not read: {versionsFailed}{/if}</span>
