@@ -111,23 +111,36 @@ public class ConversationResource {
     }
 
     /**
-     * Returns what to show under a search result, and where its arrows lead.
+     * Returns the turn a search result belongs to, as the messages it is made of, and where its
+     * arrows lead.
      *
-     * <p>A search names one row, but a person reads a turn: the model call, the tools it ran, and
-     * the call after them are one exchange written as several rows. So {@code mode=turn} — the
-     * default — answers with the whole turn, and its arrows step to the turn before and after.
-     * {@code mode=row} answers with the one row and steps a row at a time, for reading inside a
-     * turn that ran many tools.</p>
+     * <p>A search names one log entry, but an entry is not what a person reads: an entry for a
+     * model call holds both the request that went out and the answer that came back. What comes
+     * back here is the turn split into those directions, each summarised — the whole of any one of
+     * them is fetched by {@link #message}.</p>
      *
-     * @param logId the row in the {@code logs} table
-     * @param mode  {@code turn} or {@code row}; anything else is read as {@code turn}
-     * @return the view, or one whose {@code found} is false when there is no such row
+     * @param logId the entry in the {@code logs} table
+     * @return the view, or one whose {@code found} is false when there is no such entry
      */
     @GET
     @Path("/turn/{logId}")
     @Produces(MediaType.APPLICATION_JSON)
-    public ConversationLogSearch.View turn(@PathParam("logId") long logId,
-                                           @QueryParam("mode") @DefaultValue("turn") String mode) {
-        return "row".equals(mode) ? search.rowView(logId) : search.turnView(logId);
+    public ConversationLogSearch.View turn(@PathParam("logId") long logId) {
+        return search.turnView(logId);
+    }
+
+    /**
+     * Returns one message of one entry, whole.
+     *
+     * @param logId the entry it came out of
+     * @param part  which section of that entry, as the turn's message listing named it
+     * @return the message, or one whose {@code found} is false when there is no such section
+     */
+    @GET
+    @Path("/message/{logId}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public ConversationLogSearch.Body message(@PathParam("logId") long logId,
+                                              @QueryParam("part") @DefaultValue("") String part) {
+        return search.messageBody(logId, part);
     }
 }

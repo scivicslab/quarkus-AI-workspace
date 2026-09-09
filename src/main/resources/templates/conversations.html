@@ -88,26 +88,40 @@
         }
         .conv-turn-where .conv-turn-of { color: var(--text-secondary); font-weight: 400; }
 
-        /* The calls of that turn. Its own scroll, capped at two fifths of the pane, so a turn with
-           thirty calls never takes the text below it off the screen. */
-        .conv-calls {
-            flex: 0 1 auto; max-height: 40%; overflow-y: auto;
+        /* The messages of that turn, and the one being read. Two fixed shares of the pane, not
+           two flexible ones: given room to shrink, the list lost it to the text below and ended up
+           11 pixels tall against a row of 27. A share cannot be taken. */
+        .conv-messages {
+            flex: 0 0 45%; min-height: 0; overflow-y: auto;
             border-bottom: 1px solid var(--border-color);
         }
-        .conv-call {
-            display: grid; grid-template-columns: 9rem 1fr; column-gap: 0.5rem;
+        .conv-turn-head {
+            position: sticky; top: 0; z-index: 1;
+            padding: 0.25rem 0.65rem; font-size: 11px; font-weight: 600;
+            color: var(--accent-mauve); background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .conv-msg {
+            display: grid; grid-template-columns: 7.5rem 1fr; column-gap: 0.5rem;
             padding: 0.3rem 0.65rem; cursor: pointer; font-size: 12px;
             border-left: 3px solid transparent;
         }
-        .conv-call:hover { background: var(--bg-tertiary); }
-        .conv-call.selected { background: var(--bg-tertiary); border-left-color: var(--accent-blue); }
-        .conv-call-label { color: var(--accent-blue); white-space: nowrap; }
-        .conv-call-summary {
+        .conv-msg:hover { background: var(--bg-tertiary); }
+        .conv-msg.selected { background: var(--bg-tertiary); border-left-color: var(--accent-blue); }
+        /* Who sent it to whom, by colour as well as by name: the five directions are what makes a
+           trace readable at a glance. */
+        .conv-msg-dir { white-space: nowrap; font-weight: 600; }
+        .conv-msg.user .conv-msg-dir { color: var(--accent-green); }
+        .conv-msg.to-llm .conv-msg-dir { color: var(--accent-blue); }
+        .conv-msg.from-llm .conv-msg-dir { color: var(--accent-mauve); }
+        .conv-msg.to-tool .conv-msg-dir { color: var(--accent-yellow, #d0a215); }
+        .conv-msg.from-tool .conv-msg-dir { color: var(--accent-teal, #57a5a5); }
+        .conv-msg.meta .conv-msg-dir { color: var(--text-secondary); }
+        .conv-msg-summary {
             color: var(--text-secondary); white-space: nowrap;
             overflow: hidden; text-overflow: ellipsis;
         }
 
-        /* The chosen call, whole. Fetched when it is chosen, not when the turn is listed. */
         .conv-text-head {
             flex: 0 0 auto; padding: 0.35rem 0.65rem; font-size: 11px;
             color: var(--text-secondary); border-bottom: 1px solid var(--border-color);
@@ -216,38 +230,42 @@
 
     <script>
     {|
-        // What is on the right: the turn being read, and which of its calls is showing. A search
-        // result opens a turn; from there the arrows move by turn and the list moves by call, so
-        // what is on screen is no longer the result it started from.
-        var reading = null;   // {turnAnchor, view, callId}
+        // What is on the right: the turn being read, and which of its messages is showing. A
+        // search result opens a turn; from there the arrows move by turn and the list moves by
+        // message, so what is on screen is no longer the result it started from.
+        var reading = null;   // {view, at}   at = index into view.messages
 
         function selectHit(logId) {
             document.querySelectorAll('.conv-hit').forEach(function (el) {
                 el.classList.toggle('selected', Number(el.dataset.logId) === logId);
             });
-            // The call that matched is the one to show: it is why this result was picked.
+            // The entry that matched is where to land: it is why this result was picked.
             loadTurn(logId, logId);
         }
 
-        async function loadTurn(anchorId, callToShow) {
+        async function loadTurn(anchorId, entryToShow) {
             const detail = document.getElementById('conv-detail');
             detail.innerHTML = '<p class="conv-empty">Loading…</p>';
             let view;
             try {
-                const response = await fetch('/conversations/turn/' + anchorId + '?mode=turn');
+                const response = await fetch('/conversations/turn/' + anchorId);
                 view = response.ok ? await response.json() : null;
             } catch (e) {
                 view = null;
             }
-            if (!view || !view.found) {
+            if (!view || !view.found || !view.messages.length) {
                 detail.innerHTML = '<p class="conv-empty">Could not read this turn.</p>';
                 return;
             }
-            reading = {turnAnchor: anchorId, view: view, callId: null};
+            reading = {view: view, at: 0};
             drawTurn(view);
-            const wanted = view.rows.some(function (r) { return r.logId === callToShow; })
-                ? callToShow : view.rows[0].logId;
-            selectCall(wanted);
+            // Land on the first message of the entry that matched, so the search result and what
+            // opens are the same thing.
+            let at = 0;
+            for (let i = 0; i < view.messages.length; i++) {
+                if (view.messages[i].logId === entryToShow) { at = i; break; }
+            }
+            selectMessage(at);
         }
 
         function drawTurn(view) {
@@ -261,8 +279,8 @@
             where.className = 'conv-turn-where';
             const of = document.createElement('span');
             of.className = 'conv-turn-of';
-            of.textContent = '  ·  ' + view.rows.length
-                + (view.rows.length === 1 ? ' call  ·  ' : ' calls  ·  ')
+            of.textContent = '  ·  ' + view.messages.length
+                + (view.messages.length === 1 ? ' message  ·  ' : ' messages  ·  ')
                 + view.conversation + '  ·  ' + view.program;
             where.textContent = view.turn;
             where.appendChild(of);
@@ -271,28 +289,28 @@
             bar.appendChild(arrow('forward', view.nextLabel, view.nextId));
             detail.appendChild(bar);
 
-            // The calls of this turn, in the order they were made. This list is the structure the
-            // screen exists to show: a turn is these calls, and one of them is open below.
-            const calls = document.createElement('div');
-            calls.className = 'conv-calls';
-            calls.id = 'conv-calls';
-            view.rows.forEach(function (row) {
+            // The messages of this turn, in the order they were sent. Each says who sent it to
+            // whom: that is what makes a trace readable rather than a pile of text.
+            const list = document.createElement('div');
+            list.className = 'conv-messages';
+            list.id = 'conv-messages';
+            view.messages.forEach(function (message, index) {
                 const item = document.createElement('div');
-                item.className = 'conv-call';
-                item.dataset.logId = row.logId;
-                const label = document.createElement('span');
-                label.className = 'conv-call-label';
-                label.textContent = withoutTurn(row.label);
+                item.className = 'conv-msg ' + message.tone;
+                item.dataset.at = index;
+                const dir = document.createElement('span');
+                dir.className = 'conv-msg-dir';
+                dir.textContent = message.direction;
                 const summary = document.createElement('span');
-                summary.className = 'conv-call-summary';
-                summary.textContent = row.summary;
-                summary.title = row.summary;
-                item.appendChild(label);
+                summary.className = 'conv-msg-summary';
+                summary.textContent = message.summary;
+                summary.title = message.summary;
+                item.appendChild(dir);
                 item.appendChild(summary);
-                item.addEventListener('click', function () { selectCall(row.logId); });
-                calls.appendChild(item);
+                item.addEventListener('click', function () { selectMessage(index); });
+                list.appendChild(item);
             });
-            detail.appendChild(calls);
+            detail.appendChild(list);
 
             const head = document.createElement('div');
             head.className = 'conv-text-head';
@@ -310,31 +328,32 @@
             detail.focus({preventScroll: true});
         }
 
-        async function selectCall(logId) {
-            if (!reading) return;
-            reading.callId = logId;
-            document.querySelectorAll('.conv-call').forEach(function (el) {
-                const on = Number(el.dataset.logId) === logId;
+        async function selectMessage(at) {
+            if (!reading || at < 0 || at >= reading.view.messages.length) return;
+            reading.at = at;
+            const message = reading.view.messages[at];
+            document.querySelectorAll('.conv-msg').forEach(function (el) {
+                const on = Number(el.dataset.at) === at;
                 el.classList.toggle('selected', on);
                 if (on) el.scrollIntoView({block: 'nearest'});
             });
             const head = document.getElementById('conv-text-head');
             const text = document.getElementById('conv-text');
-            const row = reading.view.rows.filter(function (r) { return r.logId === logId; })[0];
-            head.textContent = row ? row.label + '  ·  ' + row.when : '';
+            head.textContent = message.direction + '  ·  ' + message.part + '  ·  '
+                + message.label + '  ·  ' + message.when;
             text.textContent = 'Loading…';
             try {
-                const response = await fetch('/conversations/turn/' + logId + '?mode=row');
-                const one = response.ok ? await response.json() : null;
-                text.textContent = one && one.found && one.rows.length
-                    ? one.rows[0].message : 'Could not read this call.';
+                const response = await fetch('/conversations/message/' + message.logId
+                    + '?part=' + encodeURIComponent(message.part));
+                const body = response.ok ? await response.json() : null;
+                text.textContent = body && body.found ? body.text : 'Could not read this message.';
             } catch (e) {
-                text.textContent = 'Could not read this call.';
+                text.textContent = 'Could not read this message.';
             }
             text.scrollTop = 0;
         }
 
-        // Left and right move between turns; up and down move between the calls of the one open.
+        // Left and right move between turns; up and down between the messages of the one open.
         function onKey(event) {
             if (!reading) return;
             const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
@@ -347,12 +366,10 @@
                 loadTurn(target, target);
                 return;
             }
-            const ids = reading.view.rows.map(function (r) { return r.logId; });
-            const at = ids.indexOf(reading.callId);
-            const next = event.key === 'ArrowUp' ? at - 1 : at + 1;
-            if (at < 0 || next < 0 || next >= ids.length) return;
+            const next = event.key === 'ArrowUp' ? reading.at - 1 : reading.at + 1;
+            if (next < 0 || next >= reading.view.messages.length) return;
             event.preventDefault();
-            selectCall(ids[next]);
+            selectMessage(next);
         }
 
         function arrow(direction, label, targetId) {
@@ -373,12 +390,6 @@
             button.title = label;
             button.addEventListener('click', function () { loadTurn(targetId, targetId); });
             return button;
-        }
-
-        /** The label without its leading turn, e.g. step1/llm from turn7/step1/llm. */
-        function withoutTurn(label) {
-            const slash = label.indexOf('/');
-            return slash < 0 ? label : label.slice(slash + 1);
         }
 
         document.querySelectorAll('.conv-hit').forEach(function (el) {

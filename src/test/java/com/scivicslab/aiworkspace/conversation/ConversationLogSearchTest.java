@@ -70,15 +70,35 @@ class ConversationLogSearchTest {
                     + "(1, 'First conversation', 'java -jar /w/quarkus-chat-ui-2.5.0.jar "
                     + "-Dquarkus.http.port=28013', 'chat-ui-iolog-28013.mv.db'),"
                     + "(2, 'Second conversation', '', 'chat-ui-iolog-28014.mv.db')");
-            insert(c, 10, 1, "turn1/step1/llm", "the model call of the first turn");
-            insert(c, 11, 1, "turn1/step1/tool", "a tool the first turn ran");
-            insert(c, 12, 1, "turn1/step2/llm", "the model call after that tool");
-            insert(c, 13, 1, "turn3/step1/llm", "turn2 was never written");
-            insert(c, 14, 1, "turn4/step1/llm", "the last turn of this conversation");
-            insert(c, 20, 2, "turn1/step1/llm", "another conversation entirely");
+            insert(c, 10, 1, "turn1/step1/llm", llmEntry("what does this program do?",
+                    "I will look at it.", "[{\"name\":\"read\"}]"));
+            insert(c, 11, 1, "turn1/step1/tool", toolEntry("read", "{\"path\":\"Main.java\"}",
+                    "public class Main { }"));
+            insert(c, 12, 1, "turn1/step2/llm", llmEntry("what does this program do?",
+                    "It prints nothing.", ""));
+            insert(c, 13, 1, "turn3/step1/llm", llmEntry("turn2 was never written",
+                    "so it is not there.", ""));
+            insert(c, 14, 1, "turn4/step1/llm", llmEntry("the last turn of this conversation",
+                    "and its answer.", ""));
+            insert(c, 20, 2, "turn1/step1/llm", llmEntry("another conversation entirely",
+                    "with its own answer.", ""));
         }
         search = new ConversationLogSearch();
         search.dbPath = db.toAbsolutePath().toString();
+    }
+
+    /** An entry for a model call, written the way the conversation log writes one. */
+    private static String llmEntry(String prompt, String answer, String toolCalls) {
+        String request = "{\"messages\":[{\"role\":\"system\",\"content\":\"be helpful\"},"
+                + "{\"role\":\"user\",\"content\":\"" + prompt + "\"}]}";
+        return "REQUEST: " + request + "\nRESPONSE: " + answer
+                + (toolCalls.isEmpty() ? "" : "\nTOOL_CALLS: " + toolCalls)
+                + "\nUSAGE: {\"prompt_tokens\":12}";
+    }
+
+    /** An entry for a tool run, written the way the conversation log writes one. */
+    private static String toolEntry(String name, String input, String observation) {
+        return "TOOL: " + name + "\nINPUT: " + input + "\nOBSERVATION: " + observation;
     }
 
     private static void insert(Connection c, long id, long sessionId, String label, String message)
@@ -159,20 +179,79 @@ class ConversationLogSearchTest {
     }
 
     @Test
-    void turnView_showsEveryRowOfTheTurn_notOnlyTheOneThatMatched() {
+    void turnView_readsTheWholeTurnAsDirectionalMessages() {
         ConversationLogSearch.View view = search.turnView(11);
 
         assertThat(view.found()).isTrue();
         assertThat(view.turn()).isEqualTo("turn1");
-        assertThat(view.rows()).extracting(ConversationLogSearch.Row::logId)
-                .containsExactly(10L, 11L, 12L);
+        // The person's own message opens the turn, then each entry contributes its directions.
+        assertThat(view.messages()).extracting(ConversationLogSearch.Message::direction)
+                .containsExactly("user → loop",
+                        "loop → LLM", "LLM → loop", "LLM → loop", "LLM server",
+                        "loop → tool", "loop → tool", "tool → loop",
+                        "loop → LLM", "LLM → loop", "LLM server");
+    }
+
+    @Test
+    void turnView_opensTheTurnWithWhatThePersonSaid() {
+        ConversationLogSearch.Message first = search.turnView(11).messages().get(0);
+
+        assertThat(first.part()).isEqualTo("USER");
+        assertThat(first.tone()).isEqualTo("user");
+        assertThat(first.summary()).isEqualTo("what does this program do?");
+    }
+
+    @Test
+    void summariseEnding_showsTheQuestionWhenTheRequestIsOneFoldedMessage() {
+        // Some programs fold the system prompt, the tool descriptions and the question into one
+        // message with the user's role. Read from the start, that line is the system prompt.
+        String folded = "You are a helpful assistant. " + "tool descriptions. ".repeat(60)
+                + "Please create the directory next to the other one.";
+        assertThat(ConversationLogSearch.summariseEnding(folded))
+                .endsWith("Please create the directory next to the other one.")
+                .startsWith("\u2026");
+    }
+
+    @Test
+    void summariseEnding_ofSomethingShort_isTheWholeOfIt() {
+        assertThat(ConversationLogSearch.summariseEnding("what does this do?"))
+                .isEqualTo("what does this do?");
+    }
+
+    @Test
+    void turnView_carriesOnlySummaries_theWholeIsFetchedPerMessage() {
+        assertThat(search.turnView(11).messages())
+                .allSatisfy(m -> assertThat(m.summary()).isNotEmpty());
+    }
+
+    @Test
+    void messageBody_answersTheOneDirectionThatWasAskedFor() {
+        ConversationLogSearch.Body observation = search.messageBody(11, "OBSERVATION");
+
+        assertThat(observation.found()).isTrue();
+        assertThat(observation.direction()).isEqualTo("tool → loop");
+        assertThat(observation.tone()).isEqualTo("from-tool");
+        assertThat(observation.text()).isEqualTo("public class Main { }");
+    }
+
+    @Test
+    void messageBody_ofTheUserMessage_readsItBackOutOfTheRequest() {
+        ConversationLogSearch.Body user = search.messageBody(10, "USER");
+
+        assertThat(user.found()).isTrue();
+        assertThat(user.text()).isEqualTo("what does this program do?");
+    }
+
+    @Test
+    void messageBody_ofASectionTheEntryDoesNotHave_isNotFound() {
+        assertThat(search.messageBody(12, "TOOL_CALLS").found()).isFalse();
     }
 
     @Test
     void turnView_arrowsLeadToTheTurnsEitherSide_acrossAGapInTheNumbering() {
         ConversationLogSearch.View turn3 = search.turnView(13);
 
-        assertThat(turn3.previousId()).as("back from turn3 reaches the last row of turn1")
+        assertThat(turn3.previousId()).as("back from turn3 reaches the last entry of turn1")
                 .isEqualTo(12);
         assertThat(turn3.previousLabel()).isEqualTo("turn1/step2/llm");
         assertThat(turn3.nextId()).isEqualTo(14);
@@ -187,20 +266,9 @@ class ConversationLogSearchTest {
 
     @Test
     void turnView_arrowsNeverLeaveTheConversation() {
-        // Row 20 is the next id in the database, but it belongs to another conversation.
+        // Entry 20 is the next id in the database, but it belongs to another conversation.
         assertThat(search.turnView(14).nextId()).isZero();
         assertThat(search.turnView(20).previousId()).isZero();
-    }
-
-    @Test
-    void rowView_showsTheOneRow_andStepsInsideTheTurn() {
-        ConversationLogSearch.View view = search.rowView(11);
-
-        assertThat(view.found()).isTrue();
-        assertThat(view.rows()).hasSize(1);
-        assertThat(view.rows().get(0).label()).isEqualTo("turn1/step1/tool");
-        assertThat(view.previousId()).isEqualTo(10);
-        assertThat(view.nextId()).isEqualTo(12);
     }
 
     @Test
@@ -213,29 +281,50 @@ class ConversationLogSearchTest {
     }
 
     @Test
-    void view_ofARowThatIsNotThere_isNotFound() {
+    void split_takesEachMarkerAfterTheOneBefore_soAWordInTheTextStartsNothing() {
+        // "RESPONSE:" inside the request is part of the request, not the start of the answer.
+        String entry = "REQUEST: the model was told to write RESPONSE: somewhere\n"
+                + "RESPONSE: the answer";
+        var sections = ConversationLogSearch.split(entry, false);
+
+        assertThat(sections).extracting(ConversationLogSearch.Section::part)
+                .containsExactly("REQUEST", "RESPONSE");
+        assertThat(sections.get(1).body()).isEqualTo("the answer");
+    }
+
+    @Test
+    void split_ofAToolEntry_usesTheToolMarkers() {
+        var sections = ConversationLogSearch.split(
+                "TOOL: write\nINPUT: {}\nOBSERVATION: done", true);
+
+        assertThat(sections).extracting(ConversationLogSearch.Section::direction)
+                .containsExactly("loop → tool", "loop → tool", "tool → loop");
+    }
+
+    @Test
+    void split_ofSomethingWithNoMarkers_findsNothing() {
+        assertThat(ConversationLogSearch.split("just some text", false)).isEmpty();
+        assertThat(ConversationLogSearch.split(null, false)).isEmpty();
+    }
+
+    @Test
+    void userPromptOf_takesTheLastThingThePersonSaid() {
+        String entry = "REQUEST: {\"messages\":[{\"role\":\"user\",\"content\":\"first\"},"
+                + "{\"role\":\"assistant\",\"content\":\"reply\"},"
+                + "{\"role\":\"user\",\"content\":\"second\"}]}\nRESPONSE: ok";
+        assertThat(ConversationLogSearch.userPromptOf(entry)).isEqualTo("second");
+    }
+
+    @Test
+    void userPromptOf_somethingThatIsNotARequest_isEmpty() {
+        assertThat(ConversationLogSearch.userPromptOf("TOOL: write\nINPUT: {}")).isEmpty();
+        assertThat(ConversationLogSearch.userPromptOf("REQUEST: not json")).isEmpty();
+    }
+
+    @Test
+    void view_ofAnEntryThatIsNotThere_isNotFound() {
         assertThat(search.turnView(999).found()).isFalse();
-        assertThat(search.rowView(999).found()).isFalse();
-    }
-
-    @Test
-    void turnView_carriesOnlyASummaryOfEachCall_notTheCallItself() {
-        // Listing a turn is done to choose one of its calls. Sending every call whole to do that
-        // is what made a thirty-call turn megabytes of JSON.
-        ConversationLogSearch.View view = search.turnView(11);
-
-        assertThat(view.rows()).allSatisfy(row -> {
-            assertThat(row.message()).isEmpty();
-            assertThat(row.summary()).isNotEmpty();
-        });
-    }
-
-    @Test
-    void rowView_carriesTheCallWhole() {
-        ConversationLogSearch.Row call = search.rowView(11).rows().get(0);
-
-        assertThat(call.message()).isEqualTo("a tool the first turn ran");
-        assertThat(call.summary()).isEqualTo("a tool the first turn ran");
+        assertThat(search.messageBody(999, "REQUEST").found()).isFalse();
     }
 
     @Test
@@ -256,7 +345,7 @@ class ConversationLogSearchTest {
     }
 
     @Test
-    void turnRows_ofTurn1_doNotSwallowTurn10() throws Exception {
+    void turnView_ofTurn1_doesNotSwallowTurn10() throws Exception {
         // The turn is matched with a trailing slash, so a prefix match cannot take a longer number.
         Path db = tempDir.resolve("prefix-log");
         try (Connection c = DriverManager.getConnection("jdbc:h2:" + db.toAbsolutePath());
@@ -267,13 +356,13 @@ class ConversationLogSearchTest {
                     + "timestamp TIMESTAMP, node_id VARCHAR, label VARCHAR, action_name VARCHAR, "
                     + "level VARCHAR, message VARCHAR, exit_code INT, duration_ms BIGINT)");
             s.execute("INSERT INTO sessions VALUES (1, 'c', '', 'chat-ui-iolog-1.mv.db')");
-            insert(c, 1, 1, "turn1/step1/llm", "turn one");
-            insert(c, 2, 1, "turn10/step1/llm", "turn ten");
+            insert(c, 1, 1, "turn1/step1/llm", llmEntry("turn one", "answer one", ""));
+            insert(c, 2, 1, "turn10/step1/llm", llmEntry("turn ten", "answer ten", ""));
         }
         ConversationLogSearch other = new ConversationLogSearch();
         other.dbPath = db.toAbsolutePath().toString();
 
-        assertThat(other.turnView(1).rows()).extracting(ConversationLogSearch.Row::logId)
-                .containsExactly(1L);
+        assertThat(other.turnView(1).messages())
+                .extracting(ConversationLogSearch.Message::logId).containsOnly(1L);
     }
 }

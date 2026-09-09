@@ -50,13 +50,17 @@ public class ConversationTurnNavigationE2E {
     private static int passed = 0;
     private static int failed = 0;
 
-    /** How many calls the long turn holds. Enough that listing them all would once have overflowed. */
-    private static final int LONG_TURN_CALLS = 30;
+    /** How many entries the long turn holds. Enough that listing it would once have overflowed. */
+    private static final int LONG_TURN_ENTRIES = 30;
+    /** Each entry splits into three directions, and the turn opens with the person's message. */
+    private static final int LONG_TURN_MESSAGES = LONG_TURN_ENTRIES * 3 + 1;
 
-    // A result is picked by words only that call holds. Its label will not do: turn1/step1/llm is
-    // the first call of every conversation, so a label picks whichever one the search listed first.
-    private static final String ALPHA_FIRST_CALL = "the model call that opens Alpha";
-    private static final String ALPHA_LAST_CALL_OF_TURN1 = "the last call of the long turn";
+    private static final String ALPHA_PROMPT = "what does the long turn do?";
+
+    // A result is picked by words only that entry holds. Its label will not do: turn1/step1/llm is
+    // the first entry of every conversation, so a label picks whichever the search listed first.
+    private static final String ALPHA_FIRST_ENTRY = "the model call that opens Alpha";
+    private static final String ALPHA_LAST_ENTRY_OF_TURN1 = "the last entry of the long turn";
     private static final String ALPHA_TURN3 = "the turn after the missing one";
     private static final String ALPHA_TURN4_TOOL = "the tool of the last turn of Alpha";
     private static final String BETA_TURN1 = "Beta, another conversation entirely";
@@ -84,10 +88,11 @@ public class ConversationTurnNavigationE2E {
                 aResultOpensItsWholeTurn(browser, base);
                 nothingEverLengthensTheDocument(browser, base);
                 theStructureStaysOnScreenAtTheEndOfALongTurn(browser, base);
-                pickingACallShowsItsWholeText(browser, base);
+                theMessageListIsTallEnoughToReadItsRows(browser, base);
+                pickingAMessageShowsItsWholeText(browser, base);
                 arrowsStepBetweenTurns(browser, base);
                 arrowKeysStillWorkAfterClickingAnArrow(browser, base);
-                upAndDownStepBetweenTheCallsOfTheTurn(browser, base);
+                upAndDownStepBetweenTheMessagesOfTheTurn(browser, base);
                 arrowsStopAtTheEndsOfTheConversation(browser, base);
             } finally {
                 browser.close();
@@ -102,17 +107,22 @@ public class ConversationTurnNavigationE2E {
 
     // --- the checks ---------------------------------------------------------------------------
 
-    /** Clicking a result lists every call of the turn it belongs to, and opens the one that matched. */
+    /** Clicking a result lists every message of the turn, named by who sent it to whom. */
     private void aResultOpensItsWholeTurn(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_LAST_CALL_OF_TURN1);
-            check(calls(page) == LONG_TURN_CALLS,
-                    "every call of the turn is listed (" + calls(page) + ")");
+            selectResult(page, ALPHA_LAST_ENTRY_OF_TURN1);
+            check(messages(page) == LONG_TURN_MESSAGES,
+                    "every message of the turn is listed (" + messages(page) + ")");
             check(where(page).startsWith("turn1"), "the bar says which turn (" + where(page) + ")");
-            check(where(page).contains(LONG_TURN_CALLS + " calls"),
-                    "the bar says how many calls it holds (" + where(page) + ")");
-            check(selectedCallLabel(page).equals("step15/tool"),
-                    "the call that matched is the one opened (" + selectedCallLabel(page) + ")");
+            check(where(page).contains(LONG_TURN_MESSAGES + " messages"),
+                    "the bar says how many it holds (" + where(page) + ")");
+            check(selectedDirection(page).equals("loop → tool"),
+                    "the entry that matched is where it lands (" + selectedDirection(page) + ")");
+            check(directions(page).contains("user → loop"),
+                    "the turn opens with what the person said");
+            check(directions(page).containsAll(java.util.List.of(
+                            "user → loop", "loop → LLM", "LLM → loop", "loop → tool", "tool → loop")),
+                    "every direction of the exchange is named (" + directions(page) + ")");
         });
     }
 
@@ -127,55 +137,89 @@ public class ConversationTurnNavigationE2E {
         withScreen(browser, base, page -> {
             check(fitsTheWindow(page), "the search results alone do not lengthen the page");
 
-            selectResult(page, ALPHA_FIRST_CALL);
+            selectResult(page, ALPHA_FIRST_ENTRY);
             check(fitsTheWindow(page),
-                    "a turn of " + LONG_TURN_CALLS + " calls does not lengthen the page");
+                    "a turn of " + LONG_TURN_MESSAGES + " messages does not lengthen the page");
 
-            lastCall(page).click();
-            page.waitForTimeout(800);
-            check(fitsTheWindow(page), "a call of several kilobytes does not lengthen the page");
+            lastMessage(page).click();
+            settle(page);
+            check(fitsTheWindow(page), "a message of several kilobytes does not lengthen the page");
         });
     }
 
     /** Reading the end of a long turn does not push the turn's own heading off the screen. */
     private void theStructureStaysOnScreenAtTheEndOfALongTurn(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
-            lastCall(page).click();
-            page.waitForTimeout(800);
+            selectResult(page, ALPHA_FIRST_ENTRY);
+            lastMessage(page).click();
+            settle(page);
 
             check(inTheWindow(page, ".conv-turn-where"),
                     "the turn is still named on screen");
             check(inTheWindow(page, ".conv-turn-forward"),
                     "the way out to the next turn is still on screen");
-            check(inTheWindow(page, ".conv-call.selected"),
-                    "the call being read is still marked in the list");
+            check(inTheWindow(page, ".conv-msg.selected"),
+                    "the message being read is still marked in the list");
             check(inTheWindow(page, ".conv-results"),
                     "the search results are still on screen");
         });
     }
 
-    /** The list carries a summary; picking a call fetches the whole thing. */
-    private void pickingACallShowsItsWholeText(Browser browser, String base) {
+    /**
+     * The calls list is tall enough to read.
+     *
+     * <p>Measured against the list's own box, not against the window. Given room to shrink, the
+     * list lost it to the text below and ended up 11 pixels tall against a row of 27 — less than
+     * half of one call showing under the bar — and every check that asked "is it inside the window"
+     * passed, because an 11-pixel box is.</p>
+     */
+    private void theMessageListIsTallEnoughToReadItsRows(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
-            String summary = page.locator(".conv-call").first()
-                    .locator(".conv-call-summary").textContent().trim();
+            selectResult(page, ALPHA_TURN3);
+            check(fullyVisibleRows(page) == messages(page),
+                    "a short turn shows all of its messages whole (" + fullyVisibleRows(page)
+                            + " of " + messages(page) + ")");
+
+            selectResult(page, ALPHA_FIRST_ENTRY);
+            int visible = fullyVisibleRows(page);
+            check(visible >= 3,
+                    "a turn of " + LONG_TURN_MESSAGES + " messages shows several whole ("
+                            + visible + ")");
+            check(visible < LONG_TURN_MESSAGES,
+                    "and not all of them, which would leave no room for the text ("
+                            + visible + ")");
+            check(clippedAtTheTop(page) == 0,
+                    "the first message under the bar is not cut in half ("
+                            + clippedAtTheTop(page) + "px cut)");
+        });
+    }
+
+    /** The list carries a summary; picking a message fetches the whole thing. */
+    private void pickingAMessageShowsItsWholeText(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_ENTRY);
+            // The model's answer, not the turn's first message: the first is what the person
+            // typed, which is a single line and proves nothing about summarising.
+            Locator answer = page.locator(".conv-msg.from-llm").first();
+            String summary = answer.locator(".conv-msg-summary").textContent().trim();
+            answer.click();
+            settle(page);
             String whole = page.locator("#conv-text").textContent();
 
             check(summary.length() <= 210,
-                    "the list carries a summary, not the call (" + summary.length() + " chars)");
+                    "the list carries a summary, not the message (" + summary.length() + " chars)");
             check(whole.length() > 3000,
-                    "the call opened below is the whole of it (" + whole.length() + " chars)");
-            check(whole.startsWith(summary.replace("…", "").substring(0, 40)),
-                    "and it is the same call the summary came from");
+                    "the message opened below is the whole of it (" + whole.length() + " chars)");
+            check(whole.replaceAll("\\s+", " ").startsWith(
+                            summary.replace("…", "").strip().substring(0, 40)),
+                    "and it is the same message the summary came from");
         });
     }
 
     /** The arrows move to the turn before and after, across the gap where turn2 is missing. */
     private void arrowsStepBetweenTurns(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
+            selectResult(page, ALPHA_FIRST_ENTRY);
             forward(page).click();
             settle(page);
             check(where(page).startsWith("turn3"),
@@ -185,7 +229,8 @@ public class ConversationTurnNavigationE2E {
             forward(page).click();
             settle(page);
             check(where(page).startsWith("turn4"), "forward again reaches turn4 (" + where(page) + ")");
-            check(calls(page) == 2, "turn4's two calls are listed (" + calls(page) + ")");
+            check(messages(page) == 7,
+                    "turn4's two entries are listed as seven messages (" + messages(page) + ")");
 
             back(page).click();
             settle(page);
@@ -204,7 +249,7 @@ public class ConversationTurnNavigationE2E {
      */
     private void arrowKeysStillWorkAfterClickingAnArrow(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
+            selectResult(page, ALPHA_FIRST_ENTRY);
             forward(page).click();
             settle(page);
             check(where(page).startsWith("turn3"), "the click moved to turn3 (" + where(page) + ")");
@@ -218,34 +263,35 @@ public class ConversationTurnNavigationE2E {
         });
     }
 
-    /** Up and down move between the calls of the turn that is open. */
-    private void upAndDownStepBetweenTheCallsOfTheTurn(Browser browser, String base) {
+    /** Up and down move between the messages of the turn that is open. */
+    private void upAndDownStepBetweenTheMessagesOfTheTurn(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
-            check(selectedCallLabel(page).equals("step1/llm"),
-                    "opens on the call that matched (" + selectedCallLabel(page) + ")");
+            selectResult(page, ALPHA_FIRST_ENTRY);
+            check(selectedDirection(page).equals("user → loop"),
+                    "opens on the message the matched entry starts with ("
+                            + selectedDirection(page) + ")");
 
             page.keyboard().press("ArrowDown");
             page.waitForTimeout(800);
-            check(selectedCallLabel(page).equals("step1/tool"),
-                    "down moves to the next call (" + selectedCallLabel(page) + ")");
+            check(selectedDirection(page).equals("loop → LLM"),
+                    "down moves to the next message (" + selectedDirection(page) + ")");
 
             page.keyboard().press("ArrowUp");
             page.waitForTimeout(800);
-            check(selectedCallLabel(page).equals("step1/llm"),
-                    "up moves back (" + selectedCallLabel(page) + ")");
+            check(selectedDirection(page).equals("user → loop"),
+                    "up moves back (" + selectedDirection(page) + ")");
 
             page.keyboard().press("ArrowUp");
             page.waitForTimeout(500);
-            check(selectedCallLabel(page).equals("step1/llm"),
-                    "up at the first call stays put (" + selectedCallLabel(page) + ")");
+            check(selectedDirection(page).equals("user → loop"),
+                    "up at the first message stays put (" + selectedDirection(page) + ")");
         });
     }
 
     /** Neither arrow leads out of the conversation the result belongs to. */
     private void arrowsStopAtTheEndsOfTheConversation(Browser browser, String base) {
         withScreen(browser, base, page -> {
-            selectResult(page, ALPHA_FIRST_CALL);
+            selectResult(page, ALPHA_FIRST_ENTRY);
             check(back(page).isDisabled(), "the first turn has no back arrow");
 
             selectResult(page, ALPHA_TURN4_TOOL);
@@ -284,19 +330,34 @@ public class ConversationTurnNavigationE2E {
         }
     }
 
-    /** Clicks the result whose snippet holds {@code marker}, and waits for its turn to open. */
+    /** Clicks the result whose snippet holds {@code marker}, and waits for its turn to be readable. */
     private void selectResult(Page page, String marker) {
         page.locator(".conv-hit").filter(
                 new Locator.FilterOptions().setHasText(marker)).first().click();
-        page.locator(".conv-call").first().waitFor(
-                new Locator.WaitForOptions().setTimeout(15_000));
-        page.waitForTimeout(700);   // the chosen call's text is fetched after the list is drawn
+        settle(page);
     }
 
+    /**
+     * Waits until the turn is listed and the call it opened on has arrived.
+     *
+     * <p>Waiting for the text, not just for the list, is what makes a measurement mean anything:
+     * the text is fetched after the list is drawn, and it is the height of the text that decides
+     * how the pane is divided. Measured while it still says "Loading…", every layout looks fine —
+     * which is how a calls list squeezed to 11 pixels passed this test once.</p>
+     */
     private void settle(Page page) {
-        page.locator(".conv-call").first().waitFor(
+        page.locator(".conv-msg").first().waitFor(
                 new Locator.WaitForOptions().setTimeout(15_000));
-        page.waitForTimeout(700);
+        long deadline = System.currentTimeMillis() + 15_000;
+        while (System.currentTimeMillis() < deadline) {
+            String text = page.locator("#conv-text").textContent();
+            if (text != null && !text.isBlank() && !"Loading…".equals(text.strip())) {
+                page.waitForTimeout(200);   // let the pane settle on the text it now holds
+                return;
+            }
+            page.waitForTimeout(100);
+        }
+        throw new AssertionError("the call's text never arrived");
     }
 
     /** True when the document is no taller than the window it is being shown in. */
@@ -325,6 +386,32 @@ public class ConversationTurnNavigationE2E {
         return box.y >= 0 && box.y + box.height <= windowHeight + 1;
     }
 
+    /** How many message rows lie wholly within the list's own box. */
+    private int fullyVisibleRows(Page page) {
+        Object n = page.evaluate("""
+                () => {
+                  const box = document.querySelector('.conv-messages').getBoundingClientRect();
+                  return [...document.querySelectorAll('.conv-msg')].filter(el => {
+                    const r = el.getBoundingClientRect();
+                    return r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+                  }).length;
+                }
+                """);
+        return ((Number) n).intValue();
+    }
+
+    /** How many pixels of the first message row are hidden above the top of the list. */
+    private int clippedAtTheTop(Page page) {
+        Object px = page.evaluate("""
+                () => {
+                  const box = document.querySelector('.conv-messages').getBoundingClientRect();
+                  const first = document.querySelector('.conv-msg').getBoundingClientRect();
+                  return Math.round(Math.max(0, box.top - first.top));
+                }
+                """);
+        return ((Number) px).intValue();
+    }
+
     private Locator back(Page page) {
         return page.locator(".conv-turn-back");
     }
@@ -337,16 +424,22 @@ public class ConversationTurnNavigationE2E {
         return page.locator(".conv-turn-where").textContent().trim();
     }
 
-    private int calls(Page page) {
-        return page.locator(".conv-call").count();
+    private int messages(Page page) {
+        return page.locator(".conv-msg").count();
     }
 
-    private Locator lastCall(Page page) {
-        return page.locator(".conv-call").last();
+    private Locator lastMessage(Page page) {
+        return page.locator(".conv-msg").last();
     }
 
-    private String selectedCallLabel(Page page) {
-        return page.locator(".conv-call.selected .conv-call-label").textContent().trim();
+    private String selectedDirection(Page page) {
+        return page.locator(".conv-msg.selected .conv-msg-dir").textContent().trim();
+    }
+
+    /** Every direction named in the list, in the order they were sent. */
+    private java.util.List<String> directions(Page page) {
+        return page.locator(".conv-msg-dir").allTextContents().stream()
+                .map(String::trim).toList();
     }
 
     private static void check(boolean ok, String message) {
@@ -377,32 +470,48 @@ public class ConversationTurnNavigationE2E {
                     + "(2, 'Beta', '', 'chat-ui-iolog-28014.mv.db')");
 
             // turn1: long enough that listing it would once have run off the bottom of the screen,
-            // and each call long enough that opening one would have done the same on its own.
+            // and each entry long enough that opening one would have done the same on its own.
             long id = 100;
-            for (int i = 0; i < LONG_TURN_CALLS; i++) {
+            for (int i = 0; i < LONG_TURN_ENTRIES; i++) {
                 int step = i / 2 + 1;
                 boolean llm = i % 2 == 0;
-                String opening = i == 0 ? ALPHA_FIRST_CALL
-                        : (i == LONG_TURN_CALLS - 1 ? ALPHA_LAST_CALL_OF_TURN1
-                                                    : "call " + (i + 1) + " of the long turn");
+                String said = i == 0 ? ALPHA_FIRST_ENTRY
+                        : (i == LONG_TURN_ENTRIES - 1 ? ALPHA_LAST_ENTRY_OF_TURN1
+                                                      : "entry " + (i + 1) + " of the long turn");
                 insert(c, id++, 1, "turn1/step" + step + "/" + (llm ? "llm" : "tool"),
-                        "haystack: " + opening + "\n" + filler(4000));
+                        llm ? llmEntry(ALPHA_PROMPT, "haystack: " + said + "\n" + filler(4000))
+                            : toolEntry("write", "haystack: " + said + "\n" + filler(4000)));
             }
-            insert(c, 200, 1, "turn3/step1/llm", "haystack: " + ALPHA_TURN3);
-            insert(c, 201, 1, "turn4/step1/llm", "haystack: the last turn of Alpha opens here");
-            insert(c, 202, 1, "turn4/step1/tool", "haystack: " + ALPHA_TURN4_TOOL);
-            insert(c, 300, 2, "turn1/step1/llm", "haystack: " + BETA_TURN1);
+            insert(c, 200, 1, "turn3/step1/llm",
+                    llmEntry("the question of turn3", "haystack: " + ALPHA_TURN3));
+            insert(c, 201, 1, "turn4/step1/llm",
+                    llmEntry("the question of turn4", "haystack: the last turn of Alpha opens here"));
+            insert(c, 202, 1, "turn4/step1/tool",
+                    toolEntry("read", "haystack: " + ALPHA_TURN4_TOOL));
+            insert(c, 300, 2, "turn1/step1/llm",
+                    llmEntry("the question of Beta", "haystack: " + BETA_TURN1));
         }
         System.out.println("  fixture database → " + db.toAbsolutePath() + ".mv.db");
         return db.toAbsolutePath();
     }
 
-    /** Body text long enough that one call cannot be shown without a scroll of its own. */
+    /** An entry for a model call, in the shape the conversation log writes one. */
+    private static String llmEntry(String prompt, String answer) {
+        String request = "{\"messages\":[{\"role\":\"system\",\"content\":\"be helpful\"},"
+                + "{\"role\":\"user\",\"content\":\"" + prompt + "\"}]}";
+        return "REQUEST: " + request + "\nRESPONSE: " + answer + "\nUSAGE: {\"prompt_tokens\":12}";
+    }
+
+    /** An entry for a tool run, in the shape the conversation log writes one. */
+    private static String toolEntry(String name, String observation) {
+        return "TOOL: " + name + "\nINPUT: {\"path\":\"somewhere\"}\nOBSERVATION: " + observation;
+    }
+
+    /** Body text long enough that one message cannot be shown without a scroll of its own. */
     private static String filler(int chars) {
         StringBuilder sb = new StringBuilder(chars + 40);
         while (sb.length() < chars) {
-            sb.append("the recorded request and its answer, line ")
-              .append(sb.length()).append('\n');
+            sb.append("the recorded exchange, line ").append(sb.length()).append('\n');
         }
         return sb.toString();
     }
