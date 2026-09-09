@@ -214,6 +214,18 @@
         /* ── Main layout ─────────────────────────────────────── */
         main { max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
 
+        /* A screen whose content has no natural end — a conversation's calls, and the whole text
+           of any one of them — cannot be allowed to make the document taller: whatever says where
+           you are scrolls off the top and the structure stops being visible. Such a screen is
+           exactly the window, and the regions inside it scroll instead. */
+        body.body-fill { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        body.body-fill header { flex: 0 0 auto; }
+        main.main-fill {
+            flex: 1 1 auto; min-height: 0; max-width: none;
+            padding: 16px 20px; display: flex; flex-direction: column;
+        }
+        main.main-fill .screen-nav { flex: 0 0 auto; }
+
         .section-label {
             font-size: 15px;
             font-weight: 600;
@@ -674,7 +686,7 @@
                       overflow-y: auto; }
     </style>
 </head>
-<body>
+<body class="{#if screen == 'conversations'}body-fill{/if}">
 
 <header>
     <a href="/" class="brand">
@@ -701,7 +713,7 @@
     </div>
 </header>
 
-<main>
+<main class="{#if screen == 'conversations'}main-fill{/if}">
 
     <nav class="screen-nav">
     {! Two tabs went away when the three screens became one: what is running and what can be

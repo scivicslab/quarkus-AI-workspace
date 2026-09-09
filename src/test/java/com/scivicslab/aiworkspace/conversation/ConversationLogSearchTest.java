@@ -219,6 +219,35 @@ class ConversationLogSearchTest {
     }
 
     @Test
+    void turnView_carriesOnlyASummaryOfEachCall_notTheCallItself() {
+        // Listing a turn is done to choose one of its calls. Sending every call whole to do that
+        // is what made a thirty-call turn megabytes of JSON.
+        ConversationLogSearch.View view = search.turnView(11);
+
+        assertThat(view.rows()).allSatisfy(row -> {
+            assertThat(row.message()).isEmpty();
+            assertThat(row.summary()).isNotEmpty();
+        });
+    }
+
+    @Test
+    void rowView_carriesTheCallWhole() {
+        ConversationLogSearch.Row call = search.rowView(11).rows().get(0);
+
+        assertThat(call.message()).isEqualTo("a tool the first turn ran");
+        assertThat(call.summary()).isEqualTo("a tool the first turn ran");
+    }
+
+    @Test
+    void summarise_putsTheOpeningOnOneLineAndMarksWhatWasCut() {
+        assertThat(ConversationLogSearch.summarise("first line\n\nsecond  line"))
+                .isEqualTo("first line second line");
+        assertThat(ConversationLogSearch.summarise("x".repeat(500)))
+                .hasSize(201).endsWith("\u2026");
+        assertThat(ConversationLogSearch.summarise(null)).isEmpty();
+    }
+
+    @Test
     void turnKey_isThePartBeforeTheFirstSlash() {
         assertThat(ConversationLogSearch.turnKey("turn7/step1/llm")).isEqualTo("turn7");
         assertThat(ConversationLogSearch.turnKey("turn10/step2/tool")).isEqualTo("turn10");

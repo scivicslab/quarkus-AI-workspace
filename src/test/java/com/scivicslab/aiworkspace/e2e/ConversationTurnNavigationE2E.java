@@ -19,23 +19,25 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * E2E: moving from a search result to the turns and rows around it, on the Conversations screen.
+ * E2E: reading a conversation from a search result on the Conversations screen.
  *
- * <p>Runs against a conversation database this test writes itself, not the merged one on disk: the
- * cases worth driving a browser for are a turn that spans several rows and a gap in the turn
- * numbering, and neither can be relied on to be in whatever has been recorded lately. The portal is
- * pointed at the fixture with {@code AI_WORKSPACE_CONVERSATION_LOG_DB_PATH}.</p>
+ * <p>The screen is three regions that scroll on their own inside a page that is exactly the window:
+ * the results, the calls of the turn one of them belongs to, and the whole text of the call picked
+ * out of those. What this drives is that the structure stays visible however much there is of it —
+ * the failure it exists to prevent is the one the earlier design had, where opening a long turn
+ * lengthened the document until the turn's own heading was off the top of the screen.</p>
  *
- * <p>The fixture, in the order the rows were written:</p>
+ * <p>It runs against a conversation database this test writes itself, so the shapes that matter are
+ * present rather than hoped for: a turn of thirty calls with long text in each, a gap in the turn
+ * numbering, and a second conversation the arrows must not cross into. The portal is pointed at it
+ * with {@code AI_WORKSPACE_CONVERSATION_LOG_DB_PATH}.</p>
+ *
  * <pre>
- *   conversation "Alpha"  turn1  llm / tool / llm      (three rows)
- *                         turn3  llm                   (turn2 was never written)
- *                         turn4  llm / tool            (two rows)
- *   conversation "Beta"   turn1  llm
+ *   conversation "Alpha"  turn1  30 calls, alternating llm and tool, ~4 kB each
+ *                         turn3  1 call            (turn2 was never written)
+ *                         turn4  2 calls
+ *   conversation "Beta"   turn1  1 call
  * </pre>
- *
- * <p>Every row holds the word {@code haystack}, so one search returns all of them and every turn is
- * reachable from a result.</p>
  *
  * <p>Run via {@link AiWorkspaceE2ERunner}, or on its own:</p>
  * <pre>
@@ -48,12 +50,15 @@ public class ConversationTurnNavigationE2E {
     private static int passed = 0;
     private static int failed = 0;
 
-    // A result is picked by words only that row holds. Its label will not do: turn1/step1/llm is
-    // the first row of every conversation, so a label picks whichever one the search listed first.
-    private static final String ALPHA_TURN1_LLM = "the model call of the first turn";
-    private static final String ALPHA_TURN1_TOOL = "a tool the first turn ran";
-    private static final String ALPHA_TURN4_LLM = "the last turn of Alpha";
-    private static final String ALPHA_TURN4_TOOL = "and the tool it ran";
+    /** How many calls the long turn holds. Enough that listing them all would once have overflowed. */
+    private static final int LONG_TURN_CALLS = 30;
+
+    // A result is picked by words only that call holds. Its label will not do: turn1/step1/llm is
+    // the first call of every conversation, so a label picks whichever one the search listed first.
+    private static final String ALPHA_FIRST_CALL = "the model call that opens Alpha";
+    private static final String ALPHA_LAST_CALL_OF_TURN1 = "the last call of the long turn";
+    private static final String ALPHA_TURN3 = "the turn after the missing one";
+    private static final String ALPHA_TURN4_TOOL = "the tool of the last turn of Alpha";
     private static final String BETA_TURN1 = "Beta, another conversation entirely";
 
     public static void main(String[] args) throws Exception {
@@ -76,13 +81,14 @@ public class ConversationTurnNavigationE2E {
                     new BrowserType.LaunchOptions().setHeadless(true));
             try {
                 String base = "http://localhost:" + port;
-                readsAWholeTurn(browser, base);
+                aResultOpensItsWholeTurn(browser, base);
+                nothingEverLengthensTheDocument(browser, base);
+                theStructureStaysOnScreenAtTheEndOfALongTurn(browser, base);
+                pickingACallShowsItsWholeText(browser, base);
                 arrowsStepBetweenTurns(browser, base);
                 arrowKeysStillWorkAfterClickingAnArrow(browser, base);
-                rowModeStepsInsideTheTurn(browser, base);
+                upAndDownStepBetweenTheCallsOfTheTurn(browser, base);
                 arrowsStopAtTheEndsOfTheConversation(browser, base);
-                theBarDoesNotMoveWhenTheModeIsSwitched(browser, base);
-                twoOpenReadersDoNotMoveEachOther(browser, base);
             } finally {
                 browser.close();
                 portal.stop();
@@ -96,183 +102,171 @@ public class ConversationTurnNavigationE2E {
 
     // --- the checks ---------------------------------------------------------------------------
 
-    /** Opening a result shows the whole turn it belongs to, one labelled block per row. */
-    private void readsAWholeTurn(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator reader = openResultFor(page, ALPHA_TURN1_TOOL);
-            check(bodies(reader) == 3,
-                    "the turn's three rows are all shown (" + bodies(reader) + ")");
-            check(labels(reader) == 3,
-                    "every row is labelled (" + labels(reader) + ")");
-            check(where(reader).equals("turn1"), "the reader says which turn (" + where(reader) + ")");
-            check(forward(reader).textContent().contains("turn3"),
-                    "the forward arrow names where it leads (" + forward(reader).textContent().trim() + ")");
-            check(reader.locator(".conv-reader-row-label").first().textContent()
-                            .contains("turn1/step1/llm"),
-                    "the rows are in the order they were written");
+    /** Clicking a result lists every call of the turn it belongs to, and opens the one that matched. */
+    private void aResultOpensItsWholeTurn(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_LAST_CALL_OF_TURN1);
+            check(calls(page) == LONG_TURN_CALLS,
+                    "every call of the turn is listed (" + calls(page) + ")");
+            check(where(page).startsWith("turn1"), "the bar says which turn (" + where(page) + ")");
+            check(where(page).contains(LONG_TURN_CALLS + " calls"),
+                    "the bar says how many calls it holds (" + where(page) + ")");
+            check(selectedCallLabel(page).equals("step15/tool"),
+                    "the call that matched is the one opened (" + selectedCallLabel(page) + ")");
+        });
+    }
+
+    /**
+     * The page never becomes taller than the window.
+     *
+     * <p>This is the whole point of the layout. Everything the screen can show grows without a
+     * limit — the results, the calls of a turn, the text of one call — and if any of it lengthens
+     * the document then what says where you are scrolls away above.</p>
+     */
+    private void nothingEverLengthensTheDocument(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            check(fitsTheWindow(page), "the search results alone do not lengthen the page");
+
+            selectResult(page, ALPHA_FIRST_CALL);
+            check(fitsTheWindow(page),
+                    "a turn of " + LONG_TURN_CALLS + " calls does not lengthen the page");
+
+            lastCall(page).click();
+            page.waitForTimeout(800);
+            check(fitsTheWindow(page), "a call of several kilobytes does not lengthen the page");
+        });
+    }
+
+    /** Reading the end of a long turn does not push the turn's own heading off the screen. */
+    private void theStructureStaysOnScreenAtTheEndOfALongTurn(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            lastCall(page).click();
+            page.waitForTimeout(800);
+
+            check(inTheWindow(page, ".conv-turn-where"),
+                    "the turn is still named on screen");
+            check(inTheWindow(page, ".conv-turn-forward"),
+                    "the way out to the next turn is still on screen");
+            check(inTheWindow(page, ".conv-call.selected"),
+                    "the call being read is still marked in the list");
+            check(inTheWindow(page, ".conv-results"),
+                    "the search results are still on screen");
+        });
+    }
+
+    /** The list carries a summary; picking a call fetches the whole thing. */
+    private void pickingACallShowsItsWholeText(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            String summary = page.locator(".conv-call").first()
+                    .locator(".conv-call-summary").textContent().trim();
+            String whole = page.locator("#conv-text").textContent();
+
+            check(summary.length() <= 210,
+                    "the list carries a summary, not the call (" + summary.length() + " chars)");
+            check(whole.length() > 3000,
+                    "the call opened below is the whole of it (" + whole.length() + " chars)");
+            check(whole.startsWith(summary.replace("…", "").substring(0, 40)),
+                    "and it is the same call the summary came from");
         });
     }
 
     /** The arrows move to the turn before and after, across the gap where turn2 is missing. */
     private void arrowsStepBetweenTurns(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
-            forward(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn3"),
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            forward(page).click();
+            settle(page);
+            check(where(page).startsWith("turn3"),
                     "forward from turn1 skips the turn2 that was never written, reaching "
-                            + where(reader));
+                            + where(page));
 
-            forward(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn4"), "forward again reaches turn4 (" + where(reader) + ")");
-            check(bodies(reader) == 2, "turn4's two rows are shown (" + bodies(reader) + ")");
+            forward(page).click();
+            settle(page);
+            check(where(page).startsWith("turn4"), "forward again reaches turn4 (" + where(page) + ")");
+            check(calls(page) == 2, "turn4's two calls are listed (" + calls(page) + ")");
 
-            back(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn3"), "back reaches turn3 (" + where(reader) + ")");
-            back(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn1"), "back reaches turn1 (" + where(reader) + ")");
+            back(page).click();
+            settle(page);
+            check(where(page).startsWith("turn3"), "back reaches turn3 (" + where(page) + ")");
+            back(page).click();
+            settle(page);
+            check(where(page).startsWith("turn1"), "back reaches turn1 (" + where(page) + ")");
         });
     }
 
     /**
      * The arrow keys keep working after an arrow has been clicked.
      *
-     * <p>Redrawing the reader replaces the very button that was clicked, so whatever the browser
-     * was focusing is gone from the page — and a key handler bound to the reader hears nothing.</p>
+     * <p>Redrawing the pane replaces the very button that was clicked, so whatever the browser was
+     * focusing is gone — and a key handler bound to the pane hears nothing after that.</p>
      */
     private void arrowKeysStillWorkAfterClickingAnArrow(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
-            forward(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn3"), "the click moved to turn3 (" + where(reader) + ")");
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            forward(page).click();
+            settle(page);
+            check(where(page).startsWith("turn3"), "the click moved to turn3 (" + where(page) + ")");
 
             // No explicit focus() here: that is the point. After the click, pressing the key is
             // what a person does next.
             page.keyboard().press("ArrowRight");
             page.waitForTimeout(1200);
-            check(where(reader).equals("turn4"),
-                    "the right arrow key still moves after a click (" + where(reader) + ")");
+            check(where(page).startsWith("turn4"),
+                    "the right arrow key still moves after a click (" + where(page) + ")");
         });
     }
 
-    /**
-     * Call mode shows one call and steps inside the turn; turn mode brings the whole turn back.
-     *
-     * <p>"Call" is what the screen says. One row of the log is one call — the model was asked and
-     * answered, or a tool was run and reported back — and "row" named the table rather than the
-     * thing. The class names and the endpoint's {@code mode=row} still say row, because there the
-     * unit really is a row of {@code logs}.</p>
-     */
-    private void rowModeStepsInsideTheTurn(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
-            reader.locator(".conv-reader-mode-row").click();
-            settle(page, reader);
-            check(bodies(reader) == 1, "call mode shows one call (" + bodies(reader) + ")");
-            check(where(reader).equals("turn1 \u00b7 step1/llm"),
-                    "call mode names the call without repeating its turn (" + where(reader) + ")");
+    /** Up and down move between the calls of the turn that is open. */
+    private void upAndDownStepBetweenTheCallsOfTheTurn(Browser browser, String base) {
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            check(selectedCallLabel(page).equals("step1/llm"),
+                    "opens on the call that matched (" + selectedCallLabel(page) + ")");
 
-            forward(reader).click();
-            settle(page, reader);
-            check(where(reader).equals("turn1 \u00b7 step1/tool"),
-                    "forward steps to the next call of the same turn (" + where(reader) + ")");
+            page.keyboard().press("ArrowDown");
+            page.waitForTimeout(800);
+            check(selectedCallLabel(page).equals("step1/tool"),
+                    "down moves to the next call (" + selectedCallLabel(page) + ")");
 
-            reader.locator(".conv-reader-mode-turn").click();
-            settle(page, reader);
-            check(bodies(reader) == 3,
-                    "turn mode shows the whole turn again (" + bodies(reader) + ")");
-            check(reader.locator(".conv-reader-mode-turn").textContent().trim().equals("Turn")
-                            && reader.locator(".conv-reader-mode-row").textContent().trim().equals("Call"),
-                    "the units are named for what they are, not for the table they come from");
+            page.keyboard().press("ArrowUp");
+            page.waitForTimeout(800);
+            check(selectedCallLabel(page).equals("step1/llm"),
+                    "up moves back (" + selectedCallLabel(page) + ")");
+
+            page.keyboard().press("ArrowUp");
+            page.waitForTimeout(500);
+            check(selectedCallLabel(page).equals("step1/llm"),
+                    "up at the first call stays put (" + selectedCallLabel(page) + ")");
         });
     }
 
     /** Neither arrow leads out of the conversation the result belongs to. */
     private void arrowsStopAtTheEndsOfTheConversation(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator first = openResultFor(page, ALPHA_TURN1_LLM);
-            check(back(first).isDisabled(), "the first turn has no back arrow");
+        withScreen(browser, base, page -> {
+            selectResult(page, ALPHA_FIRST_CALL);
+            check(back(page).isDisabled(), "the first turn has no back arrow");
 
-            Locator last = openResultFor(page, ALPHA_TURN4_TOOL);
-            check(forward(last).isDisabled(),
+            selectResult(page, ALPHA_TURN4_TOOL);
+            check(forward(page).isDisabled(),
                     "the last turn of the conversation has no forward arrow — "
                     + "the next row in the database belongs to another conversation");
 
-            Locator other = openResultFor(page, BETA_TURN1);
-            check(back(other).isDisabled(),
-                    "the other conversation's only turn has no back arrow");
-        });
-    }
-
-    /**
-     * The bar does not rearrange itself when the mode is switched.
-     *
-     * <p>Turn mode names an arrow's destination {@code turn4}; row mode names it
-     * {@code turn1/step2/llm}. Laid out as a flex row, that alone moved every control to the right
-     * of it, and marking the current mode by disabling its button changed a third thing. The bar is
-     * a grid of fixed cells so that pressing Turn or Row changes what the controls say and nothing
-     * about where they are.</p>
-     */
-    private void theBarDoesNotMoveWhenTheModeIsSwitched(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
-            var backBefore = back(reader).boundingBox();
-            var forwardBefore = forward(reader).boundingBox();
-            var turnBefore = reader.locator(".conv-reader-mode-turn").boundingBox();
-            var rowBefore = reader.locator(".conv-reader-mode-row").boundingBox();
-
-            reader.locator(".conv-reader-mode-row").click();
-            settle(page, reader);
-
-            check(sameBox(backBefore, back(reader).boundingBox()),
-                    "the back arrow stayed where it was");
-            check(sameBox(forwardBefore, forward(reader).boundingBox()),
-                    "the forward arrow stayed where it was");
-            check(sameBox(turnBefore, reader.locator(".conv-reader-mode-turn").boundingBox()),
-                    "the Turn button stayed where it was");
-            check(sameBox(rowBefore, reader.locator(".conv-reader-mode-row").boundingBox()),
-                    "the Row button stayed where it was");
-            check(reader.locator(".conv-reader-mode-row").isEnabled()
-                            && reader.locator(".conv-reader-mode-turn").isEnabled(),
-                    "both mode buttons stay pressable");
-        });
-    }
-
-    /** Two boxes are the same place and size, to within a pixel of rounding. */
-    private static boolean sameBox(com.microsoft.playwright.options.BoundingBox a,
-                                   com.microsoft.playwright.options.BoundingBox b) {
-        if (a == null || b == null) {
-            return false;
-        }
-        return Math.abs(a.x - b.x) < 1.5 && Math.abs(a.y - b.y) < 1.5
-                && Math.abs(a.width - b.width) < 1.5 && Math.abs(a.height - b.height) < 1.5;
-    }
-
-    /** Each open reader moves on its own. */
-    private void twoOpenReadersDoNotMoveEachOther(Browser browser, String base) {
-        withSearch(browser, base, page -> {
-            Locator one = openResultFor(page, ALPHA_TURN1_LLM);
-            Locator two = openResultFor(page, ALPHA_TURN4_LLM);
-            String twoBefore = where(two);
-
-            back(two).click();
-            settle(page, two);
-            check(where(one).equals("turn1"),
-                    "moving one reader left the other where it was (" + where(one) + ")");
-            check(!where(two).equals(twoBefore),
-                    "the reader that was clicked did move (" + twoBefore + " -> " + where(two) + ")");
+            selectResult(page, BETA_TURN1);
+            check(back(page).isDisabled() && forward(page).isDisabled(),
+                    "the other conversation's only turn has neither arrow");
+            check(where(page).contains("Beta"),
+                    "and it is that conversation being read (" + where(page) + ")");
         });
     }
 
     // --- driving the screen -------------------------------------------------------------------
 
-    /** Opens the Conversations screen with every fixture row matched, and runs one check block. */
-    private void withSearch(Browser browser, String base, java.util.function.Consumer<Page> body) {
-        Page page = browser.newPage();
+    /** Opens the Conversations screen with every fixture call matched, and runs one check block. */
+    private void withScreen(Browser browser, String base, java.util.function.Consumer<Page> body) {
+        Page page = browser.newPage(new Browser.NewPageOptions()
+                .setViewportSize(1280, 800));
         List<String> errors = new ArrayList<>();
         page.onPageError(errors::add);
         page.onConsoleMessage(m -> {
@@ -290,49 +284,69 @@ public class ConversationTurnNavigationE2E {
         }
     }
 
-    /**
-     * Opens the reader of the result whose head or snippet holds {@code marker}.
-     *
-     * @return that result's reader, already showing something
-     */
-    private Locator openResultFor(Page page, String marker) {
-        Locator hit = page.locator(".conv-hit").filter(
-                new Locator.FilterOptions().setHasText(marker)).first();
-        Locator toggle = hit.locator(".conv-hit-toggle");
-        if (!"Hide".equals(toggle.textContent().trim())) {
-            toggle.click();
+    /** Clicks the result whose snippet holds {@code marker}, and waits for its turn to open. */
+    private void selectResult(Page page, String marker) {
+        page.locator(".conv-hit").filter(
+                new Locator.FilterOptions().setHasText(marker)).first().click();
+        page.locator(".conv-call").first().waitFor(
+                new Locator.WaitForOptions().setTimeout(15_000));
+        page.waitForTimeout(700);   // the chosen call's text is fetched after the list is drawn
+    }
+
+    private void settle(Page page) {
+        page.locator(".conv-call").first().waitFor(
+                new Locator.WaitForOptions().setTimeout(15_000));
+        page.waitForTimeout(700);
+    }
+
+    /** True when the document is no taller than the window it is being shown in. */
+    private boolean fitsTheWindow(Page page) {
+        Object over = page.evaluate(
+                "() => document.documentElement.scrollHeight - window.innerHeight");
+        double overflow = ((Number) over).doubleValue();
+        if (overflow > 2) {
+            System.out.println("    (document is " + overflow + "px taller than the window)");
         }
-        Locator reader = hit.locator(".conv-reader");
-        reader.locator(".conv-reader-body").first().waitFor(
-                new Locator.WaitForOptions().setTimeout(15_000));
-        return reader;
+        return overflow <= 2;
     }
 
-    /** Waits for a redraw to land. The reader replaces its content, so nothing else is stable. */
-    private void settle(Page page, Locator reader) {
-        page.waitForTimeout(1000);
-        reader.locator(".conv-reader-body").first().waitFor(
-                new Locator.WaitForOptions().setTimeout(15_000));
+    /** True when the element is present and its box lies inside the window. */
+    private boolean inTheWindow(Page page, String selector) {
+        Locator el = page.locator(selector).first();
+        if (el.count() == 0) {
+            return false;
+        }
+        var box = el.boundingBox();
+        if (box == null) {
+            return false;
+        }
+        Object height = page.evaluate("() => window.innerHeight");
+        double windowHeight = ((Number) height).doubleValue();
+        return box.y >= 0 && box.y + box.height <= windowHeight + 1;
     }
 
-    private Locator back(Locator reader) {
-        return reader.locator(".conv-reader-back");
+    private Locator back(Page page) {
+        return page.locator(".conv-turn-back");
     }
 
-    private Locator forward(Locator reader) {
-        return reader.locator(".conv-reader-forward");
+    private Locator forward(Page page) {
+        return page.locator(".conv-turn-forward");
     }
 
-    private String where(Locator reader) {
-        return reader.locator(".conv-reader-where").textContent().trim();
+    private String where(Page page) {
+        return page.locator(".conv-turn-where").textContent().trim();
     }
 
-    private int bodies(Locator reader) {
-        return reader.locator(".conv-reader-body").count();
+    private int calls(Page page) {
+        return page.locator(".conv-call").count();
     }
 
-    private int labels(Locator reader) {
-        return reader.locator(".conv-reader-row-label").count();
+    private Locator lastCall(Page page) {
+        return page.locator(".conv-call").last();
+    }
+
+    private String selectedCallLabel(Page page) {
+        return page.locator(".conv-call.selected .conv-call-label").textContent().trim();
     }
 
     private static void check(boolean ok, String message) {
@@ -361,16 +375,36 @@ public class ConversationTurnNavigationE2E {
             s.execute("INSERT INTO sessions VALUES "
                     + "(1, 'Alpha', '', 'chat-ui-iolog-28013.mv.db'),"
                     + "(2, 'Beta', '', 'chat-ui-iolog-28014.mv.db')");
-            insert(c, 10, 1, "turn1/step1/llm", "haystack: the model call of the first turn");
-            insert(c, 11, 1, "turn1/step1/tool", "haystack: a tool the first turn ran");
-            insert(c, 12, 1, "turn1/step2/llm", "haystack: the model call after that tool");
-            insert(c, 13, 1, "turn3/step1/llm", "haystack: turn2 was never written");
-            insert(c, 14, 1, "turn4/step1/llm", "haystack: the last turn of Alpha");
-            insert(c, 15, 1, "turn4/step1/tool", "haystack: and the tool it ran");
-            insert(c, 20, 2, "turn1/step1/llm", "haystack: Beta, another conversation entirely");
+
+            // turn1: long enough that listing it would once have run off the bottom of the screen,
+            // and each call long enough that opening one would have done the same on its own.
+            long id = 100;
+            for (int i = 0; i < LONG_TURN_CALLS; i++) {
+                int step = i / 2 + 1;
+                boolean llm = i % 2 == 0;
+                String opening = i == 0 ? ALPHA_FIRST_CALL
+                        : (i == LONG_TURN_CALLS - 1 ? ALPHA_LAST_CALL_OF_TURN1
+                                                    : "call " + (i + 1) + " of the long turn");
+                insert(c, id++, 1, "turn1/step" + step + "/" + (llm ? "llm" : "tool"),
+                        "haystack: " + opening + "\n" + filler(4000));
+            }
+            insert(c, 200, 1, "turn3/step1/llm", "haystack: " + ALPHA_TURN3);
+            insert(c, 201, 1, "turn4/step1/llm", "haystack: the last turn of Alpha opens here");
+            insert(c, 202, 1, "turn4/step1/tool", "haystack: " + ALPHA_TURN4_TOOL);
+            insert(c, 300, 2, "turn1/step1/llm", "haystack: " + BETA_TURN1);
         }
         System.out.println("  fixture database → " + db.toAbsolutePath() + ".mv.db");
         return db.toAbsolutePath();
+    }
+
+    /** Body text long enough that one call cannot be shown without a scroll of its own. */
+    private static String filler(int chars) {
+        StringBuilder sb = new StringBuilder(chars + 40);
+        while (sb.length() < chars) {
+            sb.append("the recorded request and its answer, line ")
+              .append(sb.length()).append('\n');
+        }
+        return sb.toString();
     }
 
     private static void insert(Connection c, long id, long sessionId, String label, String message)
@@ -380,7 +414,9 @@ public class ConversationTurnNavigationE2E {
                 + "VALUES (?, ?, ?, ?, 'INFO', ?)")) {
             ps.setLong(1, id);
             ps.setLong(2, sessionId);
-            ps.setTimestamp(3, Timestamp.valueOf("2026-09-09 10:00:" + String.format("%02d", id)));
+            // Ordered the same way the ids are, which is the order a merge writes them in.
+            ps.setTimestamp(3, Timestamp.valueOf(
+                    java.time.LocalDateTime.of(2026, 9, 9, 10, 0, 0).plusSeconds(id)));
             ps.setString(4, label);
             ps.setString(5, message);
             ps.executeUpdate();

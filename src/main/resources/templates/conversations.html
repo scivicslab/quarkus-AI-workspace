@@ -1,7 +1,25 @@
 {#include layout}
 {#body}
     <style>
-        .conv-search { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+        /* Three regions that each scroll on their own, inside a page that is exactly the window
+           (see body.body-fill in layout.html). A conversation has no natural length — a turn can be
+           dozens of calls, one call the whole of a request and its response — and letting any of
+           that lengthen the document is what pushes "which turn am I in" off the top of the screen.
+           Here the results stay put while the calls scroll, and the calls stay put while the text
+           scrolls, so the structure a person is reading is always on screen. */
+        .conv-top { flex: 0 0 auto; }
+        .conv-split {
+            flex: 1 1 auto; min-height: 0; display: grid;
+            grid-template-columns: 24rem 1fr; gap: 0.75rem; margin-top: 0.5rem;
+        }
+        .conv-results, .conv-detail {
+            border: 1px solid var(--border-color); border-radius: 6px;
+            background: var(--bg-secondary); min-height: 0;
+        }
+        .conv-results { overflow-y: auto; }
+        .conv-detail { display: flex; flex-direction: column; }
+
+        .conv-search { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
         .conv-search input[type=text] {
             flex: 1; padding: 0.5rem 0.7rem; font-size: 14px;
             background: var(--bg-secondary); color: var(--text-primary);
@@ -12,11 +30,8 @@
             background: var(--accent-blue); color: var(--bg-primary);
             border: none; border-radius: 4px; font-weight: 600;
         }
-        .conv-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 1rem; }
-        .conv-merge {
-            display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
-            margin-bottom: 0.75rem;
-        }
+        .conv-meta { font-size: 12px; color: var(--text-secondary); margin: 0 0 0.4rem; }
+        .conv-merge { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
         .conv-merge button {
             padding: 0.35rem 0.8rem; font-size: 13px; cursor: pointer;
             background: var(--bg-tertiary); color: var(--text-primary);
@@ -27,141 +42,168 @@
         .conv-merge-bad { color: var(--accent-red); }
         .conv-error {
             font-size: 13px; color: var(--accent-red); border: 1px solid var(--accent-red);
-            border-radius: 4px; padding: 0.5rem 0.7rem; margin-bottom: 1rem;
+            border-radius: 4px; padding: 0.5rem 0.7rem; margin-bottom: 0.5rem;
         }
+
+        /* One search result. Clicking it opens its turn on the right; it does not expand in place,
+           which is what used to make the list grow under the reader. */
         .conv-hit {
-            border: 1px solid var(--border-color); border-radius: 4px;
-            padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; background: var(--bg-secondary);
+            padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        .conv-hit:hover { background: var(--bg-tertiary); }
+        .conv-hit.selected {
+            background: var(--bg-tertiary); border-left: 3px solid var(--accent-blue);
+            padding-left: calc(0.65rem - 3px);
         }
         .conv-hit-head {
-            display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline;
-            font-size: 12px; color: var(--text-secondary); margin-bottom: 0.35rem;
+            display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline;
+            font-size: 11px; color: var(--text-secondary); margin-bottom: 0.2rem;
         }
         .conv-hit-program { color: var(--accent-mauve); font-weight: 600; }
-        .conv-hit-snippet { font-size: 13px; line-height: 1.55; word-break: break-word; }
-        .conv-hit-toggle {
-            font-size: 12px; color: var(--accent-blue); cursor: pointer;
-            background: none; border: none; padding: 0; margin-top: 0.4rem;
+        .conv-hit-snippet {
+            font-size: 12px; line-height: 1.5; word-break: break-word;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+            overflow: hidden;
         }
-        .conv-reader { display: none; margin-top: 0.5rem; }
-        /* A grid, not a flex row: every cell keeps its width whatever it holds, so switching
-           between Turn and Row — which changes an arrow from "turn4" to "turn1/step2/llm" —
-           moves nothing on screen. */
-        .conv-reader-bar {
-            display: grid; align-items: center;
-            grid-template-columns: 11rem 13rem 11rem 4.5rem auto 1fr;
-            column-gap: 0.5rem;
-            font-size: 12px; color: var(--text-secondary); margin-bottom: 0.4rem;
+
+        /* The turn: which one, and the way out of it to the ones either side. Fixed cells, so that
+           moving between turns changes what they say and nothing about where they are. */
+        .conv-turn-bar {
+            flex: 0 0 auto; display: grid; align-items: center;
+            grid-template-columns: 11rem 1fr 11rem; column-gap: 0.5rem;
+            padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border-color);
+            font-size: 12px; color: var(--text-secondary);
         }
-        .conv-reader-bar button {
+        .conv-turn-bar button {
             padding: 0.25rem 0.6rem; font-size: 12px; cursor: pointer;
             background: var(--bg-tertiary); color: var(--text-primary);
             border: 1px solid var(--border-color); border-radius: 4px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
+        }
+        .conv-turn-bar button[disabled] { cursor: default; opacity: 0.4; }
+        .conv-turn-where {
+            text-align: center; color: var(--accent-mauve); font-weight: 600;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .conv-reader-bar button[disabled] { cursor: default; opacity: 0.4; }
-        .conv-reader-arrow { width: 100%; }
-        .conv-reader-modes { display: flex; align-items: center; gap: 0.4rem; }
-        /* Always bold, and always the same width: marking the pressed one by making it bold
-           widened that button and moved the other one every time the mode was switched. */
-        .conv-reader-mode { font-weight: 600; min-width: 3.8rem; text-align: center; }
-        .conv-reader-bar button.on {
-            border-color: var(--accent-blue); color: var(--accent-blue);
-            background: var(--bg-secondary);
+        .conv-turn-where .conv-turn-of { color: var(--text-secondary); font-weight: 400; }
+
+        /* The calls of that turn. Its own scroll, capped at two fifths of the pane, so a turn with
+           thirty calls never takes the text below it off the screen. */
+        .conv-calls {
+            flex: 0 1 auto; max-height: 40%; overflow-y: auto;
+            border-bottom: 1px solid var(--border-color);
         }
-        .conv-reader-where {
-            color: var(--accent-mauve); font-weight: 600;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        .conv-call {
+            display: grid; grid-template-columns: 9rem 1fr; column-gap: 0.5rem;
+            padding: 0.3rem 0.65rem; cursor: pointer; font-size: 12px;
+            border-left: 3px solid transparent;
         }
-        .conv-reader-row-label {
-            font-size: 11px; color: var(--text-secondary); margin: 0.5rem 0 0.2rem;
+        .conv-call:hover { background: var(--bg-tertiary); }
+        .conv-call.selected { background: var(--bg-tertiary); border-left-color: var(--accent-blue); }
+        .conv-call-label { color: var(--accent-blue); white-space: nowrap; }
+        .conv-call-summary {
+            color: var(--text-secondary); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
         }
-        .conv-reader-body {
-            padding: 0.5rem; background: var(--code-bg); border-radius: 4px;
+
+        /* The chosen call, whole. Fetched when it is chosen, not when the turn is listed. */
+        .conv-text-head {
+            flex: 0 0 auto; padding: 0.35rem 0.65rem; font-size: 11px;
+            color: var(--text-secondary); border-bottom: 1px solid var(--border-color);
+        }
+        .conv-text {
+            flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.6rem 0.65rem;
+            background: var(--code-bg);
             font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
             font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
-            max-height: 30rem; overflow-y: auto;
+        }
+        .conv-empty {
+            padding: 1rem 0.65rem; font-size: 13px; color: var(--text-secondary);
         }
     </style>
 
-    <p class="section-label">Search every tool instance's conversations at once</p>
-
-    <form class="conv-search" method="get" action="/conversations">
-        <input type="text" name="q" value="{q}" placeholder="Words that appear in the conversation"
-               autofocus>
-        <button type="submit">Search</button>
-    </form>
-
-    <div class="conv-merge">
-        <form method="post" action="/conversations/merge">
-            {! Carried through the redirect so that collecting does not clear what was searched. !}
-            <input type="hidden" name="q" value="{q}">
-            <button type="submit" {#if merging}disabled{/if}>
-                {#if merging}Collecting…{#else}Collect new conversations{/if}
-            </button>
+    <div class="conv-top">
+        <form class="conv-search" method="get" action="/conversations">
+            <input type="text" name="q" value="{q}" placeholder="Words that appear in the conversation"
+                   autofocus>
+            <button type="submit">Search</button>
         </form>
-        <span class="conv-merge-note">
-            {#if merging}
-                Reading every conversation database under
-                <span class="inst-mono">{scanDir}</span>.
-            {#else if lastMerge.ran}
-                Last collected {lastMerge.when} UTC from {lastMerge.sources} databases:
-                {lastMerge.merged} conversations added, {lastMerge.skipped} already here,
-                {lastMerge.turns} turns added.
-                {#if lastMerge.error}<span class="conv-merge-bad">{lastMerge.error}</span>{/if}
-                {#for problem in lastMerge.problems}
-                    <span class="conv-merge-bad">{problem}</span>
-                {/for}
-            {#else}
-                Nothing collected yet this run. Files named
-                <span class="inst-mono">{prefixes}</span> under
-                <span class="inst-mono">{scanDir}</span> are read.
-            {/if}
-        </span>
-    </div>
 
-    <p class="conv-meta">
-        {#if overview.present}
-            {overview.conversations} conversations, {overview.turns} turns
-            {#if overview.newest}· newest {overview.newest}{/if}
-            · <span class="inst-mono">{database}.mv.db</span>
-        {#else}
-            No merged database yet at <span class="inst-mono">{database}.mv.db</span>.
-            Press Collect new conversations to build it.
-        {/if}
-    </p>
+        <div class="conv-merge">
+            <form method="post" action="/conversations/merge">
+                {! Carried through the redirect so that collecting does not clear what was searched. !}
+                <input type="hidden" name="q" value="{q}">
+                <button type="submit" {#if merging}disabled{/if}>
+                    {#if merging}Collecting…{#else}Collect new conversations{/if}
+                </button>
+            </form>
+            <span class="conv-merge-note">
+                {#if merging}
+                    Reading every conversation database under
+                    <span class="inst-mono">{scanDir}</span>.
+                {#else if lastMerge.ran}
+                    Last collected {lastMerge.when} UTC from {lastMerge.sources} databases:
+                    {lastMerge.merged} conversations added, {lastMerge.skipped} already here,
+                    {lastMerge.turns} turns added.
+                    {#if lastMerge.error}<span class="conv-merge-bad">{lastMerge.error}</span>{/if}
+                    {#for problem in lastMerge.problems}
+                        <span class="conv-merge-bad">{problem}</span>
+                    {/for}
+                {#else}
+                    Nothing collected yet this run. Files named
+                    <span class="inst-mono">{prefixes}</span> under
+                    <span class="inst-mono">{scanDir}</span> are read.
+                {/if}
+            </span>
+        </div>
 
-    {#if error}
-        <p class="conv-error">{error}</p>
-    {/if}
-
-    {#if searched && overview.present}
         <p class="conv-meta">
-            {#if hits.isEmpty}
-                Nothing matched.
-            {#else if limited}
-                More than {limit} turns matched. Showing the newest {limit}.
+            {#if overview.present}
+                {overview.conversations} conversations, {overview.turns} calls
+                {#if overview.newest}· newest {overview.newest}{/if}
+                · <span class="inst-mono">{database}.mv.db</span>
+                {#if searched}
+                    ·
+                    {#if hits.isEmpty}Nothing matched.
+                    {#else if limited}more than {limit} matched, showing the newest {limit}
+                    {#else}{hits.size} matching calls{/if}
+                {/if}
             {#else}
-                {hits.size} matching turns.
+                No merged database yet at <span class="inst-mono">{database}.mv.db</span>.
+                Press Collect new conversations to build it.
             {/if}
         </p>
 
-        {#for hit in hits}
-            <div class="conv-hit">
-                <div class="conv-hit-head">
-                    <span class="conv-hit-program">{hit.program}</span>
-                    <span>{hit.when}</span>
-                    <span class="inst-mono">{hit.conversation}</span>
-                    <span class="inst-mono">{hit.label}</span>
-                </div>
-                <div class="conv-hit-snippet">{hit.snippet}</div>
-                <button class="conv-hit-toggle" onclick="showTurn(this, {hit.logId})">
-                    Read this turn
-                </button>
-                <div class="conv-reader" id="reader-{hit.logId}" tabindex="0"></div>
-            </div>
-        {/for}
-    {/if}
+        {#if error}
+            <p class="conv-error">{error}</p>
+        {/if}
+    </div>
+
+    <div class="conv-split">
+        <div class="conv-results" id="conv-results">
+            {#if searched && overview.present}
+                {#for hit in hits}
+                    <div class="conv-hit" data-log-id="{hit.logId}">
+                        <div class="conv-hit-head">
+                            <span class="conv-hit-program">{hit.program}</span>
+                            <span>{hit.when}</span>
+                            <span class="inst-mono">{hit.label}</span>
+                        </div>
+                        <div class="conv-hit-snippet">{hit.snippet}</div>
+                    </div>
+                {/for}
+            {#else}
+                <p class="conv-empty">Search to list the calls that match.</p>
+            {/if}
+        </div>
+
+        <div class="conv-detail" id="conv-detail">
+            <p class="conv-empty" id="conv-placeholder">
+                Pick a result on the left to read the turn it belongs to.
+            </p>
+        </div>
+    </div>
 
     {#if merging}
         <script>
@@ -174,131 +216,163 @@
 
     <script>
     {|
-        // A turn is fetched on demand: a search can return a hundred results, and one turn holds
-        // entire requests and responses — far more text than a page needs upfront.
-        //
-        // What a reader is showing moves away from the row the search matched as soon as an arrow
-        // is pressed, so each open reader remembers its own current row and mode rather than
-        // reading them back off the result it was opened from.
-        const readers = new Map();
+        // What is on the right: the turn being read, and which of its calls is showing. A search
+        // result opens a turn; from there the arrows move by turn and the list moves by call, so
+        // what is on screen is no longer the result it started from.
+        var reading = null;   // {turnAnchor, view, callId}
 
-        async function showTurn(button, logId) {
-            const box = document.getElementById('reader-' + logId);
-            if (box.style.display === 'block') {
-                box.style.display = 'none';
-                readers.delete(logId);
-                button.textContent = 'Read this turn';
-                return;
-            }
-            box.style.display = 'block';
-            button.textContent = 'Hide';
-            readers.set(logId, {at: logId, mode: 'turn'});
-            // Bound to the reader rather than to the document: several readers can be open at
-            // once, and a document-wide handler would also fire while the search box is being
-            // typed into.
-            if (!box.dataset.keysBound) {
-                box.addEventListener('keydown', function (event) {
-                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-                    const step = readers.get(logId);
-                    if (!step) return;
-                    const target = event.key === 'ArrowLeft' ? step.previousId : step.nextId;
-                    if (!target) return;
-                    event.preventDefault();
-                    step.at = target;
-                    load(logId);
-                });
-                box.dataset.keysBound = '1';
-            }
-            box.focus({preventScroll: true});
-            await load(logId);
+        function selectHit(logId) {
+            document.querySelectorAll('.conv-hit').forEach(function (el) {
+                el.classList.toggle('selected', Number(el.dataset.logId) === logId);
+            });
+            // The call that matched is the one to show: it is why this result was picked.
+            loadTurn(logId, logId);
         }
 
-        async function load(readerId) {
-            const state = readers.get(readerId);
-            const box = document.getElementById('reader-' + readerId);
-            if (!state || !box) return;
-            box.textContent = 'Loading…';
+        async function loadTurn(anchorId, callToShow) {
+            const detail = document.getElementById('conv-detail');
+            detail.innerHTML = '<p class="conv-empty">Loading…</p>';
             let view;
             try {
-                const response = await fetch(
-                    '/conversations/turn/' + state.at + '?mode=' + state.mode);
+                const response = await fetch('/conversations/turn/' + anchorId + '?mode=turn');
                 view = response.ok ? await response.json() : null;
             } catch (e) {
                 view = null;
             }
             if (!view || !view.found) {
-                box.textContent = 'Could not read this turn.';
+                detail.innerHTML = '<p class="conv-empty">Could not read this turn.</p>';
                 return;
             }
-            draw(readerId, view);
+            reading = {turnAnchor: anchorId, view: view, callId: null};
+            drawTurn(view);
+            const wanted = view.rows.some(function (r) { return r.logId === callToShow; })
+                ? callToShow : view.rows[0].logId;
+            selectCall(wanted);
         }
 
-        function draw(readerId, view) {
-            const state = readers.get(readerId);
-            const box = document.getElementById('reader-' + readerId);
-            box.textContent = '';
-            // Where the arrow keys go from here, in whichever unit is being stepped through.
-            state.previousId = view.previousId;
-            state.nextId = view.nextId;
+        function drawTurn(view) {
+            const detail = document.getElementById('conv-detail');
+            detail.textContent = '';
 
             const bar = document.createElement('div');
-            bar.className = 'conv-reader-bar';
-            // Each arrow names what it leads to. A bare glyph says only that something is there,
-            // and the one question in front of a reader is "further back to what?".
-            bar.appendChild(arrow('back', view.previousLabel, view.previousId, readerId, state.mode));
+            bar.className = 'conv-turn-bar';
+            bar.appendChild(arrow('back', view.previousLabel, view.previousId));
             const where = document.createElement('span');
-            where.className = 'conv-reader-where';
-            // In call mode the label repeats the turn it belongs to, which is the word right
-            // before it; show only the part that says which call.
-            where.textContent = view.turn
-                + (state.mode === 'row' ? ' \u00b7 ' + withoutTurn(view.rows[0].label) : '');
-            where.title = where.textContent;
+            where.className = 'conv-turn-where';
+            const of = document.createElement('span');
+            of.className = 'conv-turn-of';
+            of.textContent = '  ·  ' + view.rows.length
+                + (view.rows.length === 1 ? ' call  ·  ' : ' calls  ·  ')
+                + view.conversation + '  ·  ' + view.program;
+            where.textContent = view.turn;
+            where.appendChild(of);
+            where.title = view.turn + of.textContent;
             bar.appendChild(where);
-            bar.appendChild(arrow('forward', view.nextLabel, view.nextId, readerId, state.mode));
+            bar.appendChild(arrow('forward', view.nextLabel, view.nextId));
+            detail.appendChild(bar);
 
-            // "Call", not "row": a row is what the log table holds, and one of them is one call —
-            // either the model was asked something and answered, or a tool was run and reported
-            // back. The turn is the several calls it took to answer the person once.
-            const count = document.createElement('span');
-            count.textContent = view.rows.length
-                + (view.rows.length === 1 ? ' call' : ' calls');
-            bar.appendChild(count);
-
-            // Whichever unit is being stepped through, the other one is one press away, and the
-            // row on screen is what the switch keeps hold of. Both buttons stay pressable: making
-            // the current one dead would change how the bar looks every time it is used. The
-            // conversation and the program are not repeated here — they are in this result's own
-            // heading, just above.
-            const modes = document.createElement('span');
-            modes.className = 'conv-reader-modes';
-            const showing = document.createElement('span');
-            showing.textContent = 'Move by:';
-            modes.appendChild(showing);
-            modes.appendChild(modeButton(readerId, 'turn', 'Turn'));
-            modes.appendChild(modeButton(readerId, 'row', 'Call'));
-            bar.appendChild(modes);
-
-            const keys = document.createElement('span');
-            keys.textContent = '(\u2190 \u2192 keys)';
-            bar.appendChild(keys);
-            box.appendChild(bar);
-
-            // The button that was just clicked has been replaced by this redraw, so the browser
-            // is focusing nothing and the arrow keys below would go unheard. Take the focus back.
-            box.focus({preventScroll: true});
-
+            // The calls of this turn, in the order they were made. This list is the structure the
+            // screen exists to show: a turn is these calls, and one of them is open below.
+            const calls = document.createElement('div');
+            calls.className = 'conv-calls';
+            calls.id = 'conv-calls';
             view.rows.forEach(function (row) {
-                if (view.rows.length > 1) {
-                    const label = document.createElement('div');
-                    label.className = 'conv-reader-row-label';
-                    label.textContent = row.label + ' \u00b7 ' + row.when;
-                    box.appendChild(label);
-                }
-                const body = document.createElement('pre');
-                body.className = 'conv-reader-body';
-                body.textContent = row.message;
-                box.appendChild(body);
+                const item = document.createElement('div');
+                item.className = 'conv-call';
+                item.dataset.logId = row.logId;
+                const label = document.createElement('span');
+                label.className = 'conv-call-label';
+                label.textContent = withoutTurn(row.label);
+                const summary = document.createElement('span');
+                summary.className = 'conv-call-summary';
+                summary.textContent = row.summary;
+                summary.title = row.summary;
+                item.appendChild(label);
+                item.appendChild(summary);
+                item.addEventListener('click', function () { selectCall(row.logId); });
+                calls.appendChild(item);
             });
+            detail.appendChild(calls);
+
+            const head = document.createElement('div');
+            head.className = 'conv-text-head';
+            head.id = 'conv-text-head';
+            detail.appendChild(head);
+
+            const text = document.createElement('pre');
+            text.className = 'conv-text';
+            text.id = 'conv-text';
+            detail.appendChild(text);
+
+            // The arrow keys act on the pane being read, so the pane is what listens.
+            detail.tabIndex = 0;
+            detail.addEventListener('keydown', onKey);
+            detail.focus({preventScroll: true});
+        }
+
+        async function selectCall(logId) {
+            if (!reading) return;
+            reading.callId = logId;
+            document.querySelectorAll('.conv-call').forEach(function (el) {
+                const on = Number(el.dataset.logId) === logId;
+                el.classList.toggle('selected', on);
+                if (on) el.scrollIntoView({block: 'nearest'});
+            });
+            const head = document.getElementById('conv-text-head');
+            const text = document.getElementById('conv-text');
+            const row = reading.view.rows.filter(function (r) { return r.logId === logId; })[0];
+            head.textContent = row ? row.label + '  ·  ' + row.when : '';
+            text.textContent = 'Loading…';
+            try {
+                const response = await fetch('/conversations/turn/' + logId + '?mode=row');
+                const one = response.ok ? await response.json() : null;
+                text.textContent = one && one.found && one.rows.length
+                    ? one.rows[0].message : 'Could not read this call.';
+            } catch (e) {
+                text.textContent = 'Could not read this call.';
+            }
+            text.scrollTop = 0;
+        }
+
+        // Left and right move between turns; up and down move between the calls of the one open.
+        function onKey(event) {
+            if (!reading) return;
+            const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+            if (keys.indexOf(event.key) < 0) return;
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                const target = event.key === 'ArrowLeft'
+                    ? reading.view.previousId : reading.view.nextId;
+                if (!target) return;
+                event.preventDefault();
+                loadTurn(target, target);
+                return;
+            }
+            const ids = reading.view.rows.map(function (r) { return r.logId; });
+            const at = ids.indexOf(reading.callId);
+            const next = event.key === 'ArrowUp' ? at - 1 : at + 1;
+            if (at < 0 || next < 0 || next >= ids.length) return;
+            event.preventDefault();
+            selectCall(ids[next]);
+        }
+
+        function arrow(direction, label, targetId) {
+            const glyph = direction === 'back' ? '←' : '→';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'conv-turn-arrow conv-turn-' + direction;
+            if (!targetId) {
+                // The same button in the same place, so reaching the end of a conversation does
+                // not rearrange the bar.
+                button.textContent = direction === 'back' ? glyph + ' —' : '— ' + glyph;
+                button.disabled = true;
+                button.title = 'Nothing further in this conversation';
+                return button;
+            }
+            const name = label.split('/')[0];
+            button.textContent = direction === 'back' ? glyph + ' ' + name : name + ' ' + glyph;
+            button.title = label;
+            button.addEventListener('click', function () { loadTurn(targetId, targetId); });
+            return button;
         }
 
         /** The label without its leading turn, e.g. step1/llm from turn7/step1/llm. */
@@ -307,50 +381,9 @@
             return slash < 0 ? label : label.slice(slash + 1);
         }
 
-        function arrow(direction, label, targetId, readerId, mode) {
-            const glyph = direction === 'back' ? '\u2190' : '\u2192';
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'conv-reader-arrow conv-reader-' + direction;
-            if (!targetId) {
-                // Still the same button in the same place, so that reaching the end of a
-                // conversation does not rearrange the bar.
-                button.textContent = direction === 'back' ? glyph + ' \u2014' : '\u2014 ' + glyph;
-                button.disabled = true;
-                button.title = 'Nothing further in this conversation';
-                return button;
-            }
-            // In turn mode the destination is a turn, so name the turn rather than the row that
-            // happens to be its edge; in row mode the row itself is what is being stepped to.
-            const name = mode === 'row' ? withoutTurn(label) : label.split('/')[0];
-            // The cell has a fixed width; the whole name stays available on hover.
-            button.textContent = direction === 'back' ? glyph + ' ' + name : name + ' ' + glyph;
-            button.title = label;
-            button.addEventListener('click', function () {
-                readers.get(readerId).at = targetId;
-                load(readerId);
-            });
-            return button;
-        }
-
-        function modeButton(readerId, mode, text) {
-            const state = readers.get(readerId);
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'conv-reader-mode conv-reader-mode-' + mode;
-            button.textContent = text;
-            if (state.mode === mode) {
-                button.classList.add('on');
-            }
-            button.addEventListener('click', function () {
-                if (state.mode === mode) {
-                    return;   // already showing this; pressing it again is not a change
-                }
-                state.mode = mode;
-                load(readerId);
-            });
-            return button;
-        }
+        document.querySelectorAll('.conv-hit').forEach(function (el) {
+            el.addEventListener('click', function () { selectHit(Number(el.dataset.logId)); });
+        });
     |}
     </script>
 {/body}

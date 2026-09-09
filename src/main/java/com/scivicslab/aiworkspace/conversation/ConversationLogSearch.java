@@ -175,19 +175,27 @@ public class ConversationLogSearch {
     }
 
     /**
-     * One recorded row: a single request/response the conversation wrote.
+     * One recorded call: the model was asked something and answered, or a tool was run and
+     * reported back.
      *
      * @param logId   the row in the {@code logs} table
      * @param when    when it was recorded
      * @param label   the row's label, e.g. {@code turn7/step1/llm}
-     * @param message the whole text
+     * @param summary its first line or so, enough to tell one call from another in a list
+     * @param message the whole text, or {@code ""} when only the summary was asked for
      */
-    public record Row(long logId, String when, String label, String message) {}
+    public record Row(long logId, String when, String label, String summary, String message) {}
+
+    /** How much of a call {@link #turnView} sends, so that listing a turn is not sending it. */
+    private static final int SUMMARY_CHARS = 200;
 
     /**
      * What is shown when a search result is opened, and where its arrows lead.
      *
-     * <p>In turn mode {@link #rows} holds every row of one turn; in row mode it holds the one row.
+     * <p>In turn mode {@link #rows} holds every call of one turn, each carrying only its summary:
+     * a turn can be dozens of calls and each call the whole of a request and its response, which is
+     * far more than listing them needs. In row mode it holds the one call, whole — that is how the
+     * screen fetches the text of the call a person picked out of the list.
      * {@link #previousId} and {@link #nextId} are the row to open next, already resolved for the
      * mode that was asked for, or {@code 0} at either end of the conversation.</p>
      *
@@ -242,6 +250,9 @@ public class ConversationLogSearch {
                 return NOT_FOUND;
             }
             List<Row> rows = wholeTurn ? turnRows(c, anchor) : List.of(row(c, logId));
+            if (!wholeTurn && rows.get(0) == null) {
+                return NOT_FOUND;
+            }
             if (rows.isEmpty() || rows.get(0) == null) {
                 return NOT_FOUND;
             }
@@ -283,22 +294,30 @@ public class ConversationLogSearch {
         }
     }
 
-    /** Every row of the anchor's turn, oldest first. */
+    /**
+     * Every call of the anchor's turn, oldest first, each summarised rather than whole.
+     *
+     * <p>The whole text is left out on purpose: a turn here can run to dozens of calls, each
+     * holding an entire request and response, and a list of them is read to choose one. The one
+     * chosen is fetched by {@link #rowView}.</p>
+     */
     private List<Row> turnRows(Connection c, Anchor anchor) throws Exception {
         String sql = """
-                SELECT id, timestamp, label, message FROM logs
+                SELECT id, timestamp, label, LEFT(message, ?) AS head FROM logs
                 WHERE session_id = ? AND label LIKE ?
                 ORDER BY id
                 """;
         List<Row> rows = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, anchor.sessionId());
+            // One character over, so a message cut short can be told from one that just fits.
+            ps.setInt(1, SUMMARY_CHARS + 1);
+            ps.setLong(2, anchor.sessionId());
             // The turn key plus "/" so that turn1 does not also take turn10's rows.
-            ps.setString(2, anchor.turn() + "/%");
+            ps.setString(3, anchor.turn() + "/%");
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     rows.add(new Row(rs.getLong("id"), text(rs.getTimestamp("timestamp")),
-                            nz(rs.getString("label")), nz(rs.getString("message"))));
+                            nz(rs.getString("label")), summarise(rs.getString("head")), ""));
                 }
             }
         }
@@ -310,10 +329,23 @@ public class ConversationLogSearch {
                 "SELECT id, timestamp, label, message FROM logs WHERE id = ?")) {
             ps.setLong(1, logId);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? new Row(rs.getLong("id"), text(rs.getTimestamp("timestamp")),
-                        nz(rs.getString("label")), nz(rs.getString("message"))) : null;
+                if (!rs.next()) {
+                    return null;
+                }
+                String message = nz(rs.getString("message"));
+                return new Row(rs.getLong("id"), text(rs.getTimestamp("timestamp")),
+                        nz(rs.getString("label")), summarise(message), message);
             }
         }
+    }
+
+    /** One line that tells this call from the next: its opening, with the line breaks taken out. */
+    static String summarise(String head) {
+        if (head == null) {
+            return "";
+        }
+        String flat = head.replaceAll("\\s+", " ").strip();
+        return flat.length() > SUMMARY_CHARS ? flat.substring(0, SUMMARY_CHARS) + "\u2026" : flat;
     }
 
     /**

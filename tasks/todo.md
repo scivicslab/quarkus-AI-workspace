@@ -67,8 +67,8 @@ turn の行は `label LIKE 'turnN/%'` で取る。末尾のスラッシュがな
 
 ### 検証
 
-- ユニットテスト 18 件（既存 9 + 新規 9）、全件緑。
-- E2E `ConversationTurnNavigationE2E` 34 項目、全件緑。テスト自身が固定データの会話 DB を作り、
+- ユニットテスト 21 件（既存 9 + 新規 12）、全件緑。全体では 87 件。
+- E2E `ConversationTurnNavigationE2E` 36 項目、全件緑。テスト自身が固定データの会話 DB を作り、
   `AI_WORKSPACE_CONVERSATION_LOG_DB_PATH` でポータルをそこへ向ける。turn の欠番、複数行 turn、
   会話の端、別会話への飛び出し、リーダー 2 つの独立、JavaScript エラー 0 件を検査する。
   `AiWorkspaceE2ERunner` に登録済み。
@@ -104,6 +104,29 @@ Turn / Row を切り替えるとバーの要素が動いていた。原因は 4 
 
 E2E は切替の前後で 4 つのボタンの `boundingBox` を実測して比較する。「動かない」を目視ではなく
 座標で固定した。この検査が (3) を捕まえた。
+
+### 縦に伸びて画面外へ出る件
+
+chat-ui3 の Sessions と同じ症状。入れ子の `<details>` を開くと文書そのものが伸びるので、turn が
+増えても call が増えても本文が長くても同じ 1 本の縦スクロールに積まれ、「いまどの turn のどの call を
+見ているか」が上へ流れて画面外へ出る。Conversations も `main` が伸びる作りだったので同じだった。
+
+文書を伸ばすのをやめ、画面をウィンドウの高さに固定して中の領域が独立にスクロールする 3 領域構成に
+した。左に検索結果、右上に turn バー、その下に call の一覧、さらに下に選んだ call の全文。
+call 一覧は右ペインの高さの 4 割を上限にしてあるので、30 call の turn でも下の本文を押し出さない。
+
+`layout.html` に `body.body-fill` / `main.main-fill` を追加し、Conversations 画面だけこの扱いにする。
+
+あわせて通信量も直した。turn の一覧では各 call の先頭 200 文字だけを `LEFT(message, ?)` で返し、
+全文は選んだ 1 件を `mode=row` で取りに行く。実データの 22 call の turn で 8,969 バイト。
+以前は 22 件の全文をまとめて返していた。
+
+Turn / Call のモード切替は消えた。turn が容れ物として見えていて call を直接選べる以上、切り替える
+対象がない。左右キーと矢印ボタンで turn を移動、上下キーで turn 内の call を移動する。
+
+E2E は 30 call・各 4 kB の turn を用意し、`documentElement.scrollHeight` が `window.innerHeight` を
+超えないこと、30 call の最後を選んでも turn 名・次への矢印・選択中の call・検索結果がウィンドウの
+矩形の内側に残ることを実測する。
 
 ### 「Row」という語
 
