@@ -228,27 +228,37 @@
 
             const bar = document.createElement('div');
             bar.className = 'conv-reader-bar';
-            bar.appendChild(arrow('\u2190', view.previousLabel, view.previousId, readerId));
+            // Each arrow names what it leads to. A bare glyph says only that something is there,
+            // and the one question in front of a reader is "further back to what?".
+            bar.appendChild(arrow('back', view.previousLabel, view.previousId, readerId, state.mode));
             const where = document.createElement('span');
             where.className = 'conv-reader-where';
             where.textContent = view.turn
                 + (state.mode === 'row' ? ' \u00b7 ' + view.rows[0].label : '');
             bar.appendChild(where);
-            bar.appendChild(arrow('\u2192', view.nextLabel, view.nextId, readerId));
+            bar.appendChild(arrow('forward', view.nextLabel, view.nextId, readerId, state.mode));
 
-            const gap = document.createElement('span');
-            gap.textContent = view.rows.length + (view.rows.length === 1 ? ' row' : ' rows')
-                + ' \u00b7 ' + view.conversation + ' \u00b7 ' + view.program;
-            bar.appendChild(gap);
+            const count = document.createElement('span');
+            count.textContent = view.rows.length
+                + (view.rows.length === 1 ? ' row' : ' rows');
+            bar.appendChild(count);
 
             // Whichever unit is being stepped through, the other one is one press away, and the
-            // row on screen is what the switch keeps hold of.
+            // row on screen is what the switch keeps hold of. The conversation and the program are
+            // not repeated here: they are in this result's own heading, just above.
+            const showing = document.createElement('span');
+            showing.textContent = 'Step by:';
+            bar.appendChild(showing);
             bar.appendChild(modeButton(readerId, 'turn', 'Turn'));
             bar.appendChild(modeButton(readerId, 'row', 'Row'));
             const keys = document.createElement('span');
-            keys.textContent = '\u2190 \u2192 keys';
+            keys.textContent = '(\u2190 \u2192 keys)';
             bar.appendChild(keys);
             box.appendChild(bar);
+
+            // The button that was just clicked has been replaced by this redraw, so the browser
+            // is focusing nothing and the arrow keys below would go unheard. Take the focus back.
+            box.focus({preventScroll: true});
 
             view.rows.forEach(function (row) {
                 if (view.rows.length > 1) {
@@ -264,15 +274,21 @@
             });
         }
 
-        function arrow(glyph, label, targetId, readerId) {
+        function arrow(direction, label, targetId, readerId, mode) {
+            const glyph = direction === 'back' ? '\u2190' : '\u2192';
             const button = document.createElement('button');
             button.type = 'button';
-            button.textContent = glyph;
+            button.className = 'conv-reader-arrow conv-reader-' + direction;
             if (!targetId) {
+                button.textContent = glyph;
                 button.disabled = true;
                 button.title = 'Nothing further in this conversation';
                 return button;
             }
+            // In turn mode the destination is a turn, so name the turn rather than the row that
+            // happens to be its edge; in row mode the row itself is what is being stepped to.
+            const name = mode === 'row' ? label : label.split('/')[0];
+            button.textContent = direction === 'back' ? glyph + ' ' + name : name + ' ' + glyph;
             button.title = label;
             button.addEventListener('click', function () {
                 readers.get(readerId).at = targetId;
@@ -285,9 +301,10 @@
             const state = readers.get(readerId);
             const button = document.createElement('button');
             button.type = 'button';
+            button.className = 'conv-reader-mode conv-reader-mode-' + mode;
             button.textContent = text;
             if (state.mode === mode) {
-                button.className = 'on';
+                button.classList.add('on');
                 button.disabled = true;
                 return button;
             }

@@ -33,6 +33,8 @@ public class AiWorkspaceE2ERunner {
         new DownloadLatestE2E().run();
         Thread.sleep(3_000);
         new ToolStartupSequenceE2E().run();
+        Thread.sleep(3_000);
+        new ConversationTurnNavigationE2E().run();
         System.out.println("=== All E2E tests PASSED ===");
     }
 }
