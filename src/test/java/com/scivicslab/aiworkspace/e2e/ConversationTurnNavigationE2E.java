@@ -81,6 +81,7 @@ public class ConversationTurnNavigationE2E {
                 arrowKeysStillWorkAfterClickingAnArrow(browser, base);
                 rowModeStepsInsideTheTurn(browser, base);
                 arrowsStopAtTheEndsOfTheConversation(browser, base);
+                theBarDoesNotMoveWhenTheModeIsSwitched(browser, base);
                 twoOpenReadersDoNotMoveEachOther(browser, base);
             } finally {
                 browser.close();
@@ -195,6 +196,50 @@ public class ConversationTurnNavigationE2E {
             check(back(other).isDisabled(),
                     "the other conversation's only turn has no back arrow");
         });
+    }
+
+    /**
+     * The bar does not rearrange itself when the mode is switched.
+     *
+     * <p>Turn mode names an arrow's destination {@code turn4}; row mode names it
+     * {@code turn1/step2/llm}. Laid out as a flex row, that alone moved every control to the right
+     * of it, and marking the current mode by disabling its button changed a third thing. The bar is
+     * a grid of fixed cells so that pressing Turn or Row changes what the controls say and nothing
+     * about where they are.</p>
+     */
+    private void theBarDoesNotMoveWhenTheModeIsSwitched(Browser browser, String base) {
+        withSearch(browser, base, page -> {
+            Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
+            var backBefore = back(reader).boundingBox();
+            var forwardBefore = forward(reader).boundingBox();
+            var turnBefore = reader.locator(".conv-reader-mode-turn").boundingBox();
+            var rowBefore = reader.locator(".conv-reader-mode-row").boundingBox();
+
+            reader.locator(".conv-reader-mode-row").click();
+            settle(page, reader);
+
+            check(sameBox(backBefore, back(reader).boundingBox()),
+                    "the back arrow stayed where it was");
+            check(sameBox(forwardBefore, forward(reader).boundingBox()),
+                    "the forward arrow stayed where it was");
+            check(sameBox(turnBefore, reader.locator(".conv-reader-mode-turn").boundingBox()),
+                    "the Turn button stayed where it was");
+            check(sameBox(rowBefore, reader.locator(".conv-reader-mode-row").boundingBox()),
+                    "the Row button stayed where it was");
+            check(reader.locator(".conv-reader-mode-row").isEnabled()
+                            && reader.locator(".conv-reader-mode-turn").isEnabled(),
+                    "both mode buttons stay pressable");
+        });
+    }
+
+    /** Two boxes are the same place and size, to within a pixel of rounding. */
+    private static boolean sameBox(com.microsoft.playwright.options.BoundingBox a,
+                                   com.microsoft.playwright.options.BoundingBox b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return Math.abs(a.x - b.x) < 1.5 && Math.abs(a.y - b.y) < 1.5
+                && Math.abs(a.width - b.width) < 1.5 && Math.abs(a.height - b.height) < 1.5;
     }
 
     /** Each open reader moves on its own. */

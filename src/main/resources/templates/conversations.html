@@ -44,20 +44,35 @@
             background: none; border: none; padding: 0; margin-top: 0.4rem;
         }
         .conv-reader { display: none; margin-top: 0.5rem; }
+        /* A grid, not a flex row: every cell keeps its width whatever it holds, so switching
+           between Turn and Row — which changes an arrow from "turn4" to "turn1/step2/llm" —
+           moves nothing on screen. */
         .conv-reader-bar {
-            display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+            display: grid; align-items: center;
+            grid-template-columns: 11rem 13rem 11rem 4.5rem auto 1fr;
+            column-gap: 0.5rem;
             font-size: 12px; color: var(--text-secondary); margin-bottom: 0.4rem;
         }
         .conv-reader-bar button {
             padding: 0.25rem 0.6rem; font-size: 12px; cursor: pointer;
             background: var(--bg-tertiary); color: var(--text-primary);
             border: 1px solid var(--border-color); border-radius: 4px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .conv-reader-bar button[disabled] { cursor: default; opacity: 0.4; }
+        .conv-reader-arrow { width: 100%; }
+        .conv-reader-modes { display: flex; align-items: center; gap: 0.4rem; }
+        /* Always bold, and always the same width: marking the pressed one by making it bold
+           widened that button and moved the other one every time the mode was switched. */
+        .conv-reader-mode { font-weight: 600; min-width: 3.6rem; text-align: center; }
         .conv-reader-bar button.on {
-            border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 600;
+            border-color: var(--accent-blue); color: var(--accent-blue);
+            background: var(--bg-secondary);
         }
-        .conv-reader-where { color: var(--accent-mauve); font-weight: 600; }
+        .conv-reader-where {
+            color: var(--accent-mauve); font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
         .conv-reader-row-label {
             font-size: 11px; color: var(--text-secondary); margin: 0.5rem 0 0.2rem;
         }
@@ -235,6 +250,7 @@
             where.className = 'conv-reader-where';
             where.textContent = view.turn
                 + (state.mode === 'row' ? ' \u00b7 ' + view.rows[0].label : '');
+            where.title = where.textContent;
             bar.appendChild(where);
             bar.appendChild(arrow('forward', view.nextLabel, view.nextId, readerId, state.mode));
 
@@ -244,13 +260,19 @@
             bar.appendChild(count);
 
             // Whichever unit is being stepped through, the other one is one press away, and the
-            // row on screen is what the switch keeps hold of. The conversation and the program are
-            // not repeated here: they are in this result's own heading, just above.
+            // row on screen is what the switch keeps hold of. Both buttons stay pressable: making
+            // the current one dead would change how the bar looks every time it is used. The
+            // conversation and the program are not repeated here — they are in this result's own
+            // heading, just above.
+            const modes = document.createElement('span');
+            modes.className = 'conv-reader-modes';
             const showing = document.createElement('span');
             showing.textContent = 'Step by:';
-            bar.appendChild(showing);
-            bar.appendChild(modeButton(readerId, 'turn', 'Turn'));
-            bar.appendChild(modeButton(readerId, 'row', 'Row'));
+            modes.appendChild(showing);
+            modes.appendChild(modeButton(readerId, 'turn', 'Turn'));
+            modes.appendChild(modeButton(readerId, 'row', 'Row'));
+            bar.appendChild(modes);
+
             const keys = document.createElement('span');
             keys.textContent = '(\u2190 \u2192 keys)';
             bar.appendChild(keys);
@@ -280,7 +302,9 @@
             button.type = 'button';
             button.className = 'conv-reader-arrow conv-reader-' + direction;
             if (!targetId) {
-                button.textContent = glyph;
+                // Still the same button in the same place, so that reaching the end of a
+                // conversation does not rearrange the bar.
+                button.textContent = direction === 'back' ? glyph + ' \u2014' : '\u2014 ' + glyph;
                 button.disabled = true;
                 button.title = 'Nothing further in this conversation';
                 return button;
@@ -288,6 +312,7 @@
             // In turn mode the destination is a turn, so name the turn rather than the row that
             // happens to be its edge; in row mode the row itself is what is being stepped to.
             const name = mode === 'row' ? label : label.split('/')[0];
+            // The cell has a fixed width; the whole name stays available on hover.
             button.textContent = direction === 'back' ? glyph + ' ' + name : name + ' ' + glyph;
             button.title = label;
             button.addEventListener('click', function () {
@@ -305,10 +330,11 @@
             button.textContent = text;
             if (state.mode === mode) {
                 button.classList.add('on');
-                button.disabled = true;
-                return button;
             }
             button.addEventListener('click', function () {
+                if (state.mode === mode) {
+                    return;   // already showing this; pressing it again is not a change
+                }
                 state.mode = mode;
                 load(readerId);
             });
