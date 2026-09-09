@@ -107,6 +107,15 @@ tools:
       - {key: nodes, label: "Node IPs / CIDR (comma-separated)", type: text, default: "192.168.5.0/26", jvmProp: "broker.nodes"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
+  - name: quarkus-slurm-monitor
+    jar: quarkus-slurm-monitor.jar
+    github: scivicslab/quarkus-slurm-monitor
+    port: 28006          # reserved fixed port (queue-wait monitor; reused if already running)
+    fixedPort: true
+    singleInstance: true
+    params:
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
   - name: pluggable-cli
     github: scivicslab/pluggable-cli
     library: true
