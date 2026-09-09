@@ -111,15 +111,23 @@ public class ConversationResource {
     }
 
     /**
-     * Returns one turn's whole text, for the screen to show under a result.
+     * Returns what to show under a search result, and where its arrows lead.
+     *
+     * <p>A search names one row, but a person reads a turn: the model call, the tools it ran, and
+     * the call after them are one exchange written as several rows. So {@code mode=turn} — the
+     * default — answers with the whole turn, and its arrows step to the turn before and after.
+     * {@code mode=row} answers with the one row and steps a row at a time, for reading inside a
+     * turn that ran many tools.</p>
      *
      * @param logId the row in the {@code logs} table
-     * @return the message, or {@code ""} when there is no such row
+     * @param mode  {@code turn} or {@code row}; anything else is read as {@code turn}
+     * @return the view, or one whose {@code found} is false when there is no such row
      */
     @GET
     @Path("/turn/{logId}")
-    @Produces(MediaType.TEXT_PLAIN)
-    public String turn(@PathParam("logId") long logId) {
-        return search.message(logId);
+    @Produces(MediaType.APPLICATION_JSON)
+    public ConversationLogSearch.View turn(@PathParam("logId") long logId,
+                                           @QueryParam("mode") @DefaultValue("turn") String mode) {
+        return "row".equals(mode) ? search.rowView(logId) : search.turnView(logId);
     }
 }

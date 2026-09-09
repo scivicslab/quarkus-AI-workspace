@@ -175,25 +175,181 @@ public class ConversationLogSearch {
     }
 
     /**
-     * Returns one turn's whole text.
+     * One recorded row: a single request/response the conversation wrote.
      *
-     * @param logId the row in the {@code logs} table
-     * @return the message, or {@code ""} when there is no such row
+     * @param logId   the row in the {@code logs} table
+     * @param when    when it was recorded
+     * @param label   the row's label, e.g. {@code turn7/step1/llm}
+     * @param message the whole text
      */
-    public String message(long logId) {
+    public record Row(long logId, String when, String label, String message) {}
+
+    /**
+     * What is shown when a search result is opened, and where its arrows lead.
+     *
+     * <p>In turn mode {@link #rows} holds every row of one turn; in row mode it holds the one row.
+     * {@link #previousId} and {@link #nextId} are the row to open next, already resolved for the
+     * mode that was asked for, or {@code 0} at either end of the conversation.</p>
+     *
+     * @param found        whether there is such a row at all
+     * @param logId        the row this view is anchored on
+     * @param sessionId    the conversation it belongs to
+     * @param conversation the conversation's recorded name
+     * @param program      which program and port held the conversation
+     * @param turn         the turn key, e.g. {@code turn7}
+     * @param rows         what to show, oldest first
+     * @param previousId   the row the back arrow opens, or {@code 0}
+     * @param previousLabel what that row is, for the arrow to name
+     * @param nextId       the row the forward arrow opens, or {@code 0}
+     * @param nextLabel    what that row is, for the arrow to name
+     */
+    public record View(boolean found, long logId, long sessionId, String conversation,
+                       String program, String turn, List<Row> rows,
+                       long previousId, String previousLabel,
+                       long nextId, String nextLabel) {}
+
+    /** An answer for a row that is not in the database. */
+    private static final View NOT_FOUND =
+            new View(false, 0, 0, "", "", "", List.of(), 0, "", 0, "");
+
+    /**
+     * The turn that {@code logId} belongs to, with the arrows pointing at the turns either side.
+     *
+     * <p>The turn is the unit a person reads: one exchange, which the log records as several rows
+     * (the model call, the tools it ran, the call after them). {@link #rowView} steps through those
+     * rows one at a time instead.</p>
+     *
+     * <p>The neighbouring turns are found from this turn's first and last row, not from its number:
+     * turn numbering has gaps in the recorded data (a conversation runs turn6 then turn8), so
+     * counting would walk off the end of what was written.</p>
+     */
+    public View turnView(long logId) {
+        return view(logId, true);
+    }
+
+    /** The one row {@code logId} names, with the arrows pointing at the rows either side. */
+    public View rowView(long logId) {
+        return view(logId, false);
+    }
+
+    private View view(long logId, boolean wholeTurn) {
         if (!present()) {
-            return "";
+            return NOT_FOUND;
         }
-        try (Connection c = open();
-             PreparedStatement ps = c.prepareStatement("SELECT message FROM logs WHERE id = ?")) {
+        try (Connection c = open()) {
+            Anchor anchor = anchor(c, logId);
+            if (anchor == null) {
+                return NOT_FOUND;
+            }
+            List<Row> rows = wholeTurn ? turnRows(c, anchor) : List.of(row(c, logId));
+            if (rows.isEmpty() || rows.get(0) == null) {
+                return NOT_FOUND;
+            }
+            long firstId = rows.get(0).logId();
+            long lastId = rows.get(rows.size() - 1).logId();
+            Neighbour previous = neighbour(c, anchor.sessionId(), firstId, false);
+            Neighbour next = neighbour(c, anchor.sessionId(), lastId, true);
+            return new View(true, logId, anchor.sessionId(), anchor.conversation(),
+                    anchor.program(), anchor.turn(), rows,
+                    previous.logId(), previous.label(), next.logId(), next.label());
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Could not read around turn " + logId, e);
+            return NOT_FOUND;
+        }
+    }
+
+    /** Which conversation and turn a row belongs to. */
+    private record Anchor(long sessionId, String conversation, String program, String turn) {}
+
+    /** A row an arrow leads to; {@code logId} is {@code 0} when there is none. */
+    private record Neighbour(long logId, String label) {}
+
+    private Anchor anchor(Connection c, long logId) throws Exception {
+        String sql = """
+                SELECT l.session_id, l.label, s.workflow_name, s.command_line, s.source_db
+                FROM logs l JOIN sessions s ON s.id = l.session_id
+                WHERE l.id = ?
+                """;
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, logId);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? nz(rs.getString("message")) : "";
+                if (!rs.next()) {
+                    return null;
+                }
+                return new Anchor(rs.getLong("session_id"), nz(rs.getString("workflow_name")),
+                        programOf(rs.getString("command_line"), rs.getString("source_db")),
+                        turnKey(nz(rs.getString("label"))));
             }
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "Could not read turn " + logId, e);
-            return "";
         }
+    }
+
+    /** Every row of the anchor's turn, oldest first. */
+    private List<Row> turnRows(Connection c, Anchor anchor) throws Exception {
+        String sql = """
+                SELECT id, timestamp, label, message FROM logs
+                WHERE session_id = ? AND label LIKE ?
+                ORDER BY id
+                """;
+        List<Row> rows = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, anchor.sessionId());
+            // The turn key plus "/" so that turn1 does not also take turn10's rows.
+            ps.setString(2, anchor.turn() + "/%");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new Row(rs.getLong("id"), text(rs.getTimestamp("timestamp")),
+                            nz(rs.getString("label")), nz(rs.getString("message"))));
+                }
+            }
+        }
+        return rows;
+    }
+
+    private Row row(Connection c, long logId) throws Exception {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT id, timestamp, label, message FROM logs WHERE id = ?")) {
+            ps.setLong(1, logId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? new Row(rs.getLong("id"), text(rs.getTimestamp("timestamp")),
+                        nz(rs.getString("label")), nz(rs.getString("message"))) : null;
+            }
+        }
+    }
+
+    /**
+     * The row just past {@code fromId} in the same conversation, in either direction.
+     *
+     * <p>Ordering on {@code id} rather than on {@code timestamp}: {@code LogMerger} copies one
+     * conversation's rows in one contiguous run, so within a conversation the merged {@code id}
+     * order is the order the rows were written — checked against every row of the merged database,
+     * where none is older than the row before it.</p>
+     */
+    private Neighbour neighbour(Connection c, long sessionId, long fromId, boolean forward)
+            throws Exception {
+        String sql = forward
+                ? "SELECT id, label FROM logs WHERE session_id = ? AND id > ? ORDER BY id LIMIT 1"
+                : "SELECT id, label FROM logs WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT 1";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            ps.setLong(2, fromId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? new Neighbour(rs.getLong("id"), nz(rs.getString("label")))
+                        : new Neighbour(0, "");
+            }
+        }
+    }
+
+    /**
+     * The turn a label belongs to.
+     *
+     * @param label a row's label, e.g. {@code turn7/step1/llm}
+     * @return the part before the first {@code /}, e.g. {@code turn7}; the whole label when it
+     *         holds no {@code /}, so that a row written in some other shape still groups with
+     *         itself rather than with everything else
+     */
+    static String turnKey(String label) {
+        int slash = label.indexOf('/');
+        return slash < 0 ? label : label.substring(0, slash);
     }
 
     /**

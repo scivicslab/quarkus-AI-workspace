@@ -43,9 +43,26 @@
             font-size: 12px; color: var(--accent-blue); cursor: pointer;
             background: none; border: none; padding: 0; margin-top: 0.4rem;
         }
-        .conv-hit-full {
-            display: none; margin-top: 0.5rem; padding: 0.5rem;
-            background: var(--code-bg); border-radius: 4px;
+        .conv-reader { display: none; margin-top: 0.5rem; }
+        .conv-reader-bar {
+            display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+            font-size: 12px; color: var(--text-secondary); margin-bottom: 0.4rem;
+        }
+        .conv-reader-bar button {
+            padding: 0.25rem 0.6rem; font-size: 12px; cursor: pointer;
+            background: var(--bg-tertiary); color: var(--text-primary);
+            border: 1px solid var(--border-color); border-radius: 4px;
+        }
+        .conv-reader-bar button[disabled] { cursor: default; opacity: 0.4; }
+        .conv-reader-bar button.on {
+            border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 600;
+        }
+        .conv-reader-where { color: var(--accent-mauve); font-weight: 600; }
+        .conv-reader-row-label {
+            font-size: 11px; color: var(--text-secondary); margin: 0.5rem 0 0.2rem;
+        }
+        .conv-reader-body {
+            padding: 0.5rem; background: var(--code-bg); border-radius: 4px;
             font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
             font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
             max-height: 30rem; overflow-y: auto;
@@ -124,9 +141,9 @@
                 </div>
                 <div class="conv-hit-snippet">{hit.snippet}</div>
                 <button class="conv-hit-toggle" onclick="showTurn(this, {hit.logId})">
-                    Show the whole turn
+                    Read this turn
                 </button>
-                <pre class="conv-hit-full" id="turn-{hit.logId}"></pre>
+                <div class="conv-reader" id="reader-{hit.logId}" tabindex="0"></div>
             </div>
         {/for}
     {/if}
@@ -141,23 +158,146 @@
     {/if}
 
     <script>
-        // The whole turn is fetched on demand: a search can return a hundred turns, and a turn
-        // holds the entire request and response, which is far more text than a page needs upfront.
+    {|
+        // A turn is fetched on demand: a search can return a hundred results, and one turn holds
+        // entire requests and responses — far more text than a page needs upfront.
+        //
+        // What a reader is showing moves away from the row the search matched as soon as an arrow
+        // is pressed, so each open reader remembers its own current row and mode rather than
+        // reading them back off the result it was opened from.
+        const readers = new Map();
+
         async function showTurn(button, logId) {
-            const box = document.getElementById('turn-' + logId);
+            const box = document.getElementById('reader-' + logId);
             if (box.style.display === 'block') {
                 box.style.display = 'none';
-                button.textContent = 'Show the whole turn';
+                readers.delete(logId);
+                button.textContent = 'Read this turn';
                 return;
-            }
-            if (!box.textContent) {
-                box.textContent = 'Loading…';
-                const response = await fetch('/conversations/turn/' + logId);
-                box.textContent = response.ok ? await response.text() : 'Could not read this turn.';
             }
             box.style.display = 'block';
             button.textContent = 'Hide';
+            readers.set(logId, {at: logId, mode: 'turn'});
+            // Bound to the reader rather than to the document: several readers can be open at
+            // once, and a document-wide handler would also fire while the search box is being
+            // typed into.
+            if (!box.dataset.keysBound) {
+                box.addEventListener('keydown', function (event) {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                    const step = readers.get(logId);
+                    if (!step) return;
+                    const target = event.key === 'ArrowLeft' ? step.previousId : step.nextId;
+                    if (!target) return;
+                    event.preventDefault();
+                    step.at = target;
+                    load(logId);
+                });
+                box.dataset.keysBound = '1';
+            }
+            box.focus({preventScroll: true});
+            await load(logId);
         }
+
+        async function load(readerId) {
+            const state = readers.get(readerId);
+            const box = document.getElementById('reader-' + readerId);
+            if (!state || !box) return;
+            box.textContent = 'Loading…';
+            let view;
+            try {
+                const response = await fetch(
+                    '/conversations/turn/' + state.at + '?mode=' + state.mode);
+                view = response.ok ? await response.json() : null;
+            } catch (e) {
+                view = null;
+            }
+            if (!view || !view.found) {
+                box.textContent = 'Could not read this turn.';
+                return;
+            }
+            draw(readerId, view);
+        }
+
+        function draw(readerId, view) {
+            const state = readers.get(readerId);
+            const box = document.getElementById('reader-' + readerId);
+            box.textContent = '';
+            // Where the arrow keys go from here, in whichever unit is being stepped through.
+            state.previousId = view.previousId;
+            state.nextId = view.nextId;
+
+            const bar = document.createElement('div');
+            bar.className = 'conv-reader-bar';
+            bar.appendChild(arrow('\u2190', view.previousLabel, view.previousId, readerId));
+            const where = document.createElement('span');
+            where.className = 'conv-reader-where';
+            where.textContent = view.turn
+                + (state.mode === 'row' ? ' \u00b7 ' + view.rows[0].label : '');
+            bar.appendChild(where);
+            bar.appendChild(arrow('\u2192', view.nextLabel, view.nextId, readerId));
+
+            const gap = document.createElement('span');
+            gap.textContent = view.rows.length + (view.rows.length === 1 ? ' row' : ' rows')
+                + ' \u00b7 ' + view.conversation + ' \u00b7 ' + view.program;
+            bar.appendChild(gap);
+
+            // Whichever unit is being stepped through, the other one is one press away, and the
+            // row on screen is what the switch keeps hold of.
+            bar.appendChild(modeButton(readerId, 'turn', 'Turn'));
+            bar.appendChild(modeButton(readerId, 'row', 'Row'));
+            const keys = document.createElement('span');
+            keys.textContent = '\u2190 \u2192 keys';
+            bar.appendChild(keys);
+            box.appendChild(bar);
+
+            view.rows.forEach(function (row) {
+                if (view.rows.length > 1) {
+                    const label = document.createElement('div');
+                    label.className = 'conv-reader-row-label';
+                    label.textContent = row.label + ' \u00b7 ' + row.when;
+                    box.appendChild(label);
+                }
+                const body = document.createElement('pre');
+                body.className = 'conv-reader-body';
+                body.textContent = row.message;
+                box.appendChild(body);
+            });
+        }
+
+        function arrow(glyph, label, targetId, readerId) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = glyph;
+            if (!targetId) {
+                button.disabled = true;
+                button.title = 'Nothing further in this conversation';
+                return button;
+            }
+            button.title = label;
+            button.addEventListener('click', function () {
+                readers.get(readerId).at = targetId;
+                load(readerId);
+            });
+            return button;
+        }
+
+        function modeButton(readerId, mode, text) {
+            const state = readers.get(readerId);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = text;
+            if (state.mode === mode) {
+                button.className = 'on';
+                button.disabled = true;
+                return button;
+            }
+            button.addEventListener('click', function () {
+                state.mode = mode;
+                load(readerId);
+            });
+            return button;
+        }
+    |}
     </script>
 {/body}
 {/include}

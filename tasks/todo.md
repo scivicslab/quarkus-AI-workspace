@@ -1,46 +1,85 @@
-# 会話ログの横断検索
+# Conversations 検索結果から前後の turn へ移動する
 
-## 調査（完了）
+## 現状
 
-- [x] 会話ログのデータベースの実測（47ファイル、58.6 MiB、1日あたり0.8 MiB）
-- [x] `chat-ui-iolog-<ポート番号>.mv.db` のスキーマ確認（`sessions` / `logs` / `node_results`）
-- [x] 1会話ターンが `logs` テーブルの1行として書かれることの確認
-- [x] `log-merge` の統合機能の確認（`source_db` 列の付加、重複判定の基準）
-- [x] `log-search` に本文キーワード検索が無いことの確認
-- [x] `db-clear` が稼働中のデータベースを判定できないことの確認
-- [x] 本文キーワード検索が `IoLogView.logs()` の中だけにあることの確認
-- [x] 4つの CLI サブコマンドを実際に起動して確認（`~/.turing-workflow/plugins.yaml` が無いため未登録、
-      登録しても H2 のドライバが無く全接続が失敗、`--scan ~/works` が会話ログ以外を55個拾う）
+`/conversations` は `logs` の `message` を部分一致で検索し、1 行を 1 件のヒットとして返す。
+ヒットを開くと `GET /conversations/turn/{logId}` がその行の本文だけをプレーンテキストで返す。
+そこから前後へ移動する手段がない。
 
-## 設計文書（完了）
+## データの前提（マージ済み DB を実測して確認）
 
-- [x] `ConversationLogSearchPlacement_260908_oo01` を
-      `doc_SCIVICS002/docs/quarkus-AI-workspace/040_design` に置く
+- `logs` は `id`(BIGINT)、`session_id`、`timestamp`、`label`、`message` を持つ。
+- `LogMerger.copyLogs` が 1 会話分の行を連続挿入するため、同一 `session_id` 内では `id` 昇順が
+  時系列順になる。全行検査で `id` 順に対し `timestamp` が逆行する行は 0 件。
+- `label` は全行が `turnN/stepM/{llm|tool}` の形。空・NULL は 0 件。
+- 1 つの turn が複数行にまたがる（`turn1/step1/llm`, `turn1/step1/tool`, `turn1/step2/llm` …）。
+- turn 番号には欠番がある（例: turn6 の次が turn8）。よって移動は番号の増減ではなく
+  `id` 順で次に現れる別 turn として求める。
 
-## 実装（未着手・設計文書の承認待ち）
+## 設計
 
-- [x] `~/.turing-workflow/plugins.yaml` を作り `plugin-log-db` と `com.h2database:h2` を登録する
-      （H2 の同梱は不要だった。ホストは1エントリにつき1つの jar しか解決しないため、
-      H2 を別エントリとして並べれば同じクラスローダに載る）
-- [x] `MergeLogsCLI.openDatabase` の JDBC URL に `AUTO_SERVER=TRUE` を足す
-- [x] `log-merge` に `--name-prefix` を足し、走査対象をファイル名で絞る
-- [x] `log-merge` の統合先を `COMPRESS=TRUE` で開く（79 MB → 35 MB）
-- [x] `log-merge` が `cwd` / `command_line` / `plugin_version` 等6列を写すようにする
-- [x] `IoLogStore` が呼ぶ `startSession` を10引数の形に変える（`quarkus-chat-ui` と
-      `chat-ui-with-audit-trail` の両方）
-- [x] `quarkus-AI-workspace` に Conversations 画面を足す（`ConversationLogSearch` と
-      `ConversationResource` と `conversations.html`、`layout.html` にタブを追加）
-- [x] `assetVersion` を `AssetVersion` bean に切り出し、画面をまたいで同じ値にする
-- [x] `ConversationLogSearchTest` を書く（9件 GREEN）
-- [x] 集約の実装を `LogMerger` として `plugin-log-db` に切り出し、`MergeLogsCLI` を委譲に変える
-- [x] `quarkus-AI-workspace` が `LogMerger` を直接呼ぶ（`ConversationLogMerge` と
-      `ConversationLogMergeActor`、画面の Collect new conversations ボタン）
-- [x] 本番の `quarkus-AI-workspace`（ポート28000）を新しい jar で再起動し、初回の集約を実行
-- [x] 5つのリポジトリを push する（`quarkus-chat-ui` と `chat-ui-with-audit-trail` は
-      別セッションが先に push 済みだった）
-- [x] `quarkus-chat-ui` と `chat-ui-with-audit-trail` を Build Snapshot で入れ替える
-      （`~/works` の jar は新しい。稼働中のインスタンスは古い jar のまま動いている）
-- [x] 稼働中の会話インスタンス7つを全て新しい jar で再起動する
-- [ ] `chat-ui-with-audit-trail` の Activity が旧いセッション名を見つけられない問題
-      （ポート28012。`findResumableSession` は `chat-ui-conversation-<タブ識別子>` だけを探すが、
-      このデータベースには `chat-ui-conversation` という旧名のセッションしかない）
+既定は turn 単位。パネルにはその turn に属する全行を `id` 順で並べ、各行に `label` を見出しとして付ける。
+← / → はその会話の中で前後の turn へ移動する。行単位モードも用意し、トグルで切り替える。
+モードを切り替えても、いま見ている行を軸に位置を保つ。
+
+前後の turn は、現在の turn に属する行の `id` の最小・最大を基準に求める。
+turn キーが会話の中で非連続に現れても正しく動く。
+
+- 次の turn: `session_id` が同じで `id > (現 turn の最大 id)` の最初の行が属する turn
+- 前の turn: `session_id` が同じで `id < (現 turn の最小 id)` の最後の行が属する turn
+- 次の行 / 前の行: 同様に `id` の直後・直前の行
+
+## 手順
+
+- [x] 1. `ConversationLogSearch` に turn / 行の取得と前後の解決を追加する
+      (`turnAt(logId)`, `rowAt(logId)`, それぞれの prev/next)
+- [x] 2. `ConversationLogSearchTest` — turn キーの抽出と前後の解決をユニットテストする
+      (H2 のインメモリ DB に固定データを入れて検証。外部サービスに触れない)
+- [x] 3. `ConversationResource` の `GET /conversations/turn/{logId}` を JSON に変える。
+      本文に加えて `sessionId`・`turn`・行の一覧・前後の `logId` とラベルを返す
+- [x] 4. `conversations.html` の `showTurn` を書き換える。turn/行のトグル、← / → ボタン、
+      左右キーでの移動、端では無効化
+- [x] 5. `rm -rf target` してから `mvn install`、実機で検索 → turn 移動 → 行移動を確認する
+
+## Review
+
+### 追加したもの
+
+検索結果を開くと、その行が属する turn の全行が `label` 見出し付きで並ぶ。バーの ← → で会話内の
+前後の turn へ移動し、Turn / Row のトグルで行単位に切り替えられる。左右キーでも移動できる。
+キー操作はドキュメント全体ではなく開いているリーダー要素に結び付けた。複数の結果を同時に開けること、
+検索ボックスへの入力を奪わないことが理由。
+
+`ConversationLogSearch` に `turnView` / `rowView` と `View` / `Row` レコードを追加。
+`GET /conversations/turn/{logId}` はプレーンテキストから JSON になり、`mode=turn|row` を取る。
+本文だけを返していた `message(long)` は呼ばれなくなったので削除した。
+
+### 実装上の判断
+
+前後の turn は番号の増減ではなく、現在の turn に属する行の `id` の最小・最大を基準に求める。
+turn 番号には実データで欠番があり（turn6 の次が turn8）、番号を数えると書かれていない turn を指す。
+同じ turn の行が非連続に現れても正しく動く。範囲は必ず同一 `session_id` に閉じる。
+
+turn の行は `label LIKE 'turnN/%'` で取る。末尾のスラッシュがないと `turn1` が `turn10` の行まで拾う。
+
+`id` 順を時系列順として使えるのは、`LogMerger.copyLogs` が 1 会話分の行を連続挿入するため。
+マージ済み DB の全行を検査し、`id` 順に対し `timestamp` が逆行する行が 0 件であることを確認した。
+
+### 検証
+
+- ユニットテスト 18 件（既存 9 + 新規 9）、全件緑。
+- ヘッドレスブラウザで 12 項目、全件緑（`~/tools/headless-verify/verify_conv_turn_nav.js`）。
+  検索 → turn を開く → → で次の turn → ← で戻る → Row 切替 → Turn 復帰 → 右矢印キー、
+  複数行 turn の全行にラベルが付くこと、JavaScript エラーが 0 件であること。
+- 実データでの API 確認: 22 行の `turn18` の途中の行を開くと全 22 行が並び、← が `turn17`、
+  → が `turn19` を指す。同じ行の row モードでは前後が turn 内の隣接行になる。
+
+### 途中で見つかった不具合
+
+Qute が `<script>` 内の JavaScript オブジェクトリテラルをテンプレート式として解釈し、画面が 500 に
+なっていた。ユニットテストはサーバ側しか見ないので通り、画面を開いて初めて出た。当該スクリプトを
+Qute の未解釈ブロック `{| ... |}` で囲んで修正。
+
+### 未対応
+
+- 稼働中の 28000 には反映していない。ビルド済み jar の差し替えと再起動はユーザーの操作を待つ。
