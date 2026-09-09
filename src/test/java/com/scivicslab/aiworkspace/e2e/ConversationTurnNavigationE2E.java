@@ -159,25 +159,35 @@ public class ConversationTurnNavigationE2E {
         });
     }
 
-    /** Row mode shows one row and steps inside the turn; turn mode brings the whole turn back. */
+    /**
+     * Call mode shows one call and steps inside the turn; turn mode brings the whole turn back.
+     *
+     * <p>"Call" is what the screen says. One row of the log is one call — the model was asked and
+     * answered, or a tool was run and reported back — and "row" named the table rather than the
+     * thing. The class names and the endpoint's {@code mode=row} still say row, because there the
+     * unit really is a row of {@code logs}.</p>
+     */
     private void rowModeStepsInsideTheTurn(Browser browser, String base) {
         withSearch(browser, base, page -> {
             Locator reader = openResultFor(page, ALPHA_TURN1_LLM);
             reader.locator(".conv-reader-mode-row").click();
             settle(page, reader);
-            check(bodies(reader) == 1, "row mode shows one row (" + bodies(reader) + ")");
-            check(where(reader).contains("turn1/step1/llm"),
-                    "row mode names the row (" + where(reader) + ")");
+            check(bodies(reader) == 1, "call mode shows one call (" + bodies(reader) + ")");
+            check(where(reader).equals("turn1 \u00b7 step1/llm"),
+                    "call mode names the call without repeating its turn (" + where(reader) + ")");
 
             forward(reader).click();
             settle(page, reader);
-            check(where(reader).contains("turn1/step1/tool"),
-                    "forward steps to the next row of the same turn (" + where(reader) + ")");
+            check(where(reader).equals("turn1 \u00b7 step1/tool"),
+                    "forward steps to the next call of the same turn (" + where(reader) + ")");
 
             reader.locator(".conv-reader-mode-turn").click();
             settle(page, reader);
             check(bodies(reader) == 3,
                     "turn mode shows the whole turn again (" + bodies(reader) + ")");
+            check(reader.locator(".conv-reader-mode-turn").textContent().trim().equals("Turn")
+                            && reader.locator(".conv-reader-mode-row").textContent().trim().equals("Call"),
+                    "the units are named for what they are, not for the table they come from");
         });
     }
 

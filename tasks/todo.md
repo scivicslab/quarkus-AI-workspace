@@ -68,7 +68,7 @@ turn の行は `label LIKE 'turnN/%'` で取る。末尾のスラッシュがな
 ### 検証
 
 - ユニットテスト 18 件（既存 9 + 新規 9）、全件緑。
-- E2E `ConversationTurnNavigationE2E` 33 項目、全件緑。テスト自身が固定データの会話 DB を作り、
+- E2E `ConversationTurnNavigationE2E` 34 項目、全件緑。テスト自身が固定データの会話 DB を作り、
   `AI_WORKSPACE_CONVERSATION_LOG_DB_PATH` でポータルをそこへ向ける。turn の欠番、複数行 turn、
   会話の端、別会話への飛び出し、リーダー 2 つの独立、JavaScript エラー 0 件を検査する。
   `AiWorkspaceE2ERunner` に登録済み。
@@ -104,6 +104,19 @@ Turn / Row を切り替えるとバーの要素が動いていた。原因は 4 
 
 E2E は切替の前後で 4 つのボタンの `boundingBox` を実測して比較する。「動かない」を目視ではなく
 座標で固定した。この検査が (3) を捕まえた。
+
+### 「Row」という語
+
+`logs` テーブルの行というデータベース側の語が画面に出ていた。1 行の中身は `REQUEST:/RESPONSE:` か
+`TOOL:/INPUT:` のどちらかで、実体は「モデルへの 1 回の呼び出しとその応答」か「ツールへの 1 回の
+呼び出しとその入出力」。よって画面では Call と呼ぶ。turn は、人の 1 回の発言に答えるために要した
+複数の呼び出しのまとまり。
+
+表示は `Move by: Turn | Call`、件数は `3 calls`。現在位置は call 側で `turn1 · turn1/step1/llm` と
+turn 名が二重に出ていたので `turn1 · step1/llm` にした。矢印も call モードでは turn を繰り返さない。
+
+サーバ側の `mode=row` と Java の `rowView` は row のまま。あの層では本当に `logs` の行であり、
+画面の語だけを実体に合わせた。
 
 ### 途中で見つかった不具合
 

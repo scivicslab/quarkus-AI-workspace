@@ -64,7 +64,7 @@
         .conv-reader-modes { display: flex; align-items: center; gap: 0.4rem; }
         /* Always bold, and always the same width: marking the pressed one by making it bold
            widened that button and moved the other one every time the mode was switched. */
-        .conv-reader-mode { font-weight: 600; min-width: 3.6rem; text-align: center; }
+        .conv-reader-mode { font-weight: 600; min-width: 3.8rem; text-align: center; }
         .conv-reader-bar button.on {
             border-color: var(--accent-blue); color: var(--accent-blue);
             background: var(--bg-secondary);
@@ -248,15 +248,20 @@
             bar.appendChild(arrow('back', view.previousLabel, view.previousId, readerId, state.mode));
             const where = document.createElement('span');
             where.className = 'conv-reader-where';
+            // In call mode the label repeats the turn it belongs to, which is the word right
+            // before it; show only the part that says which call.
             where.textContent = view.turn
-                + (state.mode === 'row' ? ' \u00b7 ' + view.rows[0].label : '');
+                + (state.mode === 'row' ? ' \u00b7 ' + withoutTurn(view.rows[0].label) : '');
             where.title = where.textContent;
             bar.appendChild(where);
             bar.appendChild(arrow('forward', view.nextLabel, view.nextId, readerId, state.mode));
 
+            // "Call", not "row": a row is what the log table holds, and one of them is one call —
+            // either the model was asked something and answered, or a tool was run and reported
+            // back. The turn is the several calls it took to answer the person once.
             const count = document.createElement('span');
             count.textContent = view.rows.length
-                + (view.rows.length === 1 ? ' row' : ' rows');
+                + (view.rows.length === 1 ? ' call' : ' calls');
             bar.appendChild(count);
 
             // Whichever unit is being stepped through, the other one is one press away, and the
@@ -267,10 +272,10 @@
             const modes = document.createElement('span');
             modes.className = 'conv-reader-modes';
             const showing = document.createElement('span');
-            showing.textContent = 'Step by:';
+            showing.textContent = 'Move by:';
             modes.appendChild(showing);
             modes.appendChild(modeButton(readerId, 'turn', 'Turn'));
-            modes.appendChild(modeButton(readerId, 'row', 'Row'));
+            modes.appendChild(modeButton(readerId, 'row', 'Call'));
             bar.appendChild(modes);
 
             const keys = document.createElement('span');
@@ -296,6 +301,12 @@
             });
         }
 
+        /** The label without its leading turn, e.g. step1/llm from turn7/step1/llm. */
+        function withoutTurn(label) {
+            const slash = label.indexOf('/');
+            return slash < 0 ? label : label.slice(slash + 1);
+        }
+
         function arrow(direction, label, targetId, readerId, mode) {
             const glyph = direction === 'back' ? '\u2190' : '\u2192';
             const button = document.createElement('button');
@@ -311,7 +322,7 @@
             }
             // In turn mode the destination is a turn, so name the turn rather than the row that
             // happens to be its edge; in row mode the row itself is what is being stepped to.
-            const name = mode === 'row' ? label : label.split('/')[0];
+            const name = mode === 'row' ? withoutTurn(label) : label.split('/')[0];
             // The cell has a fixed width; the whole name stays available on hover.
             button.textContent = direction === 'back' ? glyph + ' ' + name : name + ' ' + glyph;
             button.title = label;
