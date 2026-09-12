@@ -60,9 +60,10 @@ tools:
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
       # which points directly at a vLLM node, this app talks to quarkus-gpu-broker's
       # OpenAiCompatResource — the value must be a full base URL (http://host:port) for the
-      # broker, not a bare vLLM node IP/hostname. Leave blank to fall back to the value hardcoded
-      # in application.properties (currently http://localhost:28005).
-      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      # broker, not a bare vLLM node IP/hostname. The broker speaks plain HTTP: an https:// value
+      # makes every request fail at once with "Unrecognized SSL message", so the form starts with
+      # the broker's own address rather than an empty box someone has to fill in.
+      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://localhost:28005", jvmProp: "chat-ui.servers"}
       # Publishes the conversations so a parent interpreter — Turing Workflow Editor — can drive
       # them (WorkflowTab_260906_oo01). Off by default: whatever reaches the published port can
       # drive a conversation, and through it read and write under ~/works. The published port is
@@ -83,9 +84,10 @@ tools:
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
       # which points directly at a vLLM node, this app talks to quarkus-gpu-broker's
       # OpenAiCompatResource — the value must be a full base URL (http://host:port) for the
-      # broker, not a bare vLLM node IP/hostname. Leave blank to fall back to the value hardcoded
-      # in application.properties (currently http://localhost:28005).
-      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      # broker, not a bare vLLM node IP/hostname. The broker speaks plain HTTP: an https:// value
+      # makes every request fail at once with "Unrecognized SSL message", so the form starts with
+      # the broker's own address rather than an empty box someone has to fill in.
+      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://localhost:28005", jvmProp: "chat-ui.servers"}
       # Publishes the conversations so a parent interpreter — Turing Workflow Editor — can drive
       # them (WorkflowTab_260906_oo01). Off by default: whatever reaches the published port can
       # drive a conversation, and through it read and write under ~/works. The published port is
