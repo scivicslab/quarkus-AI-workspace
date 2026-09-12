@@ -160,11 +160,12 @@ public class JvmBackend implements ServiceBackend {
      * port to a tool by JAR name.
      */
     private void scanRangeAndAdopt(int start, int end, String currentUser) {
-        // Build resolvedJar → tool map
-        java.util.Map<String, AiWorkspaceConfig.ToolDefinition> jarToTool = new java.util.LinkedHashMap<>();
+        // Every tool with its resolved jar. Two tools may share a jar (the audit-trail tiles,
+        // CompanionJars_260912_oo01), so this is a list, and pickToolForProcess tells them apart.
+        List<Map.Entry<String, AiWorkspaceConfig.ToolDefinition>> jarAndTool = new ArrayList<>();
         for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             String jar = ProcessSupervisor.resolveJarPath(ProcessSupervisor.expandEnvVars(tool.jar()));
-            if (jar != null && !jar.isBlank()) jarToTool.put(jar, tool);
+            if (jar != null && !jar.isBlank()) jarAndTool.add(Map.entry(jar, tool));
         }
 
         for (int port = start; port <= end; port++) {
@@ -180,10 +181,7 @@ public class JvmBackend implements ServiceBackend {
             }
 
             String[] args = handle.info().arguments().orElse(new String[0]);
-            AiWorkspaceConfig.ToolDefinition matchedTool = null;
-            for (Map.Entry<String, AiWorkspaceConfig.ToolDefinition> entry : jarToTool.entrySet()) {
-                if (jarMatches(entry.getKey(), args)) { matchedTool = entry.getValue(); break; }
-            }
+            AiWorkspaceConfig.ToolDefinition matchedTool = pickToolForProcess(jarAndTool, args);
             if (matchedTool == null) continue;
 
             final AiWorkspaceConfig.ToolDefinition adopted = matchedTool;
@@ -618,6 +616,31 @@ public class JvmBackend implements ServiceBackend {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * The tool a running process belongs to. Its jar must appear in the process arguments; when
+     * more than one tool runs that jar, the one whose expanded {@code jvmArgs} all appear in the
+     * arguments wins, the most of them first, so the tile that launched with
+     * {@code -Dchat-ui.plugins=...} is told apart from the tile that launched without it.
+     *
+     * @param jarAndTool every tool with its resolved jar path
+     * @param args       the process's arguments
+     * @return the tool, or {@code null} when no tool's jar is in the arguments
+     */
+    static AiWorkspaceConfig.ToolDefinition pickToolForProcess(
+            List<Map.Entry<String, AiWorkspaceConfig.ToolDefinition>> jarAndTool, String[] args) {
+        AiWorkspaceConfig.ToolDefinition best = null;
+        int bestScore = -1;
+        List<String> argList = java.util.Arrays.asList(args);
+        for (Map.Entry<String, AiWorkspaceConfig.ToolDefinition> entry : jarAndTool) {
+            if (!jarMatches(entry.getKey(), args)) continue;
+            AiWorkspaceConfig.ToolDefinition tool = entry.getValue();
+            List<String> jvmArgs = ProcessSupervisor.expandJvmArgs(tool.jvmArgs());
+            if (!argList.containsAll(jvmArgs)) continue;
+            if (jvmArgs.size() > bestScore) { best = tool; bestScore = jvmArgs.size(); }
+        }
+        return best;
     }
 
     /**
