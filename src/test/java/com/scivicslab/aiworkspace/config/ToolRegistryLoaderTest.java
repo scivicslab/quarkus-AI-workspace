@@ -154,15 +154,11 @@ class ToolRegistryLoaderTest {
         assertTrue(e.dependsOn().isEmpty(),
                 "every library it needs is a released artifact, so a snapshot build resolves them"
                         + " from Maven Central instead of building them from source first");
-        assertEquals(3, e.params().size(), "vLLM Endpoint, publish-to-parent switch, port");
+        assertEquals(2, e.params().size(), "Local LLM endpoint, port");
         assertEquals("servers", e.params().get(0).key());
         assertEquals("chat-ui.servers", e.params().get(0).jvmProp(),
                 "matches quarkus-chat-ui's own property name, since the left panel embeds its markup verbatim");
-        assertEquals("distributed", e.params().get(1).key());
-        assertEquals("chat-ui.distributed.enabled", e.params().get(1).jvmProp());
-        assertEquals("false", e.params().get(1).defaultVal(),
-                "publishing the conversations lets whatever reaches that port read and write"
-                        + " under ~/works, so it is off unless asked for");
+        assertEquals("port", e.params().get(1).key(), "the publish-to-parent switch is gone (RemoveParentInterpreterPublication_260913_oo01)");
     }
 
     @Test void audit_trail_is_two_tiles_with_companion_jars() {
