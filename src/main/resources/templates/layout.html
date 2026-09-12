@@ -669,7 +669,11 @@
         .state-FAILED { background: rgba(200,70,70,0.18); color: #e06060; }
         .state-STOPPED { background: rgba(128,128,128,0.18); color: var(--text-secondary); }
 
-        .inst-activity { color: var(--text-primary); max-width: 46ch; }
+        /* Long unbroken tokens (file paths, URLs) have no spaces, so the browser
+           cannot wrap them and they overflow into the Actions column. Allow a
+           break anywhere when there is no other opportunity. */
+        .inst-activity { color: var(--text-primary); max-width: 46ch;
+                         overflow-wrap: anywhere; }
         .detail-activity { font-size: 14px; margin: 0 0 1rem; }
 
         /* ── Instance detail ─────── */

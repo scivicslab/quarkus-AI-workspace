@@ -810,6 +810,32 @@
         }
     };
 
+    // ---------------------------------------------------------------
+    // Unattended refresh
+    // ---------------------------------------------------------------
+
+    // Long enough that a dashboard left open all day costs little: the versions pass asks GitHub
+    // once per repository, and that quota is shared by every tab the operator has open.
+    const AUTO_REFRESH_MS = 600000;
+
+    /**
+     * Presses both refresh buttons on a timer, so a dashboard left open does not go stale.
+     *
+     * Skips a turn while the tab is hidden. A background tab shows nobody anything, and the
+     * versions pass would still spend GitHub requests. The next visible turn brings it up to date.
+     */
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!document.getElementById('btn-refresh-instances')
+            && !document.getElementById('btn-refresh-versions')) {
+            return; // not the dashboard screen
+        }
+        setInterval(function () {
+            if (document.visibilityState === 'hidden') return;
+            if (typeof window.refreshInstances === 'function') window.refreshInstances();
+            if (typeof window.refreshVersions === 'function') window.refreshVersions();
+        }, AUTO_REFRESH_MS);
+    });
+
     window.downloadLatest = async function(name) {
         const btn = document.getElementById('btn-download-' + name);
         const status = document.getElementById('download-status-' + name);
