@@ -58,7 +58,8 @@ public final class ToolRegistryLoader {
                 strList(entry.get("jvmArgs")),
                 parseParams(entry.get("params")),
                 strList(entry.get("dependsOn")),
-                strList(entry.get("modules"))
+                strList(entry.get("modules")),
+                strList(entry.get("companionJars"))
             ));
         }
         logger.info("Loaded tool registry: " + result.size() + " entries from ai-workspace-tools.yaml");

@@ -90,12 +90,21 @@ public class SnapshotBuildService {
      * @return the created job, already RUNNING on a background thread
      */
     public ActorRef<BuildJobActor> start(String tool, String githubRepo, String jarFileName) {
+        return start(tool, githubRepo, jarFileName, List.of());
+    }
+
+    /**
+     * @param companionJars link names of the jars that accompany the tool's jar, placed in
+     *                      ~/works after it ({@code CompanionJars_260912_oo01}); empty for none
+     */
+    public ActorRef<BuildJobActor> start(String tool, String githubRepo, String jarFileName,
+                                         List<String> companionJars) {
         String jobId = UUID.randomUUID().toString();
         ActorRef<BuildJobActor> job = actors.newBuildJob(jobId, tool);
         // The build runs on a virtual thread because waiting for Maven is its whole job. What it
         // learns along the way it tells the actor; it never writes the state itself.
         Thread.ofVirtual().name("snapshot-build-" + tool).start(
-            () -> run(job, githubRepo, jarFileName));
+            () -> run(job, githubRepo, jarFileName, companionJars == null ? List.of() : companionJars));
         return job;
     }
 
@@ -108,7 +117,8 @@ public class SnapshotBuildService {
     // Build pipeline (background thread)
     // ---------------------------------------------------------------
 
-    private void run(ActorRef<BuildJobActor> job, String githubRepo, String jarFileName) {
+    private void run(ActorRef<BuildJobActor> job, String githubRepo, String jarFileName,
+                     List<String> companionJars) {
         try {
             buildDependencies(job);
             Path repoDir = cloneOrUpdate(job, githubRepo);
@@ -124,6 +134,16 @@ public class SnapshotBuildService {
 
                 job.tell(j -> j.step("installing to ~/works"));
                 Path dest = installToWorks(job, uberJar, jarFileName);
+                // The jars that accompany the tool's jar — its plugins — go the same way, each
+                // found by its own base name and linked under its own name.
+                for (String companion : companionJars) {
+                    String base = companion.endsWith(".jar")
+                        ? companion.substring(0, companion.length() - ".jar".length())
+                        : companion;
+                    Path companionJar = locateUberJar(repoDir, base);
+                    job.tell(j -> j.append("Found companion jar: " + companionJar));
+                    installToWorks(job, companionJar, companion);
+                }
                 job.tell(j -> j.resultFile(dest.getFileName().toString()));
                 job.tell(j -> j.append("SUCCESS: installed " + dest));
                 logger.info("Snapshot build succeeded for " + job.ask(j -> j.tool()).join() + " → " + dest);
@@ -314,7 +334,12 @@ public class SnapshotBuildService {
                     && p.getParent().getFileName().toString().equals("target"))
                 .filter(p -> {
                     String n = p.getFileName().toString();
+                    // "<base>-<version>.jar": what follows the base is a version, so a base that is
+                    // itself the prefix of a longer artifact name (a body and its plugin jars) does
+                    // not match that artifact.
                     return n.startsWith(jarBase + "-")
+                        && n.length() > jarBase.length() + 1
+                        && Character.isDigit(n.charAt(jarBase.length() + 1))
                         && n.endsWith(".jar")
                         && !n.endsWith("-sources.jar")
                         && !n.endsWith("-javadoc.jar")

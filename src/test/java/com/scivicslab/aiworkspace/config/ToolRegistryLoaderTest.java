@@ -3,6 +3,11 @@ package com.scivicslab.aiworkspace.config;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,9 +30,21 @@ class ToolRegistryLoaderTest {
                 .orElseThrow(() -> new AssertionError("missing entry: " + name));
     }
 
-    @Test void all_entries_load() {
+    /**
+     * Counts the {@code - name:} entries declared in the bundled registry. Deriving the
+     * expectation from the same resource the loader reads means registering a new tool does
+     * not require editing this test; the counts diverge only when an entry fails to parse.
+     */
+    private static long declaredEntryCount() throws IOException {
+        try (InputStream is = ToolRegistryLoader.class.getResourceAsStream("/ai-workspace-tools.yaml");
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+            return reader.lines().filter(line -> line.matches("\\s*-\\s*name:.*")).count();
+        }
+    }
+
+    @Test void all_entries_load() throws IOException {
         List<ToolRegistryEntry> all = ToolRegistryLoader.load();
-        assertEquals(10, all.size(), "expected all registry entries to parse");
+        assertEquals(declaredEntryCount(), all.size(), "expected all registry entries to parse");
     }
 
     @Test void chat_ui_full_form() {
@@ -130,7 +147,7 @@ class ToolRegistryLoaderTest {
     }
 
     @Test void chat_ui_with_audit_trail_present_and_shape() {
-        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail");
+        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
         assertEquals("chat-ui-with-audit-trail.jar", e.jarFileName());
         assertEquals("scivicslab/chat-ui-with-audit-trail", e.githubRepo());
         assertEquals(28030, e.defaultPort());
@@ -146,5 +163,25 @@ class ToolRegistryLoaderTest {
         assertEquals("false", e.params().get(1).defaultVal(),
                 "publishing the conversations lets whatever reaches that port read and write"
                         + " under ~/works, so it is off unless asked for");
+    }
+
+    @Test void audit_trail_is_two_tiles_with_companion_jars() {
+        ToolRegistryEntry local = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
+        ToolRegistryEntry cloud = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-cloud-llm");
+        assertEquals("chat-ui-with-audit-trail.jar", local.jarFileName());
+        assertEquals("chat-ui-with-audit-trail.jar", cloud.jarFileName(), "both tiles run the same body");
+        assertEquals(List.of("chat-ui-with-audit-trail-plugin-web-tools.jar"), local.companionJars());
+        assertEquals(List.of("chat-ui-with-audit-trail-plugin-web-tools.jar",
+                             "chat-ui-with-audit-trail-plugin-harness.jar"), cloud.companionJars());
+        assertEquals(1, local.jvmArgs().size());
+        assertTrue(local.jvmArgs().get(0).startsWith("-Dchat-ui.plugins=${HOME}/works/"), local.jvmArgs().get(0));
+        assertTrue(cloud.jvmArgs().get(0).contains("plugin-harness.jar"), cloud.jvmArgs().get(0));
+        assertEquals(28030, local.defaultPort());
+        assertEquals(28031, cloud.defaultPort());
+        assertEquals(local.params().size(), cloud.params().size(), "the form is the same on both tiles");
+    }
+
+    @Test void companion_jars_default_to_empty() {
+        assertTrue(byName(ToolRegistryLoader.load(), "html-saurus").companionJars().isEmpty());
     }
 }

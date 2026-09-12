@@ -368,6 +368,12 @@ public class ProcessSupervisor {
         return expandEnvVars(value, Map.of());
     }
 
+    /** @return the JVM arguments with {@code ${VAR}} references replaced, in order */
+    static List<String> expandJvmArgs(List<String> jvmArgs) {
+        if (jvmArgs == null) return List.of();
+        return jvmArgs.stream().map(ProcessSupervisor::expandEnvVars).toList();
+    }
+
     static String expandEnvVars(String value, Map<String, String> overrides) {
         if (value == null) return null;
         java.util.regex.Matcher m = java.util.regex.Pattern
@@ -402,7 +408,9 @@ public class ProcessSupervisor {
 
         // Raw JVM arguments (e.g. -Xmx4g) inserted immediately after "java"
         if (!isNative && config.jvmArgs() != null) {
-            for (String jvmArg : config.jvmArgs()) {
+            // Expanded like the form fields, so a registry entry can name a jar under ${HOME}
+            // (-Dchat-ui.plugins=${HOME}/works/....jar, CompanionJars_260912_oo01).
+            for (String jvmArg : expandJvmArgs(config.jvmArgs())) {
                 if (jvmArg != null && !jvmArg.isBlank()) command.add(jvmArg);
             }
         }

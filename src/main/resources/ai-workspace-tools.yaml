@@ -16,6 +16,8 @@
 #   singleInstance only one running instance allowed (default false)
 #   args           launch args after the jar path; ${PORT}/${HOME} expanded at launch
 #   jvmArgs        raw JVM flags inserted before -D props (e.g. -Xmx2g)
+#   companionJars  link names of jars that accompany the tool's jar (plugin jars from the same
+#                  build); Build Snapshot and Download Latest place them in ~/works too
 #   params         dashboard form fields (key,label,type[dir|select|text],default,jvmProp,workingDir,argPos,options)
 #
 # Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
@@ -44,10 +46,38 @@ tools:
       - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chatui3.vllm-base-url"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
-  - name: chat-ui-with-audit-trail
+  # chat-ui-with-audit-trail carries plugin jars beside its body (ProviderAndToolPlugins_260912_oo01);
+  # which are passed on the command line is the start-up configuration, so it is two tiles rather
+  # than a form field (CompanionJars_260912_oo01). Both build and download the same repository.
+  - name: chat-ui-with-audit-trail-local-llm
     jar: chat-ui-with-audit-trail.jar
     github: scivicslab/chat-ui-with-audit-trail
     port: 28030
+    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar]
+    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar"]
+    params:
+      # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
+      # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
+      # which points directly at a vLLM node, this app talks to quarkus-gpu-broker's
+      # OpenAiCompatResource — the value must be a full base URL (http://host:port) for the
+      # broker, not a bare vLLM node IP/hostname. Leave blank to fall back to the value hardcoded
+      # in application.properties (currently http://localhost:28005).
+      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      # Publishes the conversations so a parent interpreter — Turing Workflow Editor — can drive
+      # them (WorkflowTab_260906_oo01). Off by default: whatever reaches the published port can
+      # drive a conversation, and through it read and write under ~/works. The published port is
+      # not configured; it is this instance's HTTP port plus 1000, bound to 127.0.0.1. Give the
+      # editor this instance's HTTP port in its "Child Nodes" field, not that derived number.
+      - {key: distributed, label: "Publish conversations to a parent interpreter (true/false)", type: text, default: "false", jvmProp: "chat-ui.distributed.enabled"}
+      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+
+
+  - name: chat-ui-with-audit-trail-cloud-llm
+    jar: chat-ui-with-audit-trail.jar
+    github: scivicslab/chat-ui-with-audit-trail
+    port: 28031
+    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-harness.jar]
+    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-harness.jar"]
     params:
       # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),

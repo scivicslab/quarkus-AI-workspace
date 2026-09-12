@@ -28,5 +28,9 @@ public record ToolRegistryEntry(
     List<String> jvmArgs,
     List<AiWorkspaceConfig.ParamDefinition> params,
     List<String> dependsOn,
-    List<String> modules
+    List<String> modules,
+    /** Link names of the jars that accompany the tool's own jar — plugin jars built from the
+     *  same repository — which Build Snapshot and Download Latest place in ~/works alongside it
+     *  ({@code CompanionJars_260912_oo01}). Empty for a tool with one jar. */
+    List<String> companionJars
 ) {}

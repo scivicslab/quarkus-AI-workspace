@@ -40,6 +40,16 @@ public class ToolRegistry {
     }
 
     /** Returns true when the named entry is a library (installs to ~/.m2, no jar deployed). */
+    /** @return the link names of the jars that accompany the tool's jar; empty if none */
+    public List<String> getCompanionJars(String name) {
+        return entries.stream()
+                .filter(e -> e.name().equals(name))
+                .map(ToolRegistryEntry::companionJars)
+                .filter(c -> c != null)
+                .findFirst()
+                .orElse(List.of());
+    }
+
     public boolean isLibrary(String name) {
         return entries.stream()
                 .filter(e -> e.name().equals(name))

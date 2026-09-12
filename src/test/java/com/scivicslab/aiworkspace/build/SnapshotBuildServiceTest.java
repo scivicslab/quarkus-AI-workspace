@@ -73,4 +73,20 @@ class SnapshotBuildServiceTest {
         assertThatThrownBy(() -> SnapshotBuildService.locateUberJar(repo, "quarkus-chat-ui"))
             .isInstanceOf(IllegalStateException.class);
     }
+
+    /**
+     * A body and its plugin jars share a prefix (CompanionJars_260912_oo01): the body's base must
+     * find the body, and a plugin's base must find that plugin, however the sizes compare.
+     */
+    @Test
+    void bodyBaseDoesNotMatchItsPluginJars(@TempDir Path repo) throws Exception {
+        Path app = repo.resolve("app/target"); Files.createDirectories(app);
+        Path web = repo.resolve("plugin-web-tools/target"); Files.createDirectories(web);
+        Files.write(app.resolve("chat-ui-with-audit-trail-2.0.0-SNAPSHOT.jar"), new byte[10]);
+        Files.write(web.resolve("chat-ui-with-audit-trail-plugin-web-tools-2.0.0-SNAPSHOT.jar"), new byte[100]);
+        Path body = SnapshotBuildService.locateUberJar(repo, "chat-ui-with-audit-trail");
+        assertThat(body.getFileName().toString()).isEqualTo("chat-ui-with-audit-trail-2.0.0-SNAPSHOT.jar");
+        Path plugin = SnapshotBuildService.locateUberJar(repo, "chat-ui-with-audit-trail-plugin-web-tools");
+        assertThat(plugin.getFileName().toString()).isEqualTo("chat-ui-with-audit-trail-plugin-web-tools-2.0.0-SNAPSHOT.jar");
+    }
 }

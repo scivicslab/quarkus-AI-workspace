@@ -174,56 +174,39 @@ public class ServiceResource {
 
             String releaseJson = apiResp.body();
             String version = extractJsonString(releaseJson, "tag_name");
-            String[] asset = findJarAsset(releaseJson);  // [assetName, downloadUrl]
-            if (asset == null) {
+            // The tool's jar and the jars that accompany it (CompanionJars_260912_oo01) are each
+            // an asset of the release. All of them must be there before anything is placed: a new
+            // body next to an old plugin jar is an instance that cannot start.
+            List<String[]> assets = findJarAssets(releaseJson);
+            List<String> linkNames = new java.util.ArrayList<>();
+            linkNames.add(jarName);
+            linkNames.addAll(toolRegistry.getCompanionJars(name));
+            List<String[]> chosen = new java.util.ArrayList<>();
+            List<String> missing = new java.util.ArrayList<>();
+            for (String linkName : linkNames) {
+                String[] a = pickAsset(assets, linkName);
+                if (a == null) missing.add(linkName); else chosen.add(a);
+            }
+            if (!missing.isEmpty()) {
                 return Response.status(404)
-                    .entity(Map.of("error", "No suitable jar asset found in latest release of " + github)).build();
+                    .entity(Map.of("error", "No jar asset for " + missing + " in latest release of " + github)).build();
             }
-            String assetName = asset[0];
-            String downloadUrl = asset[1];
-
             java.nio.file.Path worksDir = java.nio.file.Path.of(System.getProperty("user.dir"));
-            java.nio.file.Path versionedDest = worksDir.resolve(assetName);
-
-            // Download to a temp file first to avoid corrupting the existing JAR on failure
-            java.nio.file.Path tmpDest = worksDir.resolve(assetName + ".tmp");
-            java.nio.file.Files.deleteIfExists(tmpDest);
-            HttpRequest dlReq = HttpRequest.newBuilder()
-                .uri(URI.create(downloadUrl))
-                .header("User-Agent", "quarkus-ai-workspace")
-                .build();
-            HttpResponse<java.nio.file.Path> dlResp = client.send(dlReq, HttpResponse.BodyHandlers.ofFile(tmpDest));
-            if (dlResp.statusCode() < 200 || dlResp.statusCode() >= 300) {
-                java.nio.file.Files.deleteIfExists(tmpDest);
-                return Response.status(502)
-                    .entity(Map.of("error", "Download returned HTTP " + dlResp.statusCode())).build();
+            String assetName = null;
+            for (int i = 0; i < chosen.size(); i++) {
+                String[] a = chosen.get(i);
+                String linkName = linkNames.get(i);
+                Response failure = installAsset(client, worksDir, a[0], a[1], linkName);
+                if (failure != null) return failure;
+                if (i == 0) assetName = a[0];
+                logger.info("Downloaded " + name + " " + version + " → " + worksDir.resolve(a[0]) + ", symlink " + linkName + " → " + a[0]);
             }
-
-            // Verify the downloaded JAR is not corrupt before replacing the live file
-            try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(tmpDest.toFile())) {
-                if (zf.size() == 0) throw new java.io.IOException("JAR is empty");
-            } catch (Exception e) {
-                java.nio.file.Files.deleteIfExists(tmpDest);
-                return Response.status(502)
-                    .entity(Map.of("error", "Downloaded JAR is corrupt: " + e.getMessage())).build();
-            }
-
-            // Atomic replace: rename temp file to final destination
-            java.nio.file.Files.move(tmpDest, versionedDest,
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-
-            // Replace symlink ~/works/<jarName> → <assetName> (relative, same directory)
-            java.nio.file.Path symlink = worksDir.resolve(jarName);
-            java.nio.file.Files.deleteIfExists(symlink);
-            java.nio.file.Files.createSymbolicLink(symlink, java.nio.file.Path.of(assetName));
-
-            logger.info("Downloaded " + name + " " + version + " → " + versionedDest + ", symlink " + symlink + " → " + assetName);
             return Response.ok(Map.of(
                 "success", true,
                 "version", version != null ? version : "unknown",
                 "file", assetName,
-                "symlink", jarName
+                "symlink", jarName,
+                "companions", linkNames.subList(1, linkNames.size())
             )).build();
         } catch (Exception e) {
             logger.warning("Download failed for " + name + ": " + e.getMessage());
@@ -294,7 +277,7 @@ public class ServiceResource {
         if (!library && jarName == null)
             return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
 
-        var job = snapshotBuilder.start(name, github, jarName);
+        var job = snapshotBuilder.start(name, github, jarName, toolRegistry.getCompanionJars(name));
         return Response.ok(Map.of(
                 "jobId", job.ask(j -> j.id()).join(),
                 "state", job.ask(j -> j.state()).join().name())).build();
@@ -339,12 +322,15 @@ public class ServiceResource {
      *
      * @return [assetName, browser_download_url], or null if not found
      */
-    private static String[] findJarAsset(String json) {
-        // Locate each browser_download_url ending in .jar, then find the nearest
-        // preceding "name" field. This avoids [^}]* breaking on nested objects
-        // (e.g. the "uploader" sub-object inside each asset entry).
+    /**
+     * Every jar asset of a release, as {@code [assetName, downloadUrl]}, in the order the JSON
+     * lists them. Locates each browser_download_url ending in .jar, then the nearest preceding
+     * "name" field — [^}]* would break on the nested "uploader" object inside each asset.
+     */
+    static List<String[]> findJarAssets(String json) {
         Pattern urlPat = Pattern.compile("\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.jar)\"");
         Pattern namePat = Pattern.compile("\"name\"\\s*:\\s*\"([^\"]+)\"");
+        List<String[]> found = new java.util.ArrayList<>();
         Matcher urlM = urlPat.matcher(json);
         while (urlM.find()) {
             String url = urlM.group(1);
@@ -356,9 +342,65 @@ public class ServiceResource {
                     && assetName.endsWith(".jar")
                     && !assetName.endsWith("-javadoc.jar")
                     && !assetName.endsWith("-sources.jar")) {
-                return new String[]{assetName, url};
+                found.add(new String[]{assetName, url});
             }
         }
+        return found;
+    }
+
+    /**
+     * The asset a link name stands for: {@code <base>-<version>.jar} where the base is the link
+     * name without {@code .jar} and what follows it is a version. A base that is the prefix of a
+     * longer artifact name (a body and its plugin jars) does not match that artifact.
+     *
+     * @return {@code [assetName, downloadUrl]}, or {@code null} when the release has none
+     */
+    static String[] pickAsset(List<String[]> assets, String linkName) {
+        String base = linkName.endsWith(".jar") ? linkName.substring(0, linkName.length() - 4) : linkName;
+        for (String[] a : assets) {
+            String n = a[0];
+            if (n.startsWith(base + "-") && n.length() > base.length() + 1
+                    && Character.isDigit(n.charAt(base.length() + 1))) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Downloads one asset to a temporary file, checks it opens as a zip, moves it into place
+     * under its versioned name and points the link name at it.
+     *
+     * @return {@code null} on success, or the error response to return
+     */
+    private static Response installAsset(HttpClient client, java.nio.file.Path worksDir,
+                                         String assetName, String downloadUrl, String linkName) throws Exception {
+        java.nio.file.Path versionedDest = worksDir.resolve(assetName);
+        java.nio.file.Path tmpDest = worksDir.resolve(assetName + ".tmp");
+        java.nio.file.Files.deleteIfExists(tmpDest);
+        HttpRequest dlReq = HttpRequest.newBuilder()
+            .uri(URI.create(downloadUrl))
+            .header("User-Agent", "quarkus-ai-workspace")
+            .build();
+        HttpResponse<java.nio.file.Path> dlResp = client.send(dlReq, HttpResponse.BodyHandlers.ofFile(tmpDest));
+        if (dlResp.statusCode() < 200 || dlResp.statusCode() >= 300) {
+            java.nio.file.Files.deleteIfExists(tmpDest);
+            return Response.status(502)
+                .entity(Map.of("error", "Download of " + assetName + " returned HTTP " + dlResp.statusCode())).build();
+        }
+        try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(tmpDest.toFile())) {
+            if (zf.size() == 0) throw new java.io.IOException("JAR is empty");
+        } catch (Exception e) {
+            java.nio.file.Files.deleteIfExists(tmpDest);
+            return Response.status(502)
+                .entity(Map.of("error", "Downloaded JAR " + assetName + " is corrupt: " + e.getMessage())).build();
+        }
+        java.nio.file.Files.move(tmpDest, versionedDest,
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        java.nio.file.Path symlink = worksDir.resolve(linkName);
+        java.nio.file.Files.deleteIfExists(symlink);
+        java.nio.file.Files.createSymbolicLink(symlink, java.nio.file.Path.of(assetName));
         return null;
     }
 
