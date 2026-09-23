@@ -52,8 +52,11 @@ tools:
   #
   # The three are the three start-up configurations of ThreeStartupConfigurations_260912_oo01:
   #   no-web-tools  ネットの向こうに出る方法が存在しない構成 — no plugin jar at all
-  #   local-llm     Local LLM だけの構成                    — web-tools
-  #   cloud-llm     最新の LLM を活用する構成                — web-tools and harness
+  #   local-llm     Local LLM だけの構成                    — web-tools and shell
+  #   cloud-llm     最新の LLM を活用する構成                — web-tools, shell and harness
+  #
+  # bash comes with the shell plugin, so the configuration with no way out to the web has no
+  # shell either. remove is built into the body, so all three can take a file away.
   #
   # The first passes no -Dchat-ui.plugins. An adopted process with no such flag is credited to it,
   # because pickToolForProcess takes the tile with the most jvmArgs the process carries and this
@@ -73,8 +76,8 @@ tools:
     jar: chat-ui-with-audit-trail.jar
     github: scivicslab/chat-ui-with-audit-trail
     port: 28030
-    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar]
-    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar"]
+    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-shell.jar]
+    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar"]
     params:
       # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
@@ -91,8 +94,8 @@ tools:
     jar: chat-ui-with-audit-trail.jar
     github: scivicslab/chat-ui-with-audit-trail
     port: 28031
-    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-harness.jar]
-    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-harness.jar"]
+    companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-shell.jar, chat-ui-with-audit-trail-plugin-harness.jar]
+    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-harness.jar"]
     params:
       # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),

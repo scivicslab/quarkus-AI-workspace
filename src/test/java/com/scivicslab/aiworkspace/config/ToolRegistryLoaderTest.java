@@ -166,7 +166,8 @@ class ToolRegistryLoaderTest {
         assertEquals("chat-ui-with-audit-trail.jar", sealed.jarFileName(), "the same body as the other two");
         assertEquals(28032, sealed.defaultPort());
         assertTrue(sealed.companionJars().isEmpty(),
-                "no plugin jar is what makes this the configuration with no way out to the web");
+                "no plugin jar is what makes this the configuration with no way out to the web,"
+                        + " and no shell plugin either");
         assertTrue(sealed.jvmArgs() == null || sealed.jvmArgs().isEmpty(),
                 "it passes no -Dchat-ui.plugins, which is how an adopted process is credited to it");
         ToolRegistryEntry local = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
@@ -178,9 +179,12 @@ class ToolRegistryLoaderTest {
         ToolRegistryEntry cloud = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-cloud-llm");
         assertEquals("chat-ui-with-audit-trail.jar", local.jarFileName());
         assertEquals("chat-ui-with-audit-trail.jar", cloud.jarFileName(), "both tiles run the same body");
-        assertEquals(List.of("chat-ui-with-audit-trail-plugin-web-tools.jar"), local.companionJars());
         assertEquals(List.of("chat-ui-with-audit-trail-plugin-web-tools.jar",
-                             "chat-ui-with-audit-trail-plugin-harness.jar"), cloud.companionJars());
+                             "chat-ui-with-audit-trail-plugin-shell.jar"), local.companionJars());
+        assertEquals(List.of("chat-ui-with-audit-trail-plugin-web-tools.jar",
+                             "chat-ui-with-audit-trail-plugin-shell.jar",
+                             "chat-ui-with-audit-trail-plugin-harness.jar"), cloud.companionJars(),
+                "bash comes with the shell plugin, so the two web-reaching tiles carry it");
         assertEquals(1, local.jvmArgs().size());
         assertTrue(local.jvmArgs().get(0).startsWith("-Dchat-ui.plugins=${HOME}/works/"), local.jvmArgs().get(0));
         assertTrue(cloud.jvmArgs().get(0).contains("plugin-harness.jar"), cloud.jvmArgs().get(0));
