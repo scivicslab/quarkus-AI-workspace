@@ -298,7 +298,10 @@ public class SnapshotBuildService {
         // though compile/package succeed. Build Snapshot only needs the jar installed locally, not
         // signed, so skip signing.
         java.util.List<String> cmd = new java.util.ArrayList<>(
-                java.util.List.of(mvnCommand, "install", "-DskipITs", "-B", "-Dgpg.skip=true"));
+                // -U: retry artifacts Maven has recorded as missing. A tool's dependency that was
+                // published to Maven Central after this workspace's ~/.m2 first looked for it is
+                // otherwise refused for a day ("was not found ... during a previous attempt").
+                java.util.List.of(mvnCommand, "install", "-U", "-DskipITs", "-B", "-Dgpg.skip=true"));
         // Build only the requested modules (plus the reactor deps they need, via -am) when the
         // library declares them. A multi-module library may contain sibling modules a consumer does
         // not need and that may not build on their own, so building the whole reactor would fail.
