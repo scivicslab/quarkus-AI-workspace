@@ -463,7 +463,7 @@
         if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
         let ok = false;
         try {
-            const r = await fetch('/api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
+            const r = await fetch('api/tool/' + toolName + '/' + port + '/stop', { method: 'POST' });
             ok = r.ok;
         } catch (e) {
             ok = false;
@@ -647,7 +647,7 @@
         if (!logEl || logEl.dataset.loaded === 'yes') return;
         logEl.textContent = 'Reading…';
         try {
-            const r = await fetch('/api/tool/' + encodeURIComponent(toolName) + '/' + port + '/logs?lines=50');
+            const r = await fetch('api/tool/' + encodeURIComponent(toolName) + '/' + port + '/logs?lines=50');
             const data = await r.json();
             const lines = data.logs || [];
             logEl.textContent = lines.length > 0
@@ -712,7 +712,7 @@
             if (snapshot) snapshot.textContent = 'reading…';
 
             try {
-                const r = await fetch('/api/versions/refresh/' + encodeURIComponent(name), { method: 'POST' });
+                const r = await fetch('api/versions/refresh/' + encodeURIComponent(name), { method: 'POST' });
                 const data = await r.json();
                 if (!r.ok || !data.success) throw new Error(data.error || 'request failed');
                 // An empty answer is GitHub saying there is no release, not that it went
