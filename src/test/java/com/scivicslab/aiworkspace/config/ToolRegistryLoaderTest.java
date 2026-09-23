@@ -161,6 +161,18 @@ class ToolRegistryLoaderTest {
         assertEquals("port", e.params().get(1).key(), "the publish-to-parent switch is gone (RemoveParentInterpreterPublication_260913_oo01)");
     }
 
+    @Test void audit_trail_is_three_tiles_one_per_start_up_configuration() {
+        ToolRegistryEntry sealed = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-no-web-tools");
+        assertEquals("chat-ui-with-audit-trail.jar", sealed.jarFileName(), "the same body as the other two");
+        assertEquals(28032, sealed.defaultPort());
+        assertTrue(sealed.companionJars().isEmpty(),
+                "no plugin jar is what makes this the configuration with no way out to the web");
+        assertTrue(sealed.jvmArgs() == null || sealed.jvmArgs().isEmpty(),
+                "it passes no -Dchat-ui.plugins, which is how an adopted process is credited to it");
+        ToolRegistryEntry local = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
+        assertEquals(local.params().size(), sealed.params().size(), "the form is the same on all three tiles");
+    }
+
     @Test void audit_trail_is_two_tiles_with_companion_jars() {
         ToolRegistryEntry local = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
         ToolRegistryEntry cloud = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-cloud-llm");
