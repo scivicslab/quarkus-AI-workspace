@@ -33,9 +33,11 @@ import java.util.zip.ZipFile;
  */
 public final class SnapshotBuildE2E {
 
-    private static final String TOOL = "quarkus-chat-ui3";
-    private static final String REPO = "scivicslab/quarkus-chat-ui3";
-    private static final String JAR  = "quarkus-chat-ui3.jar";
+    private static final String TOOL = "quarkus-chat-ui-3";
+    private static final String REPO = "scivicslab/quarkus-chat-ui";
+    private static final String JAR  = "quarkus-chat-ui-3.jar";
+    private static final String ARTIFACT = "quarkus-chat-ui";
+    private static final String BRANCH = "feat/workflow-as-queue-item";
     private static final String CLONE_URL = "https://github.com/" + REPO + ".git";
 
     private SnapshotBuildE2E() {
@@ -82,7 +84,7 @@ public final class SnapshotBuildE2E {
         svc.buildDirTemplate = buildRoot.toString();
         svc.worksDirTemplate = worksRoot.toString();
 
-        ActorRef<BuildJobActor> job = svc.start(TOOL, REPO, JAR);
+        ActorRef<BuildJobActor> job = svc.start(TOOL, REPO, JAR, java.util.List.of(), ARTIFACT, BRANCH);
 
         // Poll until terminal. A clean chat-ui3 build is seconds; allow generous slack for the
         // git clone and dependency resolution.

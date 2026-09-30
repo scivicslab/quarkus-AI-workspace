@@ -121,8 +121,8 @@ class ToolRegistryLoaderTest {
     @Test void dependsOn_declares_build_order() {
         List<ToolRegistryEntry> all = ToolRegistryLoader.load();
         assertEquals(List.of("turing-workflow", "Turing-workflow-plugins"),
-                byName(all, "quarkus-chat-ui3").dependsOn(),
-                "chat-ui3 must build turing-workflow then the plugins before itself");
+                byName(all, "quarkus-chat-ui").dependsOn(),
+                "chat-ui 2.x must build turing-workflow then the plugins before itself");
         assertEquals(List.of("turing-workflow", "pluggable-cli"),
                 byName(all, "Turing-workflow-plugins").dependsOn(),
                 "the plugins compile against turing-workflow and pluggable-cli, so both build first");
@@ -135,14 +135,30 @@ class ToolRegistryLoaderTest {
                 "a single-module library builds its whole reactor");
     }
 
-    @Test void chat_ui3_present_and_decoupled_shape() {
-        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "quarkus-chat-ui3");
-        assertEquals(28140, e.defaultPort());
-        assertEquals(2, e.params().size());
-        assertEquals("chatui3.vllm-base-url", e.params().get(0).jvmProp());
-        assertFalse(e.autoStart());
+    @Test void chat_ui3_is_gone() {
+        assertTrue(ToolRegistryLoader.load().stream().noneMatch(e -> e.name().equals("quarkus-chat-ui3")),
+                "quarkus-chat-ui3 was faded out; its know-how lives in quarkus-chat-ui 3.x and chat-ui-with-audit-trail");
+    }
+
+    /** TwoTilesOneRepository_260930_oo01: the 3.x line is a second tile on the same repository. */
+    @Test void chat_ui_3_tile_shares_the_repository_under_its_own_link_name() {
+        List<ToolRegistryEntry> all = ToolRegistryLoader.load();
+        ToolRegistryEntry two = byName(all, "quarkus-chat-ui");
+        ToolRegistryEntry three = byName(all, "quarkus-chat-ui-3");
+        assertEquals(two.githubRepo(), three.githubRepo(), "same repository");
+        assertEquals("quarkus-chat-ui-3.jar", three.jarFileName(), "its own link, so it never replaces the 2.x jar");
+        assertEquals("quarkus-chat-ui", three.artifact(), "the build's jar is still quarkus-chat-ui-<version>.jar");
+        assertEquals("quarkus-chat-ui", three.artifactBase());
+        assertEquals("feat/workflow-as-queue-item", three.branch(), "Build Snapshot checks out the 3.x branch");
+        assertEquals(28140, three.defaultPort());
+        assertEquals(two.params().size(), three.params().size(), "same program, same form");
+        assertTrue(three.dependsOn().isEmpty(), "3.x pins released turing-workflow artifacts");
+        // The 2.x tile is untouched: no artifact, no branch, so it builds the default branch by its link name.
+        assertNull(two.artifact());
+        assertNull(two.branch());
+        assertEquals("quarkus-chat-ui", two.artifactBase());
         Optional<AiWorkspaceConfig.ParamDefinition> port =
-                e.params().stream().filter(p -> p.key().equals("port")).findFirst();
+                three.params().stream().filter(p -> p.key().equals("port")).findFirst();
         assertNotNull(port.orElse(null));
     }
 

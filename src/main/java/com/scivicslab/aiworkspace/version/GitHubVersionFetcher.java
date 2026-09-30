@@ -43,11 +43,28 @@ public class GitHubVersionFetcher {
      * @throws Exception when neither could be read
      */
     public RemoteVersions fetch(String repository) throws Exception {
+        return fetch(repository, null);
+    }
+
+    /**
+     * @param repository owner and name, for example {@code scivicslab/html-saurus}
+     * @param branch     the branch whose {@code pom.xml} states the snapshot version; null for the
+     *                   default branch ({@code TwoTilesOneRepository_260930_oo01})
+     * @return both versions; either is empty when the repository does not state it
+     * @throws Exception when neither could be read
+     */
+    public RemoteVersions fetch(String repository, String branch) throws Exception {
         // No pause here: the caller reads one repository per request, and the browser leaves
         // three seconds between them (ToolVersions_260907_oo01).
         String latestRelease = fetchLatestRelease(repository);
-        String latestSnapshot = fetchLatestSnapshot(repository);
+        String latestSnapshot = fetchLatestSnapshot(repository, branch);
         return new RemoteVersions(latestRelease, latestSnapshot);
+    }
+
+    /** The raw URL of the {@code pom.xml} on the branch, or on {@code HEAD} when no branch is named. */
+    static String pomUrl(String repository, String branch) {
+        String ref = (branch == null || branch.isBlank()) ? "HEAD" : branch;
+        return "https://raw.githubusercontent.com/" + repository + "/" + ref + "/pom.xml";
     }
 
     /**
@@ -79,10 +96,8 @@ public class GitHubVersionFetcher {
      * under {@code scivicslab} were split between {@code master} and {@code main} and were renamed
      * to {@code main}, and nothing here had to change.
      */
-    private String fetchLatestSnapshot(String repository) throws Exception {
-        HttpResponse<String> response = get(
-                "https://raw.githubusercontent.com/" + repository + "/HEAD/pom.xml",
-                "text/plain");
+    private String fetchLatestSnapshot(String repository, String branch) throws Exception {
+        HttpResponse<String> response = get(pomUrl(repository, branch), "text/plain");
         if (response.statusCode() != 200) return "";
         Matcher m = PROJECT_VERSION.matcher(response.body());
         return m.find() ? m.group(1).trim() : "";

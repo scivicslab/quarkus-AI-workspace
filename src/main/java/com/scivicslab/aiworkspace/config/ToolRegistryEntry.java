@@ -32,5 +32,20 @@ public record ToolRegistryEntry(
     /** Link names of the jars that accompany the tool's own jar — plugin jars built from the
      *  same repository — which Build Snapshot and Download Latest place in ~/works alongside it
      *  ({@code CompanionJars_260912_oo01}). Empty for a tool with one jar. */
-    List<String> companionJars
-) {}
+    List<String> companionJars,
+    /** Base name of the jar the build produces ({@code <artifact>-<version>.jar}); null when it is
+     *  the link name without {@code .jar}. Two entries may link one repository's jar under different
+     *  names ({@code TwoTilesOneRepository_260930_oo01}). */
+    String artifact,
+    /** The branch Build Snapshot checks out and Latest SNAPSHOT reads; null for the default branch. */
+    String branch
+) {
+    /** The base name the build's jar is found by: {@code artifact}, else the link name without {@code .jar}. */
+    public String artifactBase() {
+        if (artifact != null && !artifact.isBlank()) return artifact;
+        if (jarFileName == null) return null;
+        return jarFileName.endsWith(".jar")
+            ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
+            : jarFileName;
+    }
+}

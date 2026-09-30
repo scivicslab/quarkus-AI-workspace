@@ -1,3 +1,25 @@
+# quarkus-chat-ui3 のタイルをやめ、quarkus-chat-ui 3.0.0-SNAPSHOT のタイルを足す（2026-09-30）
+
+## Plan
+- [x] `ai-workspace-tools.yaml`: `quarkus-chat-ui3` 項目を削除、`quarkus-chat-ui-3` 項目を追加（2.x 項目は不変）
+- [x] 登録項目に `artifact`（建てた jar の名前の先頭部分）と `branch`（Build Snapshot が建てるブランチ）を追加
+- [x] `SnapshotBuildService`: `branch` の checkout、`artifact` で jar を探す
+- [x] `GitHubVersionFetcher`/`ToolVersionActor`: Latest SNAPSHOT 行は `branch` の pom を読む
+- [x] テスト: registry（chat-ui3 が無い・3.x タイルの形）、update commands（名指しブランチ）、fetcher の branch
+- [x] 文書: `TwoTilesOneRepository_260930_oo01`（020_specs/190）、`ToolVersions` に1文
+- [x] `~/works/quarkus-chat-ui-3.jar` → `quarkus-chat-ui-3.0.0-SNAPSHOT.jar` のリンク（Build Snapshot が通る前から起動できる）
+- [ ] push（quarkus-chat-ui の feat ブランチと quarkus-AI-workspace）と 28000 の再起動はユーザー判断
+
+## Review
+- Build Snapshot は GitHub の `origin/<branch>` を建てるので、`quarkus-chat-ui` の
+  `feat/workflow-as-queue-item` を push するまでは 3.x タイルの Build Snapshot は失敗する。
+  それまでは手で置いたリンク先の 3.0.0-SNAPSHOT jar で起動できる。
+- Download Latest Release を 3.x タイルで押すと 2.x の release が `quarkus-chat-ui-3.jar` に入る
+  （タイルの Latest release 行が版を出す）。ボタンの出し分けは今回の範囲外。
+- 3.x が main に入ったら `branch:` 行を消すだけでよい。
+
+---
+
 # Conversations 検索結果から前後の turn へ移動する
 
 ## 現状

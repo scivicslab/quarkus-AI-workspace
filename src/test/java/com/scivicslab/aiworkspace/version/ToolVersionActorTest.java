@@ -33,10 +33,12 @@ class ToolVersionActorTest {
         RemoteVersions answer;
         Exception failure;
         String askedAbout;
+        String askedBranch;
 
         @Override
-        public RemoteVersions fetch(String repository) throws Exception {
+        public RemoteVersions fetch(String repository, String branch) throws Exception {
             askedAbout = repository;
+            askedBranch = branch;
             if (failure != null) throw failure;
             return answer;
         }

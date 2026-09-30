@@ -18,6 +18,11 @@
 #   jvmArgs        raw JVM flags inserted before -D props (e.g. -Xmx2g)
 #   companionJars  link names of jars that accompany the tool's jar (plugin jars from the same
 #                  build); Build Snapshot and Download Latest place them in ~/works too
+#   artifact       base name of the jar the build produces ("<artifact>-<version>.jar" under a
+#                  target/ directory); omit when it is the link name without ".jar". Needed when two
+#                  entries link one repository's jar under different names (TwoTilesOneRepository_260930_oo01)
+#   branch         the branch Build Snapshot checks out and Latest SNAPSHOT reads the pom from;
+#                  omit for the repository's default branch
 #   params         dashboard form fields (key,label,type[dir|select|text],default,jvmProp,workingDir,argPos,options)
 #
 # Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
@@ -37,13 +42,23 @@ tools:
       - {key: allowed-dirs, label: "Allowed Directories (comma-separated)", type: text, default: "${HOME}/works", jvmProp: "chat-ui.filesystem.allowed-dirs"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
-  - name: quarkus-chat-ui3
-    jar: quarkus-chat-ui3.jar
-    github: scivicslab/quarkus-chat-ui3
-    dependsOn: [turing-workflow, Turing-workflow-plugins]
+  # The 3.x development line of the same repository, beside the 2.x tile above
+  # (TwoTilesOneRepository_260930_oo01). Build Snapshot checks out the branch named here and links
+  # the jar under its own name, so it never replaces the 2.x tile's quarkus-chat-ui.jar. No
+  # dependsOn: 3.x pins released turing-workflow artifacts, which resolve from Maven Central.
+  - name: quarkus-chat-ui-3
+    jar: quarkus-chat-ui-3.jar
+    artifact: quarkus-chat-ui
+    github: scivicslab/quarkus-chat-ui
+    branch: feat/workflow-as-queue-item
     port: 28140
     params:
-      - {key: servers, label: "vLLM Endpoint", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chatui3.vllm-base-url"}
+      - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
+      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
+      - {key: provider, label: "LLM Provider", type: select, default: "${DEFAULT_PROVIDER}", jvmProp: "chat-ui.provider",
+         options: [{value: "claude", label: "Claude"}, {value: "codex", label: "Codex (OpenAI)"}, {value: "openai-compat", label: "Local LLM (vLLM)"}]}
+      - {key: servers, label: "vLLM Endpoint (Local LLM only)", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
+      - {key: allowed-dirs, label: "Allowed Directories (comma-separated)", type: text, default: "${HOME}/works", jvmProp: "chat-ui.filesystem.allowed-dirs"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   # chat-ui-with-audit-trail carries plugin jars beside its body (ProviderAndToolPlugins_260912_oo01);

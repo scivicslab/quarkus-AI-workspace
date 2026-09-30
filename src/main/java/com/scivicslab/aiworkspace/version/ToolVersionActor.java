@@ -77,15 +77,16 @@ public class ToolVersionActor {
      */
     public RemoteVersions refreshOne(String toolName) {
         String repository = null;
+        String branch = null;
         for (ToolRegistryEntry entry : ToolRegistryLoader.load()) {
-            if (entry.name().equals(toolName)) { repository = entry.githubRepo(); break; }
+            if (entry.name().equals(toolName)) { repository = entry.githubRepo(); branch = entry.branch(); break; }
         }
         if (repository == null || repository.isBlank()) {
             throw new IllegalArgumentException("No GitHub repository configured for " + toolName);
         }
 
         try {
-            RemoteVersions versions = fetcher.fetch(repository);
+            RemoteVersions versions = fetcher.fetch(repository, branch);
             byTool.put(toolName, versions);
             fetchedAt = Instant.now();
             forget(toolName);

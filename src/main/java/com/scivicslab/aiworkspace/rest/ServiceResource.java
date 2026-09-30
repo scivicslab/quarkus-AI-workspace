@@ -277,7 +277,8 @@ public class ServiceResource {
         if (!library && jarName == null)
             return Response.status(404).entity(Map.of("error", "No jar name configured for " + name)).build();
 
-        var job = snapshotBuilder.start(name, github, jarName, toolRegistry.getCompanionJars(name));
+        var job = snapshotBuilder.start(name, github, jarName, toolRegistry.getCompanionJars(name),
+                toolRegistry.getArtifactBase(name).orElse(null), toolRegistry.getBranch(name).orElse(null));
         return Response.ok(Map.of(
                 "jobId", job.ask(j -> j.id()).join(),
                 "state", job.ask(j -> j.state()).join().name())).build();

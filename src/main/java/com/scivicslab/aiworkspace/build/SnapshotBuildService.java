@@ -99,12 +99,24 @@ public class SnapshotBuildService {
      */
     public ActorRef<BuildJobActor> start(String tool, String githubRepo, String jarFileName,
                                          List<String> companionJars) {
+        return start(tool, githubRepo, jarFileName, companionJars, null, null);
+    }
+
+    /**
+     * @param artifactBase the base name the built jar is found by ({@code <base>-<version>.jar});
+     *                     null for the link name without {@code .jar}
+     * @param branch       the branch to check out; null for the repository's default branch
+     *                     ({@code TwoTilesOneRepository_260930_oo01})
+     */
+    public ActorRef<BuildJobActor> start(String tool, String githubRepo, String jarFileName,
+                                         List<String> companionJars, String artifactBase, String branch) {
         String jobId = UUID.randomUUID().toString();
         ActorRef<BuildJobActor> job = actors.newBuildJob(jobId, tool);
+        List<String> companions = companionJars == null ? List.of() : companionJars;
         // The build runs on a virtual thread because waiting for Maven is its whole job. What it
         // learns along the way it tells the actor; it never writes the state itself.
         Thread.ofVirtual().name("snapshot-build-" + tool).start(
-            () -> run(job, githubRepo, jarFileName, companionJars == null ? List.of() : companionJars));
+            () -> run(job, githubRepo, jarFileName, companions, artifactBase, branch));
         return job;
     }
 
@@ -118,17 +130,19 @@ public class SnapshotBuildService {
     // ---------------------------------------------------------------
 
     private void run(ActorRef<BuildJobActor> job, String githubRepo, String jarFileName,
-                     List<String> companionJars) {
+                     List<String> companionJars, String artifactBase, String branch) {
         try {
             buildDependencies(job);
-            Path repoDir = cloneOrUpdate(job, githubRepo);
+            Path repoDir = cloneOrUpdate(job, githubRepo, branch);
             build(job, repoDir, false, List.of()); // the tool itself is tested (project policy), full build
 
             if (jarFileName != null && !jarFileName.isBlank()) {
                 job.tell(j -> j.step("locating jar"));
-                String jarBase = jarFileName.endsWith(".jar")
-                    ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
-                    : jarFileName;
+                String jarBase = (artifactBase != null && !artifactBase.isBlank())
+                    ? artifactBase
+                    : jarFileName.endsWith(".jar")
+                        ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
+                        : jarFileName;
                 Path uberJar = locateUberJar(repoDir, jarBase);
                 job.tell(j -> j.append("Found uber-jar: " + uberJar));
 
@@ -181,7 +195,7 @@ public class SnapshotBuildService {
             }
             job.tell(j -> j.step("dependency: " + dep.name()));
             job.tell(j -> j.append("────── Building dependency: " + dep.name() + " (" + dep.githubRepo() + ")"));
-            Path depDir = cloneOrUpdate(job, dep.githubRepo());
+            Path depDir = cloneOrUpdate(job, dep.githubRepo(), dep.branch());
             build(job, depDir, true, dep.modules()); // library: mvn install to ~/.m2 (tests skipped, only needed modules)
         }
         String toolName = job.ask(j -> j.tool()).join();
@@ -240,13 +254,32 @@ public class SnapshotBuildService {
      * @return the commands, to be run in the checkout in order
      */
     static List<String[]> updateCommands() {
+        return updateCommands(null);
+    }
+
+    /**
+     * The same, for a named branch: the checkout is switched to a local branch of that name that
+     * sits exactly on the remote's, discarding local drift ({@code --force}) and any commits the
+     * last build left on it ({@code reset --hard}). Null names the remote's default branch.
+     *
+     * @param branch the branch to bring the checkout to, or null for the default branch
+     * @return the commands, to be run in the checkout in order
+     */
+    static List<String[]> updateCommands(String branch) {
+        if (branch == null || branch.isBlank()) {
+            return List.of(
+                new String[]{"git", "fetch", "--all", "--prune"},
+                new String[]{"git", "remote", "set-head", "origin", "--auto"},
+                new String[]{"git", "reset", "--hard", "origin/HEAD"});
+        }
         return List.of(
             new String[]{"git", "fetch", "--all", "--prune"},
             new String[]{"git", "remote", "set-head", "origin", "--auto"},
-            new String[]{"git", "reset", "--hard", "origin/HEAD"});
+            new String[]{"git", "checkout", "--force", "-B", branch, "origin/" + branch},
+            new String[]{"git", "reset", "--hard", "origin/" + branch});
     }
 
-    private Path cloneOrUpdate(ActorRef<BuildJobActor> job, String githubRepo) throws Exception {
+    private Path cloneOrUpdate(ActorRef<BuildJobActor> job, String githubRepo, String branch) throws Exception {
         Path buildRoot = Path.of(expand(buildDirTemplate));
         Files.createDirectories(buildRoot);
         String leaf = githubRepo.contains("/")
@@ -257,7 +290,7 @@ public class SnapshotBuildService {
         if (Files.isDirectory(repoDir.resolve(".git"))) {
             job.tell(j -> j.step("git pull"));
             job.tell(j -> j.append("Updating existing checkout: " + repoDir));
-            for (String[] command : updateCommands()) {
+            for (String[] command : updateCommands(branch)) {
                 exec(job, repoDir, command);
             }
         } else {
@@ -268,6 +301,10 @@ public class SnapshotBuildService {
             String url = base + "/" + githubRepo + ".git";
             job.tell(j -> j.append("Cloning " + url + " → " + repoDir));
             exec(job, buildRoot, "git", "clone", url, leaf);
+            if (branch != null && !branch.isBlank()) {
+                // A clone sits on the default branch; move it to the named one.
+                exec(job, repoDir, "git", "checkout", "--force", "-B", branch, "origin/" + branch);
+            }
         }
         return repoDir;
     }

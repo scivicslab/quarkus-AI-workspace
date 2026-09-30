@@ -50,6 +50,24 @@ public class ToolRegistry {
                 .orElse(List.of());
     }
 
+    /** @return the base name the build's jar is found by; empty when the entry has no jar */
+    public Optional<String> getArtifactBase(String name) {
+        return entries.stream()
+                .filter(e -> e.name().equals(name))
+                .map(ToolRegistryEntry::artifactBase)
+                .filter(a -> a != null && !a.isBlank())
+                .findFirst();
+    }
+
+    /** @return the branch Build Snapshot checks out; empty for the repository's default branch */
+    public Optional<String> getBranch(String name) {
+        return entries.stream()
+                .filter(e -> e.name().equals(name))
+                .map(ToolRegistryEntry::branch)
+                .filter(b -> b != null && !b.isBlank())
+                .findFirst();
+    }
+
     public boolean isLibrary(String name) {
         return entries.stream()
                 .filter(e -> e.name().equals(name))

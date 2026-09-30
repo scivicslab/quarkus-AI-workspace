@@ -105,6 +105,40 @@ class SnapshotBuildUpdateTest {
                 "@{u} names the pruned origin/master and resolves to nothing; this is the 128");
     }
 
+    /** Adds a branch to the origin with one commit of its own, leaving the default branch as it was. */
+    private void addAFeatureBranchAndCommit() throws Exception {
+        must(origin, "git", "checkout", "--quiet", "-b", "feat/x");
+        Files.writeString(origin.resolve("README.md"), "feature\n");
+        must(origin, "git", "commit", "--quiet", "-am", "feature");
+        must(origin, "git", "checkout", "--quiet", "master");
+    }
+
+    @Test
+    @DisplayName("a named branch: the checkout is brought to that branch, not the default one")
+    void theCheckoutFollowsTheNamedBranch() throws Exception {
+        addAFeatureBranchAndCommit();
+        Files.writeString(checkout.resolve("README.md"), "scribbled over by the last build\n");
+
+        for (String[] command : SnapshotBuildService.updateCommands("feat/x")) {
+            assertEquals(0, run(checkout, command),
+                    "command failed: " + String.join(" ", command));
+        }
+
+        assertEquals(revision(origin, "feat/x"), revision(checkout, "HEAD"),
+                "the checkout must sit on the commit the named branch points at");
+        assertEquals("feature\n", Files.readString(checkout.resolve("README.md")));
+        assertNotEquals(revision(origin, "master"), revision(checkout, "HEAD"),
+                "and not on the default branch");
+    }
+
+    @Test
+    @DisplayName("no branch named: updateCommands(null) is the default-branch sequence")
+    void nullBranchIsTheDefaultSequence() {
+        assertEquals(SnapshotBuildService.updateCommands().size(),
+                SnapshotBuildService.updateCommands(null).size());
+        assertEquals("origin/HEAD", SnapshotBuildService.updateCommands(null).get(2)[3]);
+    }
+
     @Test
     @DisplayName("a checkout with local drift is reset, rename or no rename")
     void localDriftIsDiscarded() throws Exception {
