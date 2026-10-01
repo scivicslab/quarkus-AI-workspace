@@ -44,13 +44,14 @@ tools:
 
   # The 3.x development line of the same repository, beside the 2.x tile above
   # (TwoTilesOneRepository_260930_oo01). Build Snapshot checks out the branch named here and links
-  # the jar under its own name, so it never replaces the 2.x tile's quarkus-chat-ui.jar. No
-  # dependsOn: 3.x pins released turing-workflow artifacts, which resolve from Maven Central.
+  # the jar under its own name, so it never replaces the 2.x tile's quarkus-chat-ui.jar. 3.x builds
+  # against turing-workflow's development version, so that library is built first.
   - name: quarkus-chat-ui-3
     jar: quarkus-chat-ui-3.jar
     artifact: quarkus-chat-ui
     github: scivicslab/quarkus-chat-ui
     branch: feat/workflow-as-queue-item
+    dependsOn: [turing-workflow]
     port: 28140
     params:
       - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}

@@ -152,7 +152,7 @@ class ToolRegistryLoaderTest {
         assertEquals("feat/workflow-as-queue-item", three.branch(), "Build Snapshot checks out the 3.x branch");
         assertEquals(28140, three.defaultPort());
         assertEquals(two.params().size(), three.params().size(), "same program, same form");
-        assertTrue(three.dependsOn().isEmpty(), "3.x pins released turing-workflow artifacts");
+        assertEquals(List.of("turing-workflow"), three.dependsOn(), "3.x builds against turing-workflow's development version");
         // The 2.x tile is untouched: no artifact, no branch, so it builds the default branch by its link name.
         assertNull(two.artifact());
         assertNull(two.branch());
