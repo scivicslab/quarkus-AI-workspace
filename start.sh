@@ -10,19 +10,22 @@
 #   The port. It is passed explicitly so that the port the portal listens on, the port range it
 #   hands out, and the AI_WORKSPACE_URL it gives every tool are one number.
 #
-#   The GPU broker. quarkus-gpu-broker stands once in front of the cluster's GPU nodes; the portal
-#   is the one place that knows where, and passes it to every tool as GPU_BROKER_URL. Left unset,
-#   each tool falls back to whatever address it was written with.
+#   The GPU broker. quarkus-gpu-broker stands once in front of the cluster's GPU nodes -- the one
+#   instance runs inside the W206 cluster (namespace gpu-broker) and answers on NodePort 30805 of
+#   every k0s node. The portal is the one place that knows where, and passes it to every tool as
+#   GPU_BROKER_URL. Left unset, each tool falls back to whatever address it was written with. There
+#   is no broker on this machine any more (the one on localhost:28005 was retired on 2026-10-06);
+#   pointing here at one would leave every tool talking to a port nothing listens on.
 #
 # Usage:
-#   ./start.sh                      # port 28000, broker on 28005
+#   ./start.sh                      # port 28000, the in-cluster broker
 #   ./start.sh 18400                # a throwaway on another port
-#   AI_WORKSPACE_BROKER=http://192.168.5.9:28005 ./start.sh
+#   AI_WORKSPACE_BROKER=http://192.168.5.22:30805 ./start.sh   # the same broker through another node
 set -e
 
 WORKS_DIR="${AI_WORKSPACE_WORKS_DIR:-$HOME/works}"
 PORT="${1:-28000}"
-BROKER_URL="${AI_WORKSPACE_BROKER:-http://localhost:28005}"
+BROKER_URL="${AI_WORKSPACE_BROKER:-http://192.168.5.21:30805}"
 JAR="$WORKS_DIR/quarkus-AI-workspace.jar"
 LOG="$WORKS_DIR/quarkus-ai-workspace-$PORT.log"
 
