@@ -85,7 +85,7 @@ tools:
       # Same field as the other two tiles: the conversation still needs a Local LLM to talk to.
       # What this tile leaves out is the web-tools plugin, so the conversation has no web_search
       # and no fetch, and the provider list holds openai-compat alone.
-      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://localhost:28005", jvmProp: "chat-ui.servers"}
+      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://192.168.5.21:30805", jvmProp: "chat-ui.servers"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: chat-ui-with-audit-trail-local-llm
@@ -102,7 +102,7 @@ tools:
       # broker, not a bare vLLM node IP/hostname. The broker speaks plain HTTP: an https:// value
       # makes every request fail at once with "Unrecognized SSL message", so the form starts with
       # the broker's own address rather than an empty box someone has to fill in.
-      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://localhost:28005", jvmProp: "chat-ui.servers"}
+      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://192.168.5.21:30805", jvmProp: "chat-ui.servers"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
 
@@ -120,7 +120,7 @@ tools:
       # broker, not a bare vLLM node IP/hostname. The broker speaks plain HTTP: an https:// value
       # makes every request fail at once with "Unrecognized SSL message", so the form starts with
       # the broker's own address rather than an empty box someone has to fill in.
-      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://localhost:28005", jvmProp: "chat-ui.servers"}
+      - {key: servers, label: "Local LLM Endpoint (gpu-broker base URL)", type: text, default: "http://192.168.5.21:30805", jvmProp: "chat-ui.servers"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: html-saurus
