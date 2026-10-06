@@ -156,15 +156,11 @@ tools:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
-  - name: quarkus-gpu-broker
-    jar: quarkus-gpu-broker.jar
-    github: scivicslab/quarkus-gpu-broker
-    port: 28005          # reserved fixed port (GPU broker; reused if already running)
-    fixedPort: true
-    singleInstance: true
-    params:
-      - {key: nodes, label: "Node IPs / CIDR (comma-separated)", type: text, default: "192.168.5.0/26", jvmProp: "broker.nodes"}
-      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
+  # quarkus-gpu-broker has no tile. One broker stands in front of the cluster's GPU nodes, and it
+  # runs inside the cluster (namespace gpu-broker, NodePort 30805 on every k0s node). A tile here
+  # would start a second one on this machine, which is what the tiles above used to point at
+  # (localhost:28005) until it was retired on 2026-10-06: two brokers hand out the same GPUs
+  # without knowing about each other. The address every tool is given is the one start.sh passes.
 
   - name: quarkus-slurm-monitor
     jar: quarkus-slurm-monitor.jar
