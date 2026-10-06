@@ -92,17 +92,13 @@ class ToolRegistryLoaderTest {
         assertEquals("port", e.params().get(1).key());
     }
 
-    @Test void quarkus_gpu_broker_single_instance_with_nodes() {
-        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "quarkus-gpu-broker");
-        assertTrue(e.singleInstance());
-        assertEquals("scivicslab/quarkus-gpu-broker", e.githubRepo());
-        assertEquals(28005, e.defaultPort());
-        assertTrue(e.args().isEmpty());
-        assertEquals(2, e.params().size(), "quarkus-gpu-broker has a Node IPs field and a port field");
-        AiWorkspaceConfig.ParamDefinition nodes = e.params().get(0);
-        assertEquals("nodes", nodes.key());
-        assertEquals("broker.nodes", nodes.jvmProp());
-        assertEquals("port", e.params().get(1).key());
+    @Test void no_tile_starts_a_second_gpu_broker() {
+        // One broker stands in front of the cluster's GPU nodes and runs inside the cluster. A tile
+        // would let anyone start a second one here, dividing the same GPUs between two schedulers
+        // that cannot see each other's queues.
+        assertTrue(ToolRegistryLoader.load().stream()
+                .noneMatch(e -> "quarkus-gpu-broker".equals(e.name())),
+                "the registry must not offer a GPU broker to launch");
     }
 
     @Test void library_entry_flagged() {
