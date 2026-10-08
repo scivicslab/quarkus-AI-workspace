@@ -67,9 +67,17 @@ class ToolRegistryLoaderTest {
 
     @Test void html_saurus_args_and_argpos() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "html-saurus");
-        assertEquals(List.of("${HOME}/works", "--portal-mode", "--serve", "--port", "${PORT}"), e.args());
+        List<String> args = List.of("serve", "--dir", "${HOME}/works", "--port", "${PORT}");
+        assertEquals(args, e.args());
         assertEquals(2, e.params().size(), "html-saurus has a Document Root selector and a port field");
-        assertEquals(0, e.params().get(0).argPos(), "Document Root replaces args[0]");
+
+        // argPos replaces args[argPos] with what the Document Root field holds. html-saurus split
+        // into one jar per mode, so the first word is the command the jar has rather than the
+        // directory: at 0 the directory would be written over "serve" and the portal would print
+        // its command list instead of starting.
+        int dirPos = e.params().get(0).argPos();
+        assertEquals("${HOME}/works", args.get(dirPos),
+                "Document Root must replace the directory, not the command or an option name");
         assertEquals("port", e.params().get(1).key());
     }
 
