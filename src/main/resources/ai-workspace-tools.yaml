@@ -128,9 +128,13 @@ tools:
     github: scivicslab/html-saurus
     port: 28001          # reserved fixed port (search service; reused if already running)
     fixedPort: true
-    args: ["${HOME}/works", "--portal-mode", "--serve", "--port", "${PORT}"]
+    # "serve" is the command; html-saurus-portal-server has exactly one. The mode is no longer
+    # chosen by an option — it is which jar this is.
+    args: ["serve", "--dir", "${HOME}/works", "--port", "${PORT}"]
     params:
-      - {key: dir, label: "Document Root", type: dir, default: "${HOME}/works", argPos: 0}
+      # argPos counts into args above, where the directory is now the third word: the command
+      # comes first, then --dir, then its value.
+      - {key: dir, label: "Document Root", type: dir, default: "${HOME}/works", argPos: 2}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
   - name: turing-workflow-editor
