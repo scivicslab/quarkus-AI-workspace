@@ -125,6 +125,10 @@ tools:
 
   - name: html-saurus
     jar: html-saurus.jar
+    # The repository builds one jar per mode. The portal is what this tile runs; the published
+    # site is served by html-saurus-production-server, which is not deployed from here. The link
+    # in ~/works keeps the name it has always had.
+    artifact: html-saurus-portal-server
     github: scivicslab/html-saurus
     port: 28001          # reserved fixed port (search service; reused if already running)
     fixedPort: true
