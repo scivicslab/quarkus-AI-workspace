@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts quarkus-AI-workspace the way it is meant to run.
 #
-# Three things this settles that a bare "java -jar" does not:
+# Four things this settles that a bare "java -jar" does not:
 #
 #   The working directory. Six places resolve paths against it: where tool jars are looked up,
 #   where Build Snapshot installs what it builds, where config/application.yaml is read, and where
@@ -17,6 +17,15 @@
 #   is no broker on this machine any more (the one on localhost:28005 was retired on 2026-10-06);
 #   pointing here at one would leave every tool talking to a port nothing listens on.
 #
+#   Which jar is current. "mvn install" writes target/quarkus-AI-workspace-<version>.jar; the jar
+#   this script launches is $WORKS_DIR/quarkus-AI-workspace.jar, a symbolic link someone points at a
+#   version-stamped copy placed in $WORKS_DIR. A build does not move that link, so a jar built after
+#   the link was last pointed can sit in target/ while the link still names an older one, and
+#   "java -jar" would launch the older one without saying so. Below, before launch, this script
+#   compares target/'s jar against the link's target by modification time and, if target/'s is
+#   newer, copies it into $WORKS_DIR with a new timestamp and repoints the link -- so the two can
+#   no longer disagree silently.
+#
 # Usage:
 #   ./start.sh                      # port 28000, the in-cluster broker
 #   ./start.sh 18400                # a throwaway on another port
@@ -28,11 +37,24 @@ PORT="${1:-28000}"
 BROKER_URL="${AI_WORKSPACE_BROKER:-http://192.168.5.21:30805}"
 JAR="$WORKS_DIR/quarkus-AI-workspace.jar"
 LOG="$WORKS_DIR/quarkus-ai-workspace-$PORT.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Pick up a jar mvn install left in target/ if it is newer than what the link points to (or the
+# link does not exist yet). "-nt" is true when the left file is newer, or exists while the right
+# one does not -- both of those are the cases that call for repointing the link.
+TARGET_JAR=$(ls -t "$SCRIPT_DIR"/target/quarkus-AI-workspace-*.jar 2>/dev/null | grep -v -- '-original.jar$' | head -1)
+if [ -n "$TARGET_JAR" ] && [ "$TARGET_JAR" -nt "$(readlink -f "$JAR" 2>/dev/null || echo "$JAR")" ]; then
+    VERSION=$(basename "$TARGET_JAR" .jar | sed 's/^quarkus-AI-workspace-//')
+    STAMP=$(date +%y%m%d%H%M)
+    DEST="$WORKS_DIR/quarkus-AI-workspace-$VERSION-$STAMP.jar"
+    cp "$TARGET_JAR" "$DEST"
+    ln -sfn "$(basename "$DEST")" "$JAR"
+    echo "Deployed: $(basename "$DEST") (target/ was newer than $JAR)"
+fi
 
 if [ ! -e "$JAR" ]; then
     echo "Not found: $JAR" >&2
-    echo "Deploy it first: mvn install && cp target/quarkus-AI-workspace-<version>.jar $WORKS_DIR/" >&2
-    echo "and link it:     ln -sfn quarkus-AI-workspace-<version>.jar $JAR" >&2
+    echo "Deploy it first: mvn install (this script then deploys target/'s jar on its own)" >&2
     exit 1
 fi
 
