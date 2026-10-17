@@ -27,9 +27,52 @@
         </tbody>
     </table>
 
+    <p class="section-label" style="margin-top:1.5rem;">html-saurus</p>
+    <table class="settings-table">
+        <tbody>
+            <tr>
+                <td class="inst-mono">Translation model</td>
+                <td>
+                    <select id="translation-model"></select>
+                    <button class="btn" type="button" id="translation-model-save">Save</button>
+                    <span id="translation-model-status" class="settings-unset"></span>
+                </td>
+                <td>The model html-saurus translates with. It asks here at each translation, so a change applies to the next one without restarting it. Blank keeps html-saurus's own default.</td>
+            </tr>
+        </tbody>
+    </table>
+
     <p style="margin-top:1rem;font-size:13px;color:var(--text-secondary);">
         These reach a tool only at the moment it is launched. A tool already running when a value
         changed still holds the old one; restart it to hand it the new one.
     </p>
+    <script>
+    (function () {
+        const sel = document.getElementById('translation-model');
+        const status = document.getElementById('translation-model-status');
+        async function load() {
+            const current = (await (await fetch('api/settings/translation-model')).json()).model;
+            let models = [];
+            try { models = (await (await fetch('api/settings/translation-model/candidates')).json()).models; } catch (e) {}
+            if (current && models.indexOf(current) < 0) models.unshift(current);
+            sel.innerHTML = '';
+            const none = document.createElement('option');
+            none.value = ''; none.textContent = '(html-saurus default)';
+            sel.appendChild(none);
+            models.forEach(function (m) {
+                const o = document.createElement('option');
+                o.value = m; o.textContent = m;
+                sel.appendChild(o);
+            });
+            sel.value = current;
+        }
+        document.getElementById('translation-model-save').addEventListener('click', async function () {
+            const r = await fetch('api/settings/translation-model', {
+                method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: sel.value });
+            status.textContent = r.ok ? 'Saved.' : 'Error: ' + r.status;
+        });
+        load();
+    })();
+    </script>
 {/body}
 {/include}

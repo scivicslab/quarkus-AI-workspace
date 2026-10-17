@@ -1,3 +1,26 @@
+# Settings タブで html-saurus の翻訳モデルを選べるようにする（2026-10-17）
+
+## 方針（ユーザー決定）
+- html-saurus は翻訳のたびに `AI_WORKSPACE_URL` へモデル名を問い合わせる（再起動不要）。
+- 保存先は `config/application.yaml` と別の専用ファイル。
+- 対象は翻訳モデルだけ。
+
+## Plan
+- [x] `TranslationModelSetting`: モデル名の読み書き。`${user.dir}/config/ai-workspace-settings.properties` の `translation.model`
+- [x] `GET/POST /api/settings/translation-model`（現在値の取得と保存）
+- [x] `GET /api/settings/translation-model/candidates`: broker の `GET /v1/models` の id 一覧
+- [x] Settings 画面に選択欄と保存ボタン（候補が取れないときは現在値だけ表示）
+- [x] テスト: 保存と読み出し、未設定は空、空文字で解除（`@QuarkusTest` を使わない純 Java）
+- [x] `mvn install`（`rm -rf target` 後）
+
+## Review
+- 保存先は `config/ai-workspace-settings.properties`（キー `translation.model`）。空は「未選択」で、html-saurus は自分の既定を使う。
+- `GET/POST /api/settings/translation-model` と、候補の `GET /api/settings/translation-model/candidates`（broker の `/v1/models`）を追加。
+- 使い捨てインスタンス（28040）で保存・読み出し・候補取得・画面の描画を確認済み。Qute は `{` の直後に文字が続くと式と読むので、JS のオブジェクトリテラルは `{ ` と空白を置いた。
+- 単体テスト117件通過。push と稼働中 28000 の入れ替えは未実施。
+
+---
+
 # quarkus-chat-ui3 のタイルをやめ、quarkus-chat-ui 3.0.0-SNAPSHOT のタイルを足す（2026-09-30）
 
 ## Plan
