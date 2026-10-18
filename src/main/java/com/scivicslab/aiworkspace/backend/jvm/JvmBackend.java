@@ -411,6 +411,86 @@ public class JvmBackend implements ServiceBackend {
         target.tell(ProcessSupervisor::stop);
     }
 
+    /** An instance as it was just before being restarted. */
+    private record Running(ActorRef<ProcessSupervisor> ref, int port, Map<String, String> params) {}
+
+    /** How long a stopped instance's port may take to be released, and a started one to be ready. */
+    private static final long PORT_RELEASE_TIMEOUT_MS = 20_000;
+    private static final long READY_TIMEOUT_MS = 180_000;
+
+    @Override
+    public void restartAll(String toolName, java.util.function.Consumer<String> progress) throws ServiceException {
+        findTool(toolName);
+        List<ActorRef<ProcessSupervisor>> list =
+            instances.ask(r -> r.dropFinishedAndList(toolName)).join();
+        List<Running> running = new ArrayList<>();
+        for (ActorRef<ProcessSupervisor> ref : list) {
+            running.add(new Running(ref, ref.ask(ProcessSupervisor::getPort).join(),
+                ref.ask(ProcessSupervisor::getLaunchParams).join()));
+        }
+        if (running.isEmpty()) {
+            throw new ServiceException("No running instance of " + toolName);
+        }
+        running.sort(java.util.Comparator.comparingInt(Running::port));
+
+        int n = 0;
+        for (Running r : running) {
+            n++;
+            String label = "[" + n + "/" + running.size() + "] " + toolName + ":" + r.port();
+            progress.accept(label + " stopping");
+            stopService(toolName, r.port());
+            // Messages to an instance are handled in order, so this answers only after stop() has run.
+            r.ref().ask(ProcessSupervisor::getState).join();
+            awaitPortFree(toolName, r.port());
+
+            Map<String, String> params = new java.util.HashMap<>(r.params());
+            params.put("port", Integer.toString(r.port()));
+            progress.accept(label + " starting");
+            startService(toolName, params);
+            awaitReady(toolName, r.port());
+            progress.accept(label + " ready");
+        }
+    }
+
+    private void awaitPortFree(String toolName, int port) throws ServiceException {
+        long deadline = System.currentTimeMillis() + PORT_RELEASE_TIMEOUT_MS;
+        while (!isPortFree(port)) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new ServiceException(toolName + ":" + port + " was stopped but its port is still in use");
+            }
+            sleepQuietly(200);
+        }
+    }
+
+    private void awaitReady(String toolName, int port) throws ServiceException {
+        long deadline = System.currentTimeMillis() + READY_TIMEOUT_MS;
+        while (true) {
+            SessionState state = instances.ask(r -> r.forTool(toolName)).join().stream()
+                .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
+                .map(s -> s.ask(ProcessSupervisor::getState).join())
+                .findFirst().orElse(null);
+            if (state == SessionState.READY) {
+                return;
+            }
+            if (state == null || state == SessionState.FAILED || state == SessionState.STOPPED) {
+                throw new ServiceException(toolName + ":" + port + " did not start again (" + state + ")");
+            }
+            if (System.currentTimeMillis() > deadline) {
+                throw new ServiceException(toolName + ":" + port + " was not ready within "
+                    + (READY_TIMEOUT_MS / 1000) + " seconds");
+            }
+            sleepQuietly(500);
+        }
+    }
+
+    private static void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     /**
      * {@inheritDoc}
      *

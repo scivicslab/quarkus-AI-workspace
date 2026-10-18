@@ -1,3 +1,32 @@
+# ツールのタイルに「Restart all」を置き、起動中のインスタンスを 1 つずつ再起動する（2026-10-18）
+
+## 方針（ユーザー決定）
+- 起動設定（ツール名・ポート・起動パラメータ）をインスタンスごとのファイルに残し、引き取り（adopt）のときに読み戻す。
+- 再起動は 1 つずつ順番に。「Stop all」は足さない。
+
+## 現状で分かっていること
+- 引き取ったインスタンスは起動パラメータを持たない（`ProcessSupervisor.adopt` は `Map.of()`）。そのため、再起動しても元の設定に戻せない。
+- `ProcessSupervisor.stop()` はプロセスの終了まで待つ（5 秒で強制終了）。メッセージは FIFO なので、`stop` の後の `ask` は停止後に返る。
+- 明示ポートで起動すれば、空いていればそのポートに立つ（`choosePort`）。
+
+## Plan
+- [x] `InstanceRecords`: `~/.local/share/quarkus-ai-workspace/instances/<ツール>-<ポート>.properties`（起動時刻とパラメータ）。読み書き・削除・「そのプロセスのものか」の判定
+- [x] `ProcessSupervisor`: 起動で書く、`stop()` で消す、`adopt` で読む（起動時刻とプロセスの開始時刻が近いときだけ採る）。起動パラメータを読む口を足す
+- [x] `JvmBackend.restartAll`: ポート順に 1 つずつ「停止 → 終了とポート解放を待つ → 同じポートと設定で起動 → READY を待つ」。進み具合は行ごとに通知
+- [x] `RestartAllService` と `POST /api/tool/{name}/restart-all`: `BuildJobActor` に進み具合を載せ、既存の `GET /api/tool/{name}/build-status/{jobId}` で読む
+- [x] タイルに「Restart all」ボタン（確認の画面に台数とジョブが失われることを出す）
+- [x] テスト: `InstanceRecords`。別ポートの使い捨て AI workspace で、再起動・AI workspace 自身の再起動後の引き取り・設定の復元を通しで確認
+- [x] `rm -rf target && mvn install`
+
+## Review
+- 起動設定は `~/.local/share/quarkus-ai-workspace/instances/<ツール>-<ポート>.properties` に残す（起動時刻と `param.*`）。AI workspace の再起動で引き取るときは、プロセスの開始時刻が記録した起動時刻の -5 秒〜+120 秒に入るときだけ採る。別のプロセスや手で起動したものには貸さない。`stop` で消える。
+- `Restart all`: ポート順に 1 つずつ「停止 → 終了とポート解放を待つ → 同じポート・同じ設定で起動 → READY を待つ」。進み具合は `BuildJobActor` に載せ、既存の `build-status` で読む。同じツールの二重要求は 409。確認の画面に台数と、中のジョブが失われることを出す。
+- 別ポート（28040）の使い捨て AI workspace に軽い html-saurus を 2 つ立てて確認: 再起動で PID だけが替わり、ポートと `--dir` は同じ。AI workspace 自身を再起動して引き取らせると `dir` と `title` が戻り、その状態の再起動も通った。実行中の二重要求は 409。
+- 単体テスト 125 件（`InstanceRecords` 8 件を追加）。commit・push・稼働中の AI workspace の入れ替えは未実施。
+- 記録を持たない既存の引き取りインスタンスは、最初の再起動では設定が空のまま（既定値）で起動する。次に AI workspace から起動したものから、記録が残る。
+
+---
+
 # Settings タブで html-saurus の翻訳モデルを選べるようにする（2026-10-17）
 
 ## 方針（ユーザー決定）

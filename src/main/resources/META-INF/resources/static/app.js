@@ -889,6 +889,82 @@
         }
     };
 
+    // How many instances of a tool are running, read from the same status the dashboard shows.
+    async function runningInstances(name) {
+        const r = await fetch('api/status');
+        const data = await r.json();
+        const found = [];
+        (function walk(node) {
+            if (Array.isArray(node)) { node.forEach(walk); return; }
+            if (node && typeof node === 'object') {
+                if (node.toolName === name && typeof node.port === 'number') found.push(node.port);
+                Object.values(node).forEach(walk);
+            }
+        })(data);
+        return Array.from(new Set(found)).sort((a, b) => a - b);
+    }
+
+    window.restartAll = async function(name) {
+        const btn = document.getElementById('btn-restart-' + name);
+        const status = document.getElementById('download-status-' + name);
+        if (!btn) return;
+        status.textContent = '';
+        status.style.color = '';
+        let ports;
+        try {
+            ports = await runningInstances(name);
+        } catch (e) {
+            status.textContent = '\u2717 ' + e.message;
+            status.style.color = 'var(--accent-red)';
+            return;
+        }
+        if (ports.length === 0) {
+            status.textContent = 'No running instance of ' + name + '.';
+            return;
+        }
+        if (!confirm('Restart ' + ports.length + ' instance(s) of ' + name + ' (port '
+                + ports.join(', ') + '), one at a time?\n\nWork running inside them, such as imports '
+                + 'and translations, is lost.')) {
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Restarting\u2026';
+        try {
+            const r = await fetch('api/tool/' + encodeURIComponent(name) + '/restart-all', { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || !data.jobId) {
+                status.textContent = '\u2717 ' + (data.error || 'failed to start the restart');
+                status.style.color = 'var(--accent-red)';
+                return;
+            }
+            const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(data.jobId);
+            while (true) {
+                await new Promise(res => setTimeout(res, 1500));
+                let job;
+                try { job = await (await fetch(url)).json(); } catch (e) { continue; }
+                status.title = job.log || '';
+                if (job.state === 'RUNNING') {
+                    status.textContent = '\u23f3 ' + (job.step || 'restarting');
+                    status.style.color = 'var(--text-secondary)';
+                } else if (job.state === 'SUCCESS') {
+                    status.textContent = '\u2713 restarted ' + ports.length + ' instance(s)';
+                    status.style.color = 'var(--accent-green)';
+                    return;
+                } else {
+                    status.textContent = '\u2717 ' + (job.error || 'restart failed');
+                    status.style.color = 'var(--accent-red)';
+                    return;
+                }
+            }
+        } catch (e) {
+            status.textContent = '\u2717 ' + e.message;
+            status.style.color = 'var(--accent-red)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Restart all';
+        }
+    };
+
     async function pollBuild(name, jobId, btn, status) {
         const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(jobId);
         while (true) {

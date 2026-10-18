@@ -127,6 +127,7 @@
                 {#if tool.github}
                 <button class="btn btn-download" id="btn-download-{tool.name}" onclick="downloadLatest('{tool.name}')">Download Latest Release</button>
                 <button class="btn btn-download" id="btn-build-{tool.name}" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
+                <button class="btn btn-download" id="btn-restart-{tool.name}" onclick="restartAll('{tool.name}')">Restart all</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
                 {/if}
             </div>

@@ -88,6 +88,11 @@ public class ProcessSupervisor {
         this.launchParams = Collections.unmodifiableMap(launchParams);
     }
 
+    /** The parameters this instance was launched with; empty for one adopted without a record. */
+    public Map<String, String> getLaunchParams() {
+        return launchParams;
+    }
+
     public int getPort() {
         return port;
     }
@@ -178,8 +183,18 @@ public class ProcessSupervisor {
      * Tailing the existing log file resumes so the UI can show recent output.
      */
     public static ProcessSupervisor adopt(AiWorkspaceConfig.ToolDefinition config, int port, long pid) {
-        ProcessSupervisor supervisor = new ProcessSupervisor(config, port, Map.of());
-        supervisor.adoptedHandle = ProcessHandle.of(pid).orElse(null);
+        ProcessHandle handle = ProcessHandle.of(pid).orElse(null);
+        // The parameters it was launched with, when this portal wrote them down for this very process.
+        Map<String, String> params = Map.of();
+        if (handle != null) {
+            java.time.Instant processStart = handle.info().startInstant().orElse(null);
+            params = InstanceRecords.read(InstanceRecords.DEFAULT_DIR, config.name(), port)
+                .filter(r -> InstanceRecords.belongsTo(r, processStart))
+                .map(InstanceRecords.Record::params)
+                .orElse(Map.of());
+        }
+        ProcessSupervisor supervisor = new ProcessSupervisor(config, port, params);
+        supervisor.adoptedHandle = handle;
         supervisor.state = SessionState.READY;
         // The moment is the OS's, not this portal's: this process outlived the portal that started it.
         supervisor.startedAt = supervisor.adoptedHandle == null ? null
@@ -267,8 +282,16 @@ public class ProcessSupervisor {
                 pb.directory(workingDir);
             }
 
+            long launchedAtMs = System.currentTimeMillis();
             process = pb.start();
             startedAt = java.time.Instant.now();
+            try {
+                InstanceRecords.write(InstanceRecords.DEFAULT_DIR, config.name(), port, launchedAtMs, launchParams);
+            } catch (java.io.IOException e) {
+                // The instance runs either way; only a restart after a portal restart loses its parameters.
+                logger.warning("Could not record the launch parameters of " + config.name() + ":" + port
+                    + " (" + e.getMessage() + ")");
+            }
             state = SessionState.STARTING;
 
             // Waiting is what these two do, so they stay on virtual threads. What they learn,
@@ -299,6 +322,7 @@ public class ProcessSupervisor {
     public void stop() {
         deregisterFromK8sPups();
         stopping = true;
+        InstanceRecords.delete(InstanceRecords.DEFAULT_DIR, config.name(), port);
 
         if (process != null && process.isAlive()) {
             // Destroy descendants first (java child under setsid --wait does not

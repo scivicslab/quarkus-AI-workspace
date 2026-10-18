@@ -49,6 +49,9 @@ public class ServiceResource {
     com.scivicslab.aiworkspace.build.SnapshotBuildService snapshotBuilder;
 
     @Inject
+    com.scivicslab.aiworkspace.restart.RestartAllService restartAllService;
+
+    @Inject
     com.scivicslab.aiworkspace.config.ToolRegistry toolRegistry;
 
     @GET
@@ -282,6 +285,22 @@ public class ServiceResource {
         return Response.ok(Map.of(
                 "jobId", job.ask(j -> j.id()).join(),
                 "state", job.ask(j -> j.state()).join().name())).build();
+    }
+
+    /**
+     * Restarts every running instance of the tool, one at a time, each on its own port with the
+     * parameters it was launched with. Returns at once with a {@code jobId}; the progress is read
+     * from {@code /build-status/{jobId}} like a snapshot build's.
+     */
+    @POST
+    @Path("/tool/{name}/restart-all")
+    public Response restartAll(@PathParam("name") String name) {
+        var job = restartAllService.start(name);
+        if (job.isEmpty())
+            return Response.status(409).entity(Map.of("error", name + " is already being restarted")).build();
+        return Response.ok(Map.of(
+                "jobId", job.get().ask(j -> j.id()).join(),
+                "state", job.get().ask(j -> j.state()).join().name())).build();
     }
 
     /** Reports the progress of a snapshot build started via {@code build-snapshot}. */

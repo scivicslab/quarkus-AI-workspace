@@ -32,6 +32,18 @@ public interface ServiceBackend {
     void stopService(String toolName, int port) throws ServiceException;
 
     /**
+     * Restarts every running instance of the named tool, one at a time, in port order: each is
+     * stopped, then started again on the same port with the parameters it was launched with, and
+     * the next is not touched until that one is ready. Takes as long as the instances take to start,
+     * so it is meant to be called from a background thread.
+     *
+     * @param progress told one line each time an instance moves to its next step
+     * @throws ServiceException if the tool has no running instance, or an instance does not stop,
+     *                          free its port, or become ready; instances not yet reached are left running
+     */
+    void restartAll(String toolName, java.util.function.Consumer<String> progress) throws ServiceException;
+
+    /**
      * Return recent log lines for a specific instance.
      */
     List<String> getServiceLogs(String toolName, int port, int lines);
