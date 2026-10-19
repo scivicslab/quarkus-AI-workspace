@@ -83,8 +83,20 @@ class ToolRegistryLoaderTest {
 
     @Test void turing_editor_jvmargs() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "turing-workflow-editor");
-        assertEquals(List.of("-Xmx2g"), e.jvmArgs());
+        assertEquals(List.of("-Xmx2g", "-XX:G1PeriodicGCInterval=60000"), e.jvmArgs());
         assertEquals(28120, e.defaultPort());
+    }
+
+    // Without a heap cap the JVM grows to a quarter of RAM, and without the periodic GC it keeps
+    // that heap after the work is done; every tile runs a JVM, so every tile carries both flags.
+    @Test void every_tile_caps_heap_and_returns_it() {
+        for (ToolRegistryEntry e : ToolRegistryLoader.load()) {
+            if (e.library()) continue;
+            assertTrue(e.jvmArgs().stream().anyMatch(a -> a.startsWith("-Xmx")),
+                    e.name() + " must cap its heap");
+            assertTrue(e.jvmArgs().contains("-XX:G1PeriodicGCInterval=60000"),
+                    e.name() + " must return unused heap to the OS");
+        }
     }
 
     @Test void code_raptor_single_instance_with_workdir() {

@@ -33,6 +33,7 @@ tools:
     github: scivicslab/quarkus-chat-ui
     dependsOn: [turing-workflow, Turing-workflow-plugins]
     port: 28100
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
@@ -53,6 +54,7 @@ tools:
     branch: feat/workflow-as-queue-item
     dependsOn: [turing-workflow]
     port: 28140
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
@@ -138,7 +140,7 @@ tools:
     # "serve" is the command; html-saurus-portal-server has exactly one. The mode is no longer
     # chosen by an option — it is which jar this is.
     # Heap cap and periodic return of unused heap to the OS; without them the JVM grows to a
-    # quarter of RAM and keeps it after a rebuild has finished.
+    # quarter of RAM and keeps it after a rebuild has finished. Every tile carries the same pair.
     jvmArgs: ["-Xmx3g", "-XX:G1PeriodicGCInterval=60000"]
     args: ["serve", "--dir", "${HOME}/works", "--port", "${PORT}"]
     params:
@@ -151,7 +153,7 @@ tools:
     jar: turing-workflow-editor.jar
     github: scivicslab/Turing-workflow-editor
     port: 28120
-    jvmArgs: ["-Xmx2g"]
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
       # The processes whose actors a workflow may name, as name=host:port, comma-separated. The
@@ -166,6 +168,7 @@ tools:
     port: 28002          # reserved fixed port (search service; reused if already running)
     fixedPort: true
     singleInstance: true
+    jvmArgs: ["-Xmx1g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", jvmProp: "code.raptor.works-dir"}
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
@@ -182,6 +185,7 @@ tools:
     port: 28006          # reserved fixed port (queue-wait monitor; reused if already running)
     fixedPort: true
     singleInstance: true
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
