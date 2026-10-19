@@ -188,8 +188,10 @@ class ToolRegistryLoaderTest {
         assertTrue(sealed.companionJars().isEmpty(),
                 "no plugin jar is what makes this the configuration with no way out to the web,"
                         + " and no shell plugin either");
-        assertTrue(sealed.jvmArgs() == null || sealed.jvmArgs().isEmpty(),
+        assertTrue(sealed.jvmArgs().stream().noneMatch(a -> a.startsWith("-Dchat-ui.plugins=")),
                 "it passes no -Dchat-ui.plugins, which is how an adopted process is credited to it");
+        assertEquals(List.of("-Xmx2g", "-XX:G1PeriodicGCInterval=60000"), sealed.jvmArgs(),
+                "only the heap flags every audit-trail tile shares");
         ToolRegistryEntry local = byName(ToolRegistryLoader.load(), "chat-ui-with-audit-trail-local-llm");
         assertEquals(local.params().size(), sealed.params().size(), "the form is the same on all three tiles");
     }
@@ -205,9 +207,12 @@ class ToolRegistryLoaderTest {
                              "chat-ui-with-audit-trail-plugin-shell.jar",
                              "chat-ui-with-audit-trail-plugin-harness.jar"), cloud.companionJars(),
                 "bash comes with the shell plugin, so the two web-reaching tiles carry it");
-        assertEquals(1, local.jvmArgs().size());
-        assertTrue(local.jvmArgs().get(0).startsWith("-Dchat-ui.plugins=${HOME}/works/"), local.jvmArgs().get(0));
-        assertTrue(cloud.jvmArgs().get(0).contains("plugin-harness.jar"), cloud.jvmArgs().get(0));
+        List<String> heap = List.of("-Xmx2g", "-XX:G1PeriodicGCInterval=60000");
+        assertEquals(heap, local.jvmArgs().subList(0, 2), "the same heap flags lead every audit-trail tile");
+        assertEquals(heap, cloud.jvmArgs().subList(0, 2), "the same heap flags lead every audit-trail tile");
+        assertEquals(3, local.jvmArgs().size());
+        assertTrue(local.jvmArgs().get(2).startsWith("-Dchat-ui.plugins=${HOME}/works/"), local.jvmArgs().get(2));
+        assertTrue(cloud.jvmArgs().get(2).contains("plugin-harness.jar"), cloud.jvmArgs().get(2));
         assertEquals(28030, local.defaultPort());
         assertEquals(28031, cloud.defaultPort());
         assertEquals(local.params().size(), cloud.params().size(), "the form is the same on both tiles");

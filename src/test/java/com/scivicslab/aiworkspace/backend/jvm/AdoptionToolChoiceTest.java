@@ -42,6 +42,24 @@ class AdoptionToolChoiceTest {
     }
 
     @Test
+    void pickToolForProcess_sharedHeapFlagsOnEveryTile_stillTellsTheTilesApart() {
+        String xmx = "-Xmx2g", gc = "-XX:G1PeriodicGCInterval=60000";
+        AiWorkspaceConfig.ToolDefinition plain = tool("plain", List.of(xmx, gc));
+        AiWorkspaceConfig.ToolDefinition local = tool("local", List.of(xmx, gc, "-Dchat-ui.plugins=/home/x/works/web.jar"));
+        AiWorkspaceConfig.ToolDefinition cloud = tool("cloud",
+                List.of(xmx, gc, "-Dchat-ui.plugins=/home/x/works/web.jar,/home/x/works/harness.jar"));
+        List<Map.Entry<String, AiWorkspaceConfig.ToolDefinition>> tools =
+                List.of(Map.entry(JAR, plain), Map.entry(JAR, local), Map.entry(JAR, cloud));
+        assertEquals("cloud", JvmBackend.pickToolForProcess(tools, new String[] {
+                xmx, gc, "-Dchat-ui.plugins=/home/x/works/web.jar,/home/x/works/harness.jar", "-jar", JAR}).name());
+        assertEquals("local", JvmBackend.pickToolForProcess(tools, new String[] {
+                xmx, gc, "-Dchat-ui.plugins=/home/x/works/web.jar", "-jar", JAR}).name());
+        assertEquals("plain", JvmBackend.pickToolForProcess(tools, new String[] {xmx, gc, "-jar", JAR}).name());
+        assertNull(JvmBackend.pickToolForProcess(tools, new String[] {"-jar", JAR}),
+                "a process started before the heap flags were added is credited to no tile");
+    }
+
+    @Test
     void pickToolForProcess_otherJar_isNull() {
         assertNull(JvmBackend.pickToolForProcess(TOOLS, new String[] {"-jar", "/home/x/works/other.jar"}));
     }

@@ -81,6 +81,9 @@ tools:
     jar: chat-ui-with-audit-trail.jar
     github: scivicslab/chat-ui-with-audit-trail
     port: 28032
+    # Heap cap and periodic return of unused heap to the OS. The same two flags lead every
+    # chat-ui-with-audit-trail tile, so pickToolForProcess still tells the tiles apart by -Dchat-ui.plugins.
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
     params:
       # Same field as the other two tiles: the conversation still needs a Local LLM to talk to.
       # What this tile leaves out is the web-tools plugin, so the conversation has no web_search
@@ -93,7 +96,7 @@ tools:
     github: scivicslab/chat-ui-with-audit-trail
     port: 28030
     companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-shell.jar]
-    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar"]
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000", "-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar"]
     params:
       # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
@@ -111,7 +114,7 @@ tools:
     github: scivicslab/chat-ui-with-audit-trail
     port: 28031
     companionJars: [chat-ui-with-audit-trail-plugin-web-tools.jar, chat-ui-with-audit-trail-plugin-shell.jar, chat-ui-with-audit-trail-plugin-harness.jar]
-    jvmArgs: ["-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-harness.jar"]
+    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000", "-Dchat-ui.plugins=${HOME}/works/chat-ui-with-audit-trail-plugin-web-tools.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-shell.jar,${HOME}/works/chat-ui-with-audit-trail-plugin-harness.jar"]
     params:
       # Read by ChatUiActorSystem.servers (@ConfigProperty("chat-ui.servers")) and passed to
       # OpenAiCompatProvider. Unlike quarkus-chat-ui3's "vLLM Endpoint" field (chatui3.vllm-base-url),
@@ -134,6 +137,9 @@ tools:
     fixedPort: true
     # "serve" is the command; html-saurus-portal-server has exactly one. The mode is no longer
     # chosen by an option — it is which jar this is.
+    # Heap cap and periodic return of unused heap to the OS; without them the JVM grows to a
+    # quarter of RAM and keeps it after a rebuild has finished.
+    jvmArgs: ["-Xmx3g", "-XX:G1PeriodicGCInterval=60000"]
     args: ["serve", "--dir", "${HOME}/works", "--port", "${PORT}"]
     params:
       # argPos counts into args above, where the directory is now the third word: the command
