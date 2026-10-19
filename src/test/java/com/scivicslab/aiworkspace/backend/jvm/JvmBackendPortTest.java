@@ -74,6 +74,17 @@ class JvmBackendPortTest {
     }
 
     @Test
+    @DisplayName("reserved tool falls forward when an instance holds its port before it listens")
+    void fixedPort_heldByInstance_fallsForwardToPool() throws Exception {
+        AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
+        ActorRef<ProcessSupervisor> instance = actorSystem.actorOf(
+            "instance-html-saurus-28001", ProcessSupervisor.adopt(def, 28001, 12345L));
+        backend.instances.tell(r -> r.add("html-saurus", instance));
+        // Nothing listens on 28001 yet (occupied is empty), but the instance holds it.
+        assertEquals(28010, backend.choosePort(def, Map.of()));
+    }
+
+    @Test
     @DisplayName("non-fixed tool is placed in the dynamic pool starting at 28010")
     void nonFixed_usesPool() throws Exception {
         int port = backend.choosePort(tool("quarkus-chat-ui", 28100, false), Map.of());
@@ -105,14 +116,14 @@ class JvmBackendPortTest {
     }
 
     @Test
-    @DisplayName("readyInstanceOn returns null when no instance is registered")
-    void readyInstanceOn_empty_null() {
-        assertNull(backend.readyInstanceOn("html-saurus", 28001));
+    @DisplayName("liveInstanceOn returns null when no instance is registered")
+    void liveInstanceOn_empty_null() {
+        assertNull(backend.liveInstanceOn("html-saurus", 28001));
     }
 
     @Test
-    @DisplayName("readyInstanceOn returns the READY instance on the reserved port (reuse basis)")
-    void readyInstanceOn_adopted_returnsInstance() {
+    @DisplayName("liveInstanceOn returns the READY instance on the reserved port (reuse basis)")
+    void liveInstanceOn_adopted_returnsInstance() {
         AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
         // The registry holds actor references now, so the supervisor is wrapped before it goes in.
         // No watching threads are started here: this test only asks which instance is on a port.
@@ -120,8 +131,8 @@ class JvmBackendPortTest {
             "instance-html-saurus-28001", ProcessSupervisor.adopt(def, 28001, 12345L));
         backend.instances.tell(r -> r.add("html-saurus", instance));
 
-        assertNotNull(backend.readyInstanceOn("html-saurus", 28001));
-        assertNull(backend.readyInstanceOn("html-saurus", 28002));
-        assertNull(backend.readyInstanceOn("code-raptor", 28001));
+        assertNotNull(backend.liveInstanceOn("html-saurus", 28001));
+        assertNull(backend.liveInstanceOn("html-saurus", 28002));
+        assertNull(backend.liveInstanceOn("code-raptor", 28001));
     }
 }

@@ -316,7 +316,10 @@
         // A row appearing or disappearing changes the table's shape, and the server renders it.
         // That is the one case worth a reload, and it happens only when someone launched or
         // stopped something.
-        let sameShape = rows.length === byPort.size;
+        // Compared with the instance count, not with byPort: two instances on one port (a failed
+        // second launch) collapse into one map entry, and comparing with the map then reloaded
+        // the page on every poll.
+        let sameShape = rows.length === all.length;
         if (sameShape) {
             for (const row of rows) {
                 if (!byPort.has(row.dataset.port)) { sameShape = false; break; }

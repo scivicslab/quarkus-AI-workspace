@@ -362,13 +362,16 @@ public class JvmBackend implements ServiceBackend {
             list = List.of();
         }
 
-        // Reuse: a reserved (fixedPort) tool already READY on its reserved port is reused rather
-        // than started a second time — unless an explicit port was requested (an intentional
-        // additional instance). This makes "launch the search service" idempotent.
+        // Reuse: a reserved (fixedPort) tool already READY or STARTING on its reserved port is
+        // reused rather than started a second time — unless an explicit port was requested (an
+        // intentional additional instance). This makes "launch the search service" idempotent.
+        // STARTING counts too: html-saurus takes about 40 seconds to open its port, and a second
+        // launch in that window used to start another process on the same port, which failed to
+        // bind while its supervisor stayed in the registry as a second row for that port.
         String requestedPort = params.get("port");
         boolean explicitPort = requestedPort != null && !requestedPort.isBlank();
         if (rangeStart >= 0 && def.fixedPort() && !explicitPort
-                && readyInstanceOn(toolName, def.port()) != null) {
+                && liveInstanceOn(toolName, def.port()) != null) {
             logger.info(toolName + " already running on reserved port " + def.port()
                 + " — reusing existing instance");
             return;
@@ -605,7 +608,9 @@ public class JvmBackend implements ServiceBackend {
                         ? rp : findFreePortInRange(poolStart, rangeEnd);
             }
             if (def.fixedPort()) {
-                return isPortFree(def.port()) ? def.port() : findFreePortInRange(poolStart, rangeEnd);
+                // An instance still starting holds its port before anything listens on it.
+                return (isPortFree(def.port()) && !portUsedByInstances(def.port()))
+                        ? def.port() : findFreePortInRange(poolStart, rangeEnd);
             }
             return findFreePortInRange(poolStart, rangeEnd);
         }
@@ -626,13 +631,18 @@ public class JvmBackend implements ServiceBackend {
     }
 
     /**
-     * Returns a READY instance of {@code toolName} listening on {@code port}, or {@code null}.
-     * Basis of the reserved-port reuse in {@link #startService}. Package-private for testing.
+     * Returns an instance of {@code toolName} on {@code port} that is READY or STARTING, or
+     * {@code null}. Basis of the reserved-port reuse in {@link #startService}. Package-private
+     * for testing.
      */
-    ActorRef<ProcessSupervisor> readyInstanceOn(String toolName, int port) {
+    ActorRef<ProcessSupervisor> liveInstanceOn(String toolName, int port) {
         List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(toolName)).join();
         return list.stream()
-            .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port && s.ask(ProcessSupervisor::getState).join() == SessionState.READY)
+            .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
+            .filter(s -> {
+                SessionState st = s.ask(ProcessSupervisor::getState).join();
+                return st == SessionState.READY || st == SessionState.STARTING;
+            })
             .findFirst().orElse(null);
     }
 
