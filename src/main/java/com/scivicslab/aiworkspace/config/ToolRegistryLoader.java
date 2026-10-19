@@ -21,7 +21,20 @@ public final class ToolRegistryLoader {
 
     private ToolRegistryLoader() {}
 
+    /** Holds the registry, read the first time anything asks for it. The YAML is a resource inside
+     *  the jar and cannot change while the process runs, so reading it again per request only
+     *  costs time and a log line each ({@code ToolRegistryLoader#load} was called on every
+     *  dashboard request, and a page reloading itself in a loop filled the log with 71 MB). */
+    private static final class Holder {
+        static final List<ToolRegistryEntry> ENTRIES = loadFromClasspath();
+    }
+
+    /** @return the registry, read once per process */
     public static List<ToolRegistryEntry> load() {
+        return Holder.ENTRIES;
+    }
+
+    private static List<ToolRegistryEntry> loadFromClasspath() {
         try (InputStream is = ToolRegistryLoader.class.getResourceAsStream("/ai-workspace-tools.yaml")) {
             if (is == null) {
                 logger.warning("ai-workspace-tools.yaml not found on classpath — registry is empty");

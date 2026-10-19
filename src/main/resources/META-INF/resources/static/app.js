@@ -281,6 +281,30 @@
         el.textContent = state;
     }
 
+    /**
+     * Reloads the page because its table no longer matches the server's.
+     *
+     * Refused when the page was itself reloaded a few seconds ago. A mismatch that a reload does
+     * not cure would otherwise reload the page again the moment it loaded, over and over, several
+     * times a second.
+     */
+    const SELF_RELOAD_MIN_GAP_MS = 10000;
+    function reloadSelfUnlessLooping() {
+        const KEY = 'aiw-self-reload-at';
+        try {
+            const last = Number(sessionStorage.getItem(KEY) || 0);
+            if (Date.now() - last < SELF_RELOAD_MIN_GAP_MS) {
+                console.warn('Not reloading again: this page reloaded itself less than '
+                    + (SELF_RELOAD_MIN_GAP_MS / 1000) + ' s ago');
+                return;
+            }
+            sessionStorage.setItem(KEY, String(Date.now()));
+        } catch (e) {
+            // storage unavailable: reload anyway, as before
+        }
+        location.reload();
+    }
+
     async function pollStatus() {
         try {
             const r = await fetch('api/status');
@@ -325,7 +349,7 @@
                 if (!byPort.has(row.dataset.port)) { sameShape = false; break; }
             }
         }
-        if (!sameShape) { location.reload(); return; }
+        if (!sameShape) { reloadSelfUnlessLooping(); return; }
 
         for (const row of rows) {
             const svc = byPort.get(row.dataset.port);
@@ -768,7 +792,7 @@
             const changed = onScreen.length !== rows.length || onScreen.some(function (tr) {
                 return !answered.has(key(tr.dataset.tool, Number(tr.dataset.port)));
             });
-            if (changed) { window.location.reload(); return; }
+            if (changed) { reloadSelfUnlessLooping(); return; }
 
             const counts = { READY: 0, STARTING: 0, FAILED: 0, STOPPED: 0 };
             rows.forEach(function (row) {
