@@ -24,7 +24,10 @@ public class ProxyResource {
     private static volatile HttpClient CLIENT;
     private static HttpClient client() {
         if (CLIENT == null) {
+            // HTTP/1.1 only: an h2c upgrade makes Quarkus tools answer with ":status" pseudo-headers,
+            // which the response copy below cannot set, so the proxied request hangs.
             CLIENT = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1)
                     .followRedirects(HttpClient.Redirect.NEVER)
                     .build();
         }
