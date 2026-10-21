@@ -189,6 +189,17 @@ tools:
     params:
       - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
 
+  - name: frame-viewer
+    jar: frame-viewer.jar
+    github: scivicslab/frame-viewer
+    port: 28040
+    jvmArgs: ["-Xmx512m", "-XX:G1PeriodicGCInterval=60000"]
+    params:
+      # Where the frame library (subjects/ and frames/) is read from.
+      - {key: rstOnLispDir, label: "rst-on-lisp Directory", type: dir, default: "${HOME}/works/rst-on-lisp", jvmProp: "frame-viewer.rst-on-lisp-dir"}
+      # The directory the frames' made-from paths are written under (the books' rule files).
+      - {key: worksDir, label: "Works Directory", type: dir, default: "${HOME}/works", jvmProp: "frame-viewer.works-dir"}
+
   - name: pluggable-cli
     github: scivicslab/pluggable-cli
     library: true
