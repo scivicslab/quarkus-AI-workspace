@@ -863,56 +863,89 @@
         }, AUTO_REFRESH_MS);
     });
 
+    // ── The Catalog's action list ─────────────────────────────────────────
+    // Each tile has one list of actions and a Run button. Choosing an entry only enables Run: the
+    // actions download, build and restart, and a stray choice in the list must not start one.
+
+    /** Enables Run once an action is chosen. */
+    window.actionChosen = function(name) {
+        const sel = document.getElementById('action-' + name);
+        const run = document.getElementById('btn-run-' + name);
+        if (sel && run) run.disabled = !sel.value;
+    };
+
+    /** Starts the action chosen in the tile's list. */
+    window.runAction = function(name) {
+        const sel = document.getElementById('action-' + name);
+        if (!sel || !sel.value) return;
+        const action = {
+            'download': window.downloadLatest,
+            'build': window.buildSnapshot,
+            'restart': window.restartAll,
+            'build-restart': window.buildAndRestart
+        }[sel.value];
+        if (action) action(name);
+    };
+
+    /** While an action runs, the list and Run are disabled and Run says what is happening. */
+    function busy(name, label) {
+        const sel = document.getElementById('action-' + name);
+        const run = document.getElementById('btn-run-' + name);
+        if (sel) sel.disabled = true;
+        if (run) { run.disabled = true; run.textContent = label; }
+    }
+
+    function idle(name) {
+        const sel = document.getElementById('action-' + name);
+        const run = document.getElementById('btn-run-' + name);
+        if (sel) sel.disabled = false;
+        if (run) { run.textContent = 'Run'; run.disabled = !(sel && sel.value); }
+    }
+
+    function showResult(status, ok, text) {
+        status.textContent = (ok ? '\u2713 ' : '\u2717 ') + text;
+        status.style.color = ok ? 'var(--accent-green)' : 'var(--accent-red)';
+    }
+
     window.downloadLatest = async function(name) {
-        const btn = document.getElementById('btn-download-' + name);
         const status = document.getElementById('download-status-' + name);
-        if (!btn) return;
-        btn.disabled = true;
-        btn.textContent = 'Downloading…';
+        if (!status) return;
+        busy(name, 'Downloading\u2026');
         status.textContent = '';
         status.style.color = '';
         try {
             const r = await fetch('api/tool/' + encodeURIComponent(name) + '/download', { method: 'POST' });
             const data = await r.json();
             if (r.ok && data.success) {
-                status.textContent = '\u2713 ' + (data.version || 'downloaded') + ' (' + (data.file || '') + ')';
-                status.style.color = 'var(--accent-green)';
+                showResult(status, true, (data.version || 'downloaded') + ' (' + (data.file || '') + ')');
             } else {
-                status.textContent = '\u2717 ' + (data.error || 'download failed');
-                status.style.color = 'var(--accent-red)';
+                showResult(status, false, data.error || 'download failed');
             }
         } catch (e) {
-            status.textContent = '\u2717 ' + e.message;
-            status.style.color = 'var(--accent-red)';
+            showResult(status, false, e.message);
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Download Latest Release';
+            idle(name);
         }
     };
 
     window.buildSnapshot = async function(name) {
-        const btn = document.getElementById('btn-build-' + name);
         const status = document.getElementById('download-status-' + name);
-        if (!btn) return;
-        btn.disabled = true;
-        btn.textContent = 'Building…';
+        if (!status) return;
+        busy(name, 'Building\u2026');
         status.textContent = '';
         status.style.color = '';
         try {
             const r = await fetch('api/tool/' + encodeURIComponent(name) + '/build-snapshot', { method: 'POST' });
             const data = await r.json();
             if (!r.ok || !data.jobId) {
-                status.textContent = '✗ ' + (data.error || 'failed to start build');
-                status.style.color = 'var(--accent-red)';
+                showResult(status, false, data.error || 'failed to start build');
                 return;
             }
-            await pollBuild(name, data.jobId, btn, status);
+            await pollBuild(name, data.jobId, null, status);
         } catch (e) {
-            status.textContent = '✗ ' + e.message;
-            status.style.color = 'var(--accent-red)';
+            showResult(status, false, e.message);
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Build Snapshot';
+            idle(name);
         }
     };
 
@@ -931,18 +964,40 @@
         return Array.from(new Set(found)).sort((a, b) => a - b);
     }
 
+    /**
+     * Follows a restart job until it ends, writing its progress and result into {@code status}.
+     * Restart all and Build and restart both read their restart this way.
+     */
+    async function followRestart(name, jobId, ports, status, donePrefix) {
+        const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(jobId);
+        while (true) {
+            await new Promise(res => setTimeout(res, 1500));
+            let job;
+            try { job = await (await fetch(url)).json(); } catch (e) { continue; }
+            status.title = job.log || '';
+            if (job.state === 'RUNNING') {
+                status.textContent = '\u23f3 ' + (job.step || 'restarting');
+                status.style.color = 'var(--text-secondary)';
+            } else if (job.state === 'SUCCESS') {
+                showResult(status, true, (donePrefix || '') + 'restarted ' + ports.length + ' instance(s)');
+                return;
+            } else {
+                showResult(status, false, job.error || 'restart failed');
+                return;
+            }
+        }
+    }
+
     window.restartAll = async function(name) {
-        const btn = document.getElementById('btn-restart-' + name);
         const status = document.getElementById('download-status-' + name);
-        if (!btn) return;
+        if (!status) return;
         status.textContent = '';
         status.style.color = '';
         let ports;
         try {
             ports = await runningInstances(name);
         } catch (e) {
-            status.textContent = '\u2717 ' + e.message;
-            status.style.color = 'var(--accent-red)';
+            showResult(status, false, e.message);
             return;
         }
         if (ports.length === 0) {
@@ -954,41 +1009,74 @@
                 + 'and translations, is lost.')) {
             return;
         }
-        btn.disabled = true;
-        btn.textContent = 'Restarting\u2026';
+        busy(name, 'Restarting\u2026');
         try {
             const r = await fetch('api/tool/' + encodeURIComponent(name) + '/restart-all', { method: 'POST' });
             const data = await r.json();
             if (!r.ok || !data.jobId) {
-                status.textContent = '\u2717 ' + (data.error || 'failed to start the restart');
-                status.style.color = 'var(--accent-red)';
+                showResult(status, false, data.error || 'failed to start the restart');
                 return;
             }
-            const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(data.jobId);
-            while (true) {
-                await new Promise(res => setTimeout(res, 1500));
-                let job;
-                try { job = await (await fetch(url)).json(); } catch (e) { continue; }
-                status.title = job.log || '';
-                if (job.state === 'RUNNING') {
-                    status.textContent = '\u23f3 ' + (job.step || 'restarting');
-                    status.style.color = 'var(--text-secondary)';
-                } else if (job.state === 'SUCCESS') {
-                    status.textContent = '\u2713 restarted ' + ports.length + ' instance(s)';
-                    status.style.color = 'var(--accent-green)';
-                    return;
-                } else {
-                    status.textContent = '\u2717 ' + (job.error || 'restart failed');
-                    status.style.color = 'var(--accent-red)';
-                    return;
-                }
-            }
+            await followRestart(name, data.jobId, ports, status);
         } catch (e) {
-            status.textContent = '\u2717 ' + e.message;
-            status.style.color = 'var(--accent-red)';
+            showResult(status, false, e.message);
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Restart all';
+            idle(name);
+        }
+    };
+
+    /**
+     * Build Snapshot, then Restart all once the build has succeeded; a failed build restarts
+     * nothing. The server starts the restart (POST build-and-restart), so it happens even if this
+     * page is closed during the build. Here the build is followed as Build Snapshot follows it, then
+     * the restart the server started as Restart all follows it.
+     */
+    window.buildAndRestart = async function(name) {
+        const status = document.getElementById('download-status-' + name);
+        if (!status) return;
+        status.textContent = '';
+        status.style.color = '';
+        let ports;
+        try {
+            ports = await runningInstances(name);
+        } catch (e) {
+            showResult(status, false, e.message);
+            return;
+        }
+        const restartLine = ports.length === 0
+                ? 'No instance of ' + name + ' is running now, so nothing will be restarted.'
+                : 'Then, if the build succeeds, restart ' + ports.length + ' instance(s) (port '
+                  + ports.join(', ') + ') one at a time. Work running inside them, such as imports '
+                  + 'and translations, is lost.';
+        if (!confirm('Build a snapshot of ' + name + '?\n\n' + restartLine)) return;
+        busy(name, 'Building\u2026');
+        try {
+            const r = await fetch('api/tool/' + encodeURIComponent(name) + '/build-and-restart', { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || !data.jobId) {
+                showResult(status, false, data.error || 'failed to start build');
+                return;
+            }
+            const built = await pollBuild(name, data.jobId, null, status);
+            if (!built || built.state !== 'SUCCESS') return;   // pollBuild has shown the failure
+            // The server starts the restart when the build ends; wait for it to say which job.
+            const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(data.jobId);
+            let next = built;
+            for (let i = 0; i < 40 && !next.nextJobId && !next.nextSkipped; i++) {
+                await new Promise(res => setTimeout(res, 500));
+                try { next = await (await fetch(url)).json(); } catch (e) { /* transient; ask again */ }
+            }
+            if (!next.nextJobId) {
+                showResult(status, false, 'built ' + (built.file || 'snapshot') + ', but '
+                        + (next.nextSkipped || 'the restart did not start'));
+                return;
+            }
+            busy(name, 'Restarting\u2026');
+            await followRestart(name, next.nextJobId, ports, status, 'built ' + (built.file || 'snapshot') + ', ');
+        } catch (e) {
+            showResult(status, false, e.message);
+        } finally {
+            idle(name);
         }
     };
 
@@ -1012,12 +1100,12 @@
                 status.style.color = 'var(--accent-green)';
                 status.title = data.log || '';
                 markReady(name);
-                return;
+                return data;
             } else {
                 status.textContent = '✗ ' + (data.error || 'build failed');
                 status.style.color = 'var(--accent-red)';
                 status.title = data.log || '';
-                return;
+                return data;
             }
         }
     }

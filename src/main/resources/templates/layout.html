@@ -380,6 +380,15 @@
         }
         .btn-download:hover { background: color-mix(in srgb, var(--accent-green) 12%, transparent); opacity: 1; }
         .download-status { font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.3rem; }
+        .tool-action {
+            font-size: 0.75rem;
+            padding: 0.15rem 0.3rem;
+            background: var(--bg-secondary, transparent);
+            color: var(--text-primary, inherit);
+            border: 1px solid var(--accent-green);
+            border-radius: 4px;
+        }
+        .btn-download:disabled { opacity: 0.45; cursor: default; }
         .tool-status { font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem; }
         /* ── Tool grid ───────────────────────────────────────── */
         .tool-grid {

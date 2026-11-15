@@ -125,9 +125,17 @@
             <div class="tool-buttons">
                 <button class="btn btn-launch" onclick="toggleLaunchForm('{tool.name}')">Configure &amp; Start…</button>
                 {#if tool.github}
-                <button class="btn btn-download" id="btn-download-{tool.name}" onclick="downloadLatest('{tool.name}')">Download Latest Release</button>
-                <button class="btn btn-download" id="btn-build-{tool.name}" onclick="buildSnapshot('{tool.name}')">Build Snapshot</button>
-                <button class="btn btn-download" id="btn-restart-{tool.name}" onclick="restartAll('{tool.name}')">Restart all</button>
+                {! One list of the actions instead of a button each. Choosing an entry starts
+                   nothing: these download, build and restart, so only Run starts the chosen one. !}
+                <select class="tool-action" id="action-{tool.name}" aria-label="Action for {tool.name}"
+                        onchange="actionChosen('{tool.name}')">
+                    <option value="" selected disabled>Choose an action…</option>
+                    <option value="download">Download Latest Release</option>
+                    <option value="build">Build Snapshot</option>
+                    <option value="restart">Restart all</option>
+                    <option value="build-restart">Build and restart</option>
+                </select>
+                <button class="btn btn-download" id="btn-run-{tool.name}" onclick="runAction('{tool.name}')" disabled>Run</button>
                 <span class="download-status" id="download-status-{tool.name}"></span>
                 {/if}
             </div>

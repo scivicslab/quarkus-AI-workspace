@@ -52,6 +52,9 @@ public class ServiceResource {
     com.scivicslab.aiworkspace.restart.RestartAllService restartAllService;
 
     @Inject
+    com.scivicslab.aiworkspace.restart.BuildThenRestart buildThenRestart;
+
+    @Inject
     com.scivicslab.aiworkspace.config.ToolRegistry toolRegistry;
 
     @GET
@@ -269,6 +272,27 @@ public class ServiceResource {
     @POST
     @Path("/tool/{name}/build-snapshot")
     public Response buildSnapshot(@PathParam("name") String name) {
+        return startSnapshotBuild(name, false);
+    }
+
+    /**
+     * "Build and restart": starts the same snapshot build as {@code build-snapshot}, and once it has
+     * succeeded, the same restart as {@code restart-all}; a failed build restarts nothing
+     * ({@code BuildThenRestart}). The server starts the restart, so it follows the build even if the
+     * browser is closed meanwhile.
+     *
+     * <p>Returns the build's {@code jobId} at once. {@code /build-status/{jobId}} reports the build,
+     * and after it ends, {@code nextJobId} (the restart to follow the same way) or
+     * {@code nextSkipped} (why nothing was restarted).
+     */
+    @POST
+    @Path("/tool/{name}/build-and-restart")
+    public Response buildAndRestart(@PathParam("name") String name) {
+        return startSnapshotBuild(name, true);
+    }
+
+    /** Starts a snapshot build of {@code name}, followed by a restart of its instances when asked. */
+    private Response startSnapshotBuild(String name, boolean thenRestart) {
         // Use ToolRegistry (not backend) so library entries — which have no jar in ~/works/
         // and are therefore absent from the backend's acquired-tool list — can also be built.
         String github = toolRegistry.getGithubRepo(name).orElse(null);
@@ -282,6 +306,7 @@ public class ServiceResource {
 
         var job = snapshotBuilder.start(name, github, jarName, toolRegistry.getCompanionJars(name),
                 toolRegistry.getArtifactBase(name).orElse(null), toolRegistry.getBranch(name).orElse(null));
+        if (thenRestart) buildThenRestart.restartAfter(job, name);
         return Response.ok(Map.of(
                 "jobId", job.ask(j -> j.id()).join(),
                 "state", job.ask(j -> j.state()).join().name())).build();
@@ -319,7 +344,9 @@ public class ServiceResource {
                 "step", j.step(),
                 "log", String.join("\n", j.tail(40)),
                 "file", j.resultFile() == null ? "" : j.resultFile(),
-                "error", j.error() == null ? "" : j.error())).join();
+                "error", j.error() == null ? "" : j.error(),
+                "nextJobId", j.nextJobId() == null ? "" : j.nextJobId(),
+                "nextSkipped", j.nextSkipped() == null ? "" : j.nextSkipped())).join();
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("jobId", snapshot.get("jobId"));
         body.put("state", snapshot.get("state"));
@@ -327,6 +354,8 @@ public class ServiceResource {
         body.put("log", snapshot.get("log"));
         if (!snapshot.get("file").isEmpty()) body.put("file", snapshot.get("file"));
         if (!snapshot.get("error").isEmpty()) body.put("error", snapshot.get("error"));
+        if (!snapshot.get("nextJobId").isEmpty()) body.put("nextJobId", snapshot.get("nextJobId"));
+        if (!snapshot.get("nextSkipped").isEmpty()) body.put("nextSkipped", snapshot.get("nextSkipped"));
         return Response.ok(body).build();
     }
 

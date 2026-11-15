@@ -45,12 +45,13 @@ class DownloadLatestE2E {
                 page.navigate("http://localhost:" + portalPort + "/",
                     new Page.NavigateOptions().setWaitUntil(WaitUntilState.LOAD));
 
-                // Wait for the Download Latest button to appear
-                Locator btn = page.locator("#btn-download-html-saurus");
-                btn.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_TIMEOUT_MS));
+                // Wait for the tile's action list, choose Download Latest Release, and press Run
+                Locator actions = page.locator("#action-html-saurus");
+                actions.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_TIMEOUT_MS));
+                actions.selectOption("download");
 
-                // Click and wait for the status span to show a result (non-empty text)
-                btn.click();
+                // Run, and wait for the status span to show a result (non-empty text)
+                page.locator("#btn-run-html-saurus").click();
                 Locator status = page.locator("#download-status-html-saurus");
                 page.waitForFunction(
                     "() => { const s = document.getElementById('download-status-html-saurus'); " +

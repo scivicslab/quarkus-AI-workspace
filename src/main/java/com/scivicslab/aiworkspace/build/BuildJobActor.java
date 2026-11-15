@@ -3,6 +3,7 @@ package com.scivicslab.aiworkspace.build;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * One snapshot build: how far it has got, and what it has printed.
@@ -28,6 +29,12 @@ public class BuildJobActor {
     private String resultFile;
     private String error;
     private final Deque<String> log = new ArrayDeque<>();
+    /** Completed with the end state when the job ends, for whoever waits to act on it. */
+    private final CompletableFuture<State> finished = new CompletableFuture<>();
+    /** The job started after this one ended (Build and restart: the restart), or null. */
+    private String nextJobId;
+    /** Why no job was started after this one, when one was meant to be, or null. */
+    private String nextSkipped;
 
     public BuildJobActor(String id, String tool) {
         this.id = id;
@@ -40,17 +47,32 @@ public class BuildJobActor {
     public String step()       { return step; }
     public String resultFile() { return resultFile; }
     public String error()      { return error; }
+    public String nextJobId()  { return nextJobId; }
+    public String nextSkipped(){ return nextSkipped; }
+
+    /** @return completed with SUCCESS or FAILED when the job ends; never completed while it runs */
+    public CompletableFuture<State> finished() { return finished; }
+
+    /** Records the job that was started because this one ended, so a reader can follow it. */
+    public void next(String jobId)           { this.nextJobId = jobId; }
+
+    /** Records why no job was started after this one, though one was meant to be. */
+    public void nextSkipped(String why)      { this.nextSkipped = why; }
 
     public void step(String step)             { this.step = step; }
     public void resultFile(String resultFile) { this.resultFile = resultFile; }
 
     /** Records that the build finished, with the jar it produced. */
-    public void succeeded() { this.state = State.SUCCESS; }
+    public void succeeded() {
+        this.state = State.SUCCESS;
+        finished.complete(State.SUCCESS);
+    }
 
     /** Records that the build stopped, with why. */
     public void failed(String error) {
         this.state = State.FAILED;
         this.error = error;
+        finished.complete(State.FAILED);
     }
 
     /** @return the last {@code n} log lines, oldest first. */
