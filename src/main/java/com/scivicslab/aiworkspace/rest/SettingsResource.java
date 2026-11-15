@@ -64,8 +64,7 @@ public class SettingsResource {
     @GET
     @Path("/candidates")
     public String candidates() {
-        String broker = System.getProperty("gpu.broker.url");
-        if (broker == null || broker.isBlank()) broker = System.getenv("GPU_BROKER_URL");
+        String broker = com.scivicslab.aiworkspace.config.GpuBrokerUrl.resolve().orElse(null);
         List<String> ids = new ArrayList<>();
         if (broker != null && !broker.isBlank()) {
             try {

@@ -172,6 +172,8 @@ public class DashboardResource {
             .data("failed", count(rows, SessionState.FAILED))
             .data("stopped", count(rows, SessionState.STOPPED))
             .data("launchTools", catalogTiles())
+            // The broker is watched from the Catalog, not started from it (GpuBrokerViewResource).
+            .data("gpuBrokerUrl", com.scivicslab.aiworkspace.config.GpuBrokerUrl.resolve().orElse(""))
             .data("versionsFetchedAt", fetchedAtText())
             .data("versionsFailed", String.join(", ",
                     actors.toolVersions().ask(a -> a.failedTools()).join()));
@@ -274,8 +276,6 @@ public class DashboardResource {
     @Path("/settings")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance settings() {
-        String broker = System.getProperty("gpu.broker.url");
-        if (broker == null || broker.isBlank()) broker = System.getenv("GPU_BROKER_URL");
         String portalPort = String.valueOf(com.scivicslab.aiworkspace.config.PortalPort.number());
         int start;
         try { start = Integer.parseInt(portalPort); } catch (NumberFormatException e) { start = -1; }
@@ -284,7 +284,7 @@ public class DashboardResource {
             .data("version", appVersion)
             .data("assetVersion", assetVersionBean.value())
             .data("imageTag", imageTag.orElse(""))
-            .data("gpuBrokerUrl", broker == null || broker.isBlank() ? "" : broker.replaceAll("/+$", ""))
+            .data("gpuBrokerUrl", com.scivicslab.aiworkspace.config.GpuBrokerUrl.resolve().orElse(""))
             .data("aiWorkspaceUrl", "http://localhost:" + portalPort)
             .data("portalPort", portalPort)
             .data("portRange", start < 0 ? "—"

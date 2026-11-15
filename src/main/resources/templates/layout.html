@@ -389,6 +389,16 @@
             border-radius: 4px;
         }
         .btn-download:disabled { opacity: 0.45; cursor: default; }
+        /* The GPU broker tile: watched, not started (dashboard.html). */
+        .tool-tile-view { border-style: dashed; }
+        .broker-view-note { font-size: 0.75rem; color: var(--text-secondary); margin: 0.3rem 0; }
+        .broker-view-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; margin: 0.3rem 0; }
+        .broker-queues { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        .broker-queues th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: 0.15rem 0.3rem; }
+        .broker-queues td { padding: 0.15rem 0.3rem; border-top: 1px solid var(--border-color, #333); vertical-align: top; }
+        .broker-queues .ep-up { color: var(--accent-green); }
+        .broker-queues .ep-down { color: var(--accent-red); }
+        .broker-unreachable { color: var(--accent-red); }
         .tool-status { font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem; }
         /* ── Tool grid ───────────────────────────────────────── */
         .tool-grid {

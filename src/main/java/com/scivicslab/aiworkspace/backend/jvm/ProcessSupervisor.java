@@ -724,10 +724,7 @@ public class ProcessSupervisor {
      * @return the broker base URL, or {@code null} if none is configured
      */
     private String gpuBrokerUrl() {
-        String url = System.getProperty("gpu.broker.url");
-        if (url != null && !url.isBlank()) return url;
-        url = System.getenv("GPU_BROKER_URL");
-        return (url != null && !url.isBlank()) ? url : null;
+        return com.scivicslab.aiworkspace.config.GpuBrokerUrl.resolve().orElse(null);
     }
 
     private void registerWithK8sPups() {

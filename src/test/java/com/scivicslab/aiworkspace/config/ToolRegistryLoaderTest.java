@@ -112,13 +112,39 @@ class ToolRegistryLoaderTest {
         assertEquals("port", e.params().get(1).key());
     }
 
-    @Test void no_tile_starts_a_second_gpu_broker() {
+    @Test void the_gpu_broker_is_watched_from_the_catalog_but_never_started() throws IOException {
         // One broker stands in front of the cluster's GPU nodes and runs inside the cluster. A tile
-        // would let anyone start a second one here, dividing the same GPUs between two schedulers
-        // that cannot see each other's queues.
-        assertTrue(ToolRegistryLoader.load().stream()
-                .noneMatch(e -> "quarkus-gpu-broker".equals(e.name())),
-                "the registry must not offer a GPU broker to launch");
+        // that launches one would let anyone start a second here, dividing the same GPUs between two
+        // schedulers that cannot see each other's queues. Every launchable tile comes from the
+        // registry, so the registry must hold no broker under any name, jar or repository.
+        for (ToolRegistryEntry e : ToolRegistryLoader.load()) {
+            String said = (e.name() + " " + e.jarFileName() + " " + e.githubRepo()).toLowerCase();
+            assertFalse(said.contains("gpu-broker"), "the registry must not offer a GPU broker to launch: " + e.name());
+        }
+        // The Catalog shows the broker in a tile of its own, which only reads it: no launch form, no
+        // action list, no Run, and nothing that builds, downloads or restarts.
+        String tile = brokerTileOf(templateText("/templates/dashboard.html"));
+        assertTrue(tile.contains("data-view-only=\"true\""), "the broker tile is marked view-only");
+        assertTrue(tile.contains("target=\"_blank\""), "the broker tile opens the broker's own page in a new tab");
+        for (String control : List.of("launchTool(", "toggleLaunchForm(", "runAction(", "class=\"tool-action\"",
+                "btn-run-", "launch-form", "build-snapshot", "restart-all", "/download")) {
+            assertFalse(tile.contains(control), "the broker tile must not carry " + control);
+        }
+    }
+
+    /** The markup of the GPU broker tile: from its opening tag to the end of the Catalog's grid. */
+    private static String brokerTileOf(String dashboard) {
+        int start = dashboard.indexOf("id=\"gpu-broker-tile\"");
+        assertTrue(start >= 0, "the Catalog has a GPU broker tile");
+        int end = dashboard.indexOf("{/body}", start);
+        return dashboard.substring(start, end < 0 ? dashboard.length() : end);
+    }
+
+    private static String templateText(String resource) throws IOException {
+        try (InputStream in = ToolRegistryLoaderTest.class.getResourceAsStream(resource)) {
+            assertNotNull(in, resource + " is on the classpath");
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 
     @Test void library_entry_flagged() {

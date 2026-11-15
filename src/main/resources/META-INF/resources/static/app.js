@@ -1080,6 +1080,70 @@
         }
     };
 
+    // ── The GPU broker tile: watched, not started ─────────────────────────
+    // Reads the broker's queues through the portal (api/gpu-broker/queues) every few seconds while
+    // the page is visible, and draws one row per queue. The tile starts nothing.
+    const BROKER_POLL_MS = 5000;
+
+    function brokerCell(tr, text, cls) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (cls) td.className = cls;
+        tr.appendChild(td);
+        return td;
+    }
+
+    async function refreshBroker() {
+        const status = document.getElementById('gpu-broker-status');
+        const table = document.getElementById('gpu-broker-queues');
+        if (!status || !table) return;
+        const tbody = table.querySelector('tbody');
+        let data;
+        try {
+            data = await (await fetch('api/gpu-broker/queues')).json();
+        } catch (e) {
+            status.textContent = 'could not ask the portal: ' + e.message;
+            status.className = 'tool-tile-status broker-unreachable';
+            return;
+        }
+        if (!data.reachable) {
+            status.textContent = 'cannot reach the broker at ' + data.url + ': ' + (data.error || 'no answer');
+            status.className = 'tool-tile-status broker-unreachable';
+            tbody.textContent = '';
+            return;
+        }
+        const queues = data.queues || [];
+        const pending = queues.reduce((n, q) => n + q.pendingJobs, 0);
+        const active = queues.reduce((n, q) => n + q.activeSlots, 0);
+        status.textContent = 'reachable: ' + queues.length + ' queue(s), ' + active + ' job(s) running, '
+                + pending + ' waiting · ' + new Date().toLocaleTimeString();
+        status.className = 'tool-tile-status';
+        tbody.textContent = '';
+        for (const q of queues) {
+            const tr = document.createElement('tr');
+            brokerCell(tr, q.name);
+            const eps = brokerCell(tr, '');
+            for (const ep of q.endpoints) {
+                const line = document.createElement('div');
+                line.textContent = ep.address + ' ' + ep.health;
+                line.className = ep.health === 'UP' ? 'ep-up' : 'ep-down';
+                eps.appendChild(line);
+            }
+            if (q.endpoints.length === 0) eps.textContent = 'none';
+            brokerCell(tr, q.activeSlots + ' / ' + q.totalSlots);
+            brokerCell(tr, String(q.pendingJobs));
+            tbody.appendChild(tr);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!document.getElementById('gpu-broker-queues')) return;
+        refreshBroker();
+        setInterval(function () {
+            if (document.visibilityState !== 'hidden') refreshBroker();
+        }, BROKER_POLL_MS);
+    });
+
     async function pollBuild(name, jobId, btn, status) {
         const url = 'api/tool/' + encodeURIComponent(name) + '/build-status/' + encodeURIComponent(jobId);
         while (true) {
