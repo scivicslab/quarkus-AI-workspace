@@ -47,24 +47,6 @@ class ToolRegistryLoaderTest {
         assertEquals(declaredEntryCount(), all.size(), "expected all registry entries to parse");
     }
 
-    @Test void chat_ui_full_form() {
-        ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "quarkus-chat-ui");
-        assertEquals("quarkus-chat-ui.jar", e.jarFileName());
-        assertEquals("scivicslab/quarkus-chat-ui", e.githubRepo());
-        assertEquals(28100, e.defaultPort());
-        assertEquals(6, e.params().size(), "chat-ui has 6 form fields");
-        AiWorkspaceConfig.ParamDefinition title = e.params().get(0);
-        assertEquals("title", title.key());
-        assertEquals("chat-ui.title", title.jvmProp());
-        AiWorkspaceConfig.ParamDefinition provider = e.params().get(2);
-        assertEquals("provider", provider.key());
-        assertEquals("select", provider.type());
-        assertEquals("chat-ui.provider", provider.jvmProp());
-        assertEquals(3, provider.options().size(), "provider select has 3 options");
-        assertEquals("claude", provider.options().get(0).value());
-        assertTrue(e.params().get(1).workingDir(), "workdir sets the working directory");
-    }
-
     @Test void html_saurus_args_and_argpos() {
         ToolRegistryEntry e = byName(ToolRegistryLoader.load(), "html-saurus");
         List<String> args = List.of("serve", "--dir", "${HOME}/works", "--port", "${PORT}");
@@ -162,9 +144,6 @@ class ToolRegistryLoaderTest {
 
     @Test void dependsOn_declares_build_order() {
         List<ToolRegistryEntry> all = ToolRegistryLoader.load();
-        assertEquals(List.of("turing-workflow", "Turing-workflow-plugins"),
-                byName(all, "quarkus-chat-ui").dependsOn(),
-                "chat-ui 2.x must build turing-workflow then the plugins before itself");
         assertEquals(List.of("turing-workflow", "pluggable-cli"),
                 byName(all, "Turing-workflow-plugins").dependsOn(),
                 "the plugins compile against turing-workflow and pluggable-cli, so both build first");
@@ -177,31 +156,16 @@ class ToolRegistryLoaderTest {
                 "a single-module library builds its whole reactor");
     }
 
-    @Test void chat_ui3_is_gone() {
-        assertTrue(ToolRegistryLoader.load().stream().noneMatch(e -> e.name().equals("quarkus-chat-ui3")),
-                "quarkus-chat-ui3 was faded out; its know-how lives in quarkus-chat-ui 3.x and chat-ui-with-audit-trail");
-    }
-
-    /** TwoTilesOneRepository_260930_oo01: the 3.x line is a second tile on the same repository. */
-    @Test void chat_ui_3_tile_shares_the_repository_under_its_own_link_name() {
-        List<ToolRegistryEntry> all = ToolRegistryLoader.load();
-        ToolRegistryEntry two = byName(all, "quarkus-chat-ui");
-        ToolRegistryEntry three = byName(all, "quarkus-chat-ui-3");
-        assertEquals(two.githubRepo(), three.githubRepo(), "same repository");
-        assertEquals("quarkus-chat-ui-3.jar", three.jarFileName(), "its own link, so it never replaces the 2.x jar");
-        assertEquals("quarkus-chat-ui", three.artifact(), "the build's jar is still quarkus-chat-ui-<version>.jar");
-        assertEquals("quarkus-chat-ui", three.artifactBase());
-        assertEquals("feat/workflow-as-queue-item", three.branch(), "Build Snapshot checks out the 3.x branch");
-        assertEquals(28140, three.defaultPort());
-        assertEquals(two.params().size(), three.params().size(), "same program, same form");
-        assertEquals(List.of("turing-workflow"), three.dependsOn(), "3.x builds against turing-workflow's development version");
-        // The 2.x tile is untouched: no artifact, no branch, so it builds the default branch by its link name.
-        assertNull(two.artifact());
-        assertNull(two.branch());
-        assertEquals("quarkus-chat-ui", two.artifactBase());
-        Optional<AiWorkspaceConfig.ParamDefinition> port =
-                three.params().stream().filter(p -> p.key().equals("port")).findFirst();
-        assertNotNull(port.orElse(null));
+    /** quarkus-chat-ui (2.x and its 3.x line) and quarkus-chat-ui3 were the prototypes of chat-ui-with-audit-trail. */
+    @Test void quarkus_chat_ui_prototypes_are_retired() {
+        List<String> names = ToolRegistryLoader.load().stream().map(ToolRegistryEntry::name).toList();
+        for (String retired : List.of("quarkus-chat-ui", "quarkus-chat-ui-3", "quarkus-chat-ui3")) {
+            assertFalse(names.contains(retired), retired + " is retired; chat-ui-with-audit-trail is the final form");
+        }
+        assertTrue(ToolRegistryLoader.load().stream()
+                        .noneMatch(e -> "scivicslab/quarkus-chat-ui".equals(e.githubRepo())
+                                || "scivicslab/quarkus-chat-ui3".equals(e.githubRepo())),
+                "no tile builds or downloads from the retired repositories");
     }
 
     @Test void chat_ui_with_audit_trail_present_and_shape() {
@@ -215,7 +179,7 @@ class ToolRegistryLoaderTest {
         assertEquals(2, e.params().size(), "Local LLM endpoint, port");
         assertEquals("servers", e.params().get(0).key());
         assertEquals("chat-ui.servers", e.params().get(0).jvmProp(),
-                "matches quarkus-chat-ui's own property name, since the left panel embeds its markup verbatim");
+                "matches the property name of quarkus-chat-ui, its prototype, since the left panel embeds its markup verbatim");
         assertEquals("port", e.params().get(1).key(), "the publish-to-parent switch is gone (RemoveParentInterpreterPublication_260913_oo01)");
     }
 

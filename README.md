@@ -7,7 +7,7 @@ A launcher and dashboard for the AI toolkit. Manages a set of Java tools as loca
 | Tool | Description | Port (default) |
 |------|-------------|----------------|
 | **quarkus-mcp-gateway** | MCP server hub — connects LLM clients to external tools and services | 28001 |
-| **quarkus-chat-ui** | Web UI for LLMs (Claude, Codex, local vLLM) with skill commands and agent support | 28100+ |
+| **chat-ui-with-audit-trail** | Web UI for LLMs (Claude, local LLM) that records every turn in an audit trail | 28030+ |
 | **turing-workflow-editor** | Visual editor for Turing Workflow YAML definitions | 28120+ |
 | **html-saurus** | Local document portal — browse Markdown and Docusaurus docs in a browser | 28110+ |
 
@@ -40,7 +40,7 @@ chmod +x quarkus-AI-workspace-*-linux-x86_64
 Open `http://localhost:28000` in your browser.
 
 > **Note:** The native binary itself requires no Java installation.
-> The tools it manages (quarkus-mcp-gateway, quarkus-chat-ui, etc.) are Java uber-jars and **do** require Java 21+.
+> The tools it manages (quarkus-mcp-gateway, chat-ui-with-audit-trail, etc.) are Java uber-jars and **do** require Java 21+.
 > If Java is not found when you try to start a tool, the workspace will show installation instructions.
 
 ---
@@ -68,7 +68,7 @@ Open `http://localhost:28000` (or the port you specified) in your browser.
 The dashboard shows a **Download Latest** button next to each tool. Click it to download the latest release JAR automatically — no manual `curl` or filename adjustments needed.
 
 1. Click **Download Latest** for `quarkus-mcp-gateway` → then click **Start**
-2. Click **Download Latest** for `quarkus-chat-ui`, `html-saurus`, `turing-workflow-editor` as needed
+2. Click **Download Latest** for `chat-ui-with-audit-trail`, `html-saurus`, `turing-workflow-editor` as needed
 
 All JARs are saved in the same directory as `start.sh`. The workspace resolves tool JARs from that directory, so no config change is required when a new version is released.
 
@@ -133,7 +133,7 @@ mvn package -Dnative
 
 | Project | Repository |
 |---------|------------|
-| quarkus-chat-ui | https://github.com/scivicslab/quarkus-chat-ui |
+| chat-ui-with-audit-trail | https://github.com/scivicslab/chat-ui-with-audit-trail |
 | quarkus-mcp-gateway | https://github.com/scivicslab/quarkus-mcp-gateway |
 | turing-workflow-editor | https://github.com/scivicslab/Turing-workflow-editor |
 | html-saurus | https://github.com/scivicslab/html-saurus |

@@ -28,42 +28,6 @@
 # Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
 # metadata lives here — there is no per-tool plugin and no external override file.
 tools:
-  - name: quarkus-chat-ui
-    jar: quarkus-chat-ui.jar
-    github: scivicslab/quarkus-chat-ui
-    dependsOn: [turing-workflow, Turing-workflow-plugins]
-    port: 28100
-    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
-    params:
-      - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
-      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
-      - {key: provider, label: "LLM Provider", type: select, default: "${DEFAULT_PROVIDER}", jvmProp: "chat-ui.provider",
-         options: [{value: "claude", label: "Claude"}, {value: "codex", label: "Codex (OpenAI)"}, {value: "openai-compat", label: "Local LLM (vLLM)"}]}
-      - {key: servers, label: "vLLM Endpoint (Local LLM only)", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
-      - {key: allowed-dirs, label: "Allowed Directories (comma-separated)", type: text, default: "${HOME}/works", jvmProp: "chat-ui.filesystem.allowed-dirs"}
-      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
-
-  # The 3.x development line of the same repository, beside the 2.x tile above
-  # (TwoTilesOneRepository_260930_oo01). Build Snapshot checks out the branch named here and links
-  # the jar under its own name, so it never replaces the 2.x tile's quarkus-chat-ui.jar. 3.x builds
-  # against turing-workflow's development version, so that library is built first.
-  - name: quarkus-chat-ui-3
-    jar: quarkus-chat-ui-3.jar
-    artifact: quarkus-chat-ui
-    github: scivicslab/quarkus-chat-ui
-    branch: feat/workflow-as-queue-item
-    dependsOn: [turing-workflow]
-    port: 28140
-    jvmArgs: ["-Xmx2g", "-XX:G1PeriodicGCInterval=60000"]
-    params:
-      - {key: title, label: "Session Title", type: text, default: "", jvmProp: "chat-ui.title"}
-      - {key: workdir, label: "Working Directory", type: dir, default: "${HOME}/works", workingDir: true}
-      - {key: provider, label: "LLM Provider", type: select, default: "${DEFAULT_PROVIDER}", jvmProp: "chat-ui.provider",
-         options: [{value: "claude", label: "Claude"}, {value: "codex", label: "Codex (OpenAI)"}, {value: "openai-compat", label: "Local LLM (vLLM)"}]}
-      - {key: servers, label: "vLLM Endpoint (Local LLM only)", type: text, default: "${VLLM_ENDPOINT}", jvmProp: "chat-ui.servers"}
-      - {key: allowed-dirs, label: "Allowed Directories (comma-separated)", type: text, default: "${HOME}/works", jvmProp: "chat-ui.filesystem.allowed-dirs"}
-      - {key: port, label: "Port (blank = auto-assign)", type: text, default: ""}
-
   # chat-ui-with-audit-trail carries plugin jars beside its body (ProviderAndToolPlugins_260912_oo01);
   # which are passed on the command line is the start-up configuration, so it is three tiles rather
   # than a form field (CompanionJars_260912_oo01). All three build and download the same repository.
