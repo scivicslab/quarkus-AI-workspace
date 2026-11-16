@@ -54,6 +54,14 @@ public interface ServiceBackend {
      */
     DashboardModel getDashboardModel();
 
+    /**
+     * The chat-ui-with-audit-trail instances this backend runs, in any state, each with the command
+     * line it runs with (ChatUiPeers_261116_oo01). Empty for a backend that runs none.
+     */
+    default List<com.scivicslab.aiworkspace.chatui.ChatUiPeers.Instance> chatUiInstances() {
+        return List.of();
+    }
+
     /** Update the memo for a specific instance. No-op if instance not found. */
     default void updateMemo(String toolName, int port, String memo) {}
 

@@ -513,6 +513,20 @@ public class JvmBackend implements ServiceBackend {
     }
 
     @Override
+    public List<com.scivicslab.aiworkspace.chatui.ChatUiPeers.Instance> chatUiInstances() {
+        List<com.scivicslab.aiworkspace.chatui.ChatUiPeers.Instance> out = new ArrayList<>();
+        if (config == null || config.jvm() == null) return out;
+        for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
+            if (!com.scivicslab.aiworkspace.chatui.ChatUiPeers.isChatUi(tool.jar())) continue;
+            for (ActorRef<ProcessSupervisor> s : instances.ask(r -> r.forTool(tool.name())).join()) {
+                out.add(s.ask(p -> new com.scivicslab.aiworkspace.chatui.ChatUiPeers.Instance(
+                        p.getPort(), p.getState(), p.commandLine())).join());
+            }
+        }
+        return out;
+    }
+
+    @Override
     public DashboardModel getDashboardModel() {
         List<SessionView> managementServices = new ArrayList<>();
         List<SessionView> activeSessions = new ArrayList<>();

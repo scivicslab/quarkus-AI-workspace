@@ -79,6 +79,9 @@ public class ProcessSupervisor {
      */
     private java.time.Instant startedAt;
 
+    /** The command this supervisor started its process with; {@code null} for an adopted process. */
+    private List<String> launchedCommand;
+
 
     public ProcessSupervisor(AiWorkspaceConfig.ToolDefinition config,
                              int port,
@@ -107,6 +110,16 @@ public class ProcessSupervisor {
 
     public String getCachedAccessUrl() {
         return cachedAccessUrl;
+    }
+
+    /**
+     * The command line this instance runs with: the one this supervisor launched, or, for a process
+     * it adopted, the arguments the operating system reports (empty when it reports none).
+     */
+    public List<String> commandLine() {
+        if (launchedCommand != null) return launchedCommand;
+        if (adoptedHandle == null) return List.of();
+        return adoptedHandle.info().arguments().map(List::of).orElse(List.of());
     }
 
     public long getPid() {
@@ -241,6 +254,7 @@ public class ProcessSupervisor {
 
         try {
             List<String> command = buildCommand();
+            launchedCommand = List.copyOf(command);
             // On Linux: wrap with setsid to detach from the portal's process group.
             // Without this, Ctrl+C / SIGINT sent to the terminal kills the entire
             // process group (portal + all children). setsid starts the child in a
@@ -417,7 +431,8 @@ public class ProcessSupervisor {
     // Private helpers
     // ---------------------------------------------------------------
 
-    private List<String> buildCommand() {
+    /** Package-private so the launch command can be checked without starting a process. */
+    List<String> buildCommand() {
         List<String> command = new ArrayList<>();
         String exec = resolveJarPath(expandEnvVars(config.jar()));
         boolean isNative = !exec.endsWith(".jar");
@@ -461,6 +476,12 @@ public class ProcessSupervisor {
                     logger.fine(config.name() + ": param '" + param.key() + "'=[" + value + "] (no -D mapping)");
                 }
             }
+        }
+
+        // A chat-ui-with-audit-trail is told how its peers reach it and where to ask for them
+        // (ChatUiPeers_261116_oo01). Options the tile already gives are kept.
+        if (com.scivicslab.aiworkspace.chatui.ChatUiPeers.isChatUi(config.jar())) {
+            command.addAll(com.scivicslab.aiworkspace.chatui.ChatUiPeers.launchOptions(command, port, ownBaseUrl()));
         }
 
         if (hasPositionalArgs) {
