@@ -1,7 +1,7 @@
 {
-  "name": "lxd-pups-portal",
+  "name": "quarkus-ai-workspace-e2e",
   "version": "1.0.0",
-  "description": "**LXD-pups** = **LXD** **P**er-**U**ser **P**od **S**ervice — My Own OpenClaw and LangGraph",
+  "description": "Playwright end-to-end tests for quarkus-AI-workspace (see e2e/)",
   "main": "index.js",
   "directories": {
     "doc": "docs"
