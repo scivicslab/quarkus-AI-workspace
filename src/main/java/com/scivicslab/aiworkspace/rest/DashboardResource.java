@@ -65,8 +65,8 @@ public class DashboardResource {
     @ConfigProperty(name = "quarkus.application.version", defaultValue = "dev")
     String appVersion;
 
-    // The container image tag, baked into the image at build time (Dockerfile ARG IMAGE_TAG ->
-    // ENV AI_WORKSPACE_IMAGE_TAG). Lets the header show the EXACT build (e.g. 2.5.0-2607041128),
+    // The container image tag, baked into the image at build time (k8s-pups'
+    // docker/quarkus-ai-workspace/Dockerfile: ARG IMAGE_TAG -> ENV AI_WORKSPACE_IMAGE_TAG). Lets the header show the EXACT build (e.g. 2.5.0-2607041128),
     // which the Maven version alone cannot distinguish between two SNAPSHOT builds. Empty when unset.
     @ConfigProperty(name = "ai-workspace.image-tag")
     Optional<String> imageTag;
