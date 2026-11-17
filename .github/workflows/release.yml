@@ -16,11 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      # The pom compiles for Java 25 (maven.compiler.release), so the build needs JDK 25. GraalVM CE
+      # is the JDK of every build of this project, the same one the native jobs below use.
+      - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: maven
+          java-version: '25'
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
 
       - name: Build uber-JAR
         run: mvn package -DskipTests
@@ -59,7 +62,7 @@ jobs:
 
       - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'graalvm-community'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: 'maven'
