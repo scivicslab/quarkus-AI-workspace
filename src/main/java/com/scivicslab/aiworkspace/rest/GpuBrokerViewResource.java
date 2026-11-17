@@ -25,10 +25,22 @@ import java.util.Map;
 @Path("/api/gpu-broker")
 public class GpuBrokerViewResource {
 
-    private static final HttpClient CLIENT = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(3))
-            .build();
+    // Created on first use, not in a static initializer: the native image initializes this resource
+    // class at build time, and an HttpClient made there is frozen into the image heap, which the
+    // native build refuses (HttpClientFacade). ProxyResource does the same.
+    private static volatile HttpClient client;
+
+    private static HttpClient client() {
+        HttpClient c = client;
+        if (c == null) {
+            c = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(Duration.ofSeconds(3))
+                    .build();
+            client = c;
+        }
+        return c;
+    }
 
     /**
      * @return {@code {"configured":false}} when no broker URL is set; otherwise {@code url},
@@ -45,7 +57,7 @@ public class GpuBrokerViewResource {
         if (url.isEmpty()) return body;
         body.put("url", url.get());
         try {
-            HttpResponse<String> r = CLIENT.send(
+            HttpResponse<String> r = client().send(
                     HttpRequest.newBuilder(URI.create(url.get() + "/queues")).timeout(Duration.ofSeconds(5)).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             if (r.statusCode() != 200) {

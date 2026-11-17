@@ -18,11 +18,13 @@ public final class BrokerQueues {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /** One endpoint of a queue: its address and the health the broker reports (UP, DOWN, ...). */
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record Endpoint(String address, String health) {
         public boolean up() { return "UP".equals(health); }
     }
 
     /** One queue as the tile shows it. */
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record Queue(String name, int activeSlots, int totalSlots, int pendingJobs, List<Endpoint> endpoints) {
         public long endpointsUp() { return endpoints.stream().filter(Endpoint::up).count(); }
     }

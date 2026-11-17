@@ -31,7 +31,8 @@ public final class ChatUiPeers {
     static final String ACTOR_PORT = "chat-ui.actor-port";
     static final String WORKSPACE_URL = "chat-ui.workspace-url";
 
-    /** One peer, as GET /api/chat-ui/peers lists it. */
+    /** One peer, as GET /api/chat-ui/peers lists it. Registered so that Jackson can write it in the native image. */
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record Peer(String name, String host, int actorPort) {}
 
     /** One chat-ui instance this portal runs: its HTTP port, its state and the command line it runs with. */
