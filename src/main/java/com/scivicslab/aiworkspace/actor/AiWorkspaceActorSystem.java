@@ -5,7 +5,6 @@ import com.scivicslab.aiworkspace.build.BuildRegistryActor;
 import com.scivicslab.aiworkspace.version.GitHubVersionFetcher;
 import com.scivicslab.aiworkspace.version.ToolVersionActor;
 import com.scivicslab.pojoactor.core.ActorRef;
-import com.scivicslab.pojoactor.core.ActorSystem;
 
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
@@ -34,7 +33,8 @@ public class AiWorkspaceActorSystem {
     @Inject
     GitHubVersionFetcher fetcher;
 
-    private ActorSystem actorSystem;
+    /** This portal's actor system, which is also its node of the distributed actor system (ActorNodesForWorkspaceAndPortal_261118_oo01). */
+    private com.scivicslab.pojoactor.distributed.DistributedIIActorSystem actorSystem;
     private ActorRef<ToolVersionActor> toolVersions;
     private ActorRef<BuildRegistryActor> buildRegistry;
     private ActorRef<com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor>
@@ -42,7 +42,8 @@ public class AiWorkspaceActorSystem {
 
     @PostConstruct
     void init() {
-        actorSystem = new ActorSystem("ai-workspace");
+        var me = com.scivicslab.aiworkspace.node.WorkspaceNode.identity();
+        actorSystem = com.scivicslab.aiworkspace.node.WorkspaceNode.buildSystem(me.getNodeId(), me.getPort());
         toolVersions = actorSystem.actorOf("tool-versions", new ToolVersionActor(fetcher));
         buildRegistry = actorSystem.actorOf("build-registry", new BuildRegistryActor());
         conversationLogMerge = actorSystem.actorOf("conversation-log-merge",
@@ -53,7 +54,8 @@ public class AiWorkspaceActorSystem {
     @PreDestroy
     void shutdown() {
         if (actorSystem != null) {
-            actorSystem.terminate();
+            // Also stops the receiver, when the node opened one.
+            actorSystem.close();
             logger.info("AiWorkspaceActorSystem terminated");
         }
     }
@@ -89,7 +91,7 @@ public class AiWorkspaceActorSystem {
     }
 
     /** The system itself, for actors that are created while the portal runs. */
-    public ActorSystem actorSystem() {
+    public com.scivicslab.pojoactor.distributed.DistributedIIActorSystem actorSystem() {
         return actorSystem;
     }
 }

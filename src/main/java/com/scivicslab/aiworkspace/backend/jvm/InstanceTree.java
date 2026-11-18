@@ -122,8 +122,9 @@ public final class InstanceTree {
     }
 
     /**
-     * Closes one instance's actor and removes it from the tree. {@code close} takes the name out of the actor
-     * system; with pojo-actor 4.2.0 it does not take it out of the parent's children, so that is done here.
+     * Closes one instance's actor and removes it from the tree. {@code close} takes the name out of the actor system
+     * and, from pojo-actor 4.6.0, out of the parent's children too; the two removals after it make sure of both
+     * whatever the version, and do nothing when {@code close} already did them.
      */
     private void forget(ActorRef<ProcessSupervisor> instance) {
         String name = instance.getName();
