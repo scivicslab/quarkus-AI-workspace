@@ -19,9 +19,10 @@ public record Layout(List<Tile> shown, List<Tile> hidden, List<TileSpec> missing
      * @param defaultTitle the catalog's heading for it
      * @param title        the user's heading for it, or {@code ""}
      * @param branch       the branch it builds, or {@code ""} for the default branch
-     * @param jar          its link name in {@code ~/works}
+     * @param jar          its link name in {@code ~/works}, or {@code ""} for a link entry
+     * @param link         true for a link entry, which has no branch and no jar and starts nothing
      */
-    public record Tile(String name, String defaultTitle, String title, String branch, String jar) {
+    public record Tile(String name, String defaultTitle, String title, String branch, String jar, boolean link) {
 
         /** @return the heading the tile is drawn with: the user's, else the catalog's */
         public String heading() {

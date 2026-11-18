@@ -26,7 +26,7 @@ class DashboardTest {
 
     private static ToolRegistryEntry entry(String name, String title, String branch, boolean library) {
         return new ToolRegistryEntry(name, library ? null : name + ".jar", "o/" + name, library, 0, false, false, false,
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null, branch, title);
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null, branch, title, null, null, null);
     }
 
     private static final List<ToolRegistryEntry> CATALOG = List.of(

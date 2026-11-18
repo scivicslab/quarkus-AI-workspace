@@ -117,12 +117,16 @@ public class DashboardResource {
      * @param latestSnapshot the version the default branch's pom.xml declares, or ""
      * @param branch         the branch the entry builds, or "" for the default branch; a branch entry offers no
      *                       Download Latest Release (DashboardBuilder_261118_oo01)
+     * @param link           true for a link entry: the tile shows and opens {@code url} and starts nothing
+     * @param url            a link entry's resolved address, or "" when it has none
+     * @param view           what a link entry's tile adds, such as {@code gpu-broker-queues}, or ""
      */
     public record CatalogTile(String name, String displayName,
                               java.util.List<com.scivicslab.aiworkspace.model.ParamDefinition> params,
                               String github, String status, boolean library,
                               String installed, String latestRelease, String latestSnapshot,
-                              String iconUrl, String branch) {}
+                              String iconUrl, String branch,
+                              boolean link, String url, String view) {}
 
     /** The extensions a tool icon may be held in, tried in this order. */
     private static final List<String> ICON_EXTENSIONS = List.of(".svg", ".ico");
@@ -254,6 +258,16 @@ public class DashboardResource {
 
         List<CatalogTile> tiles = new ArrayList<>();
         for (var shown : layout.shown()) {
+            var linkEntry = registry.get(shown.name());
+            if (linkEntry != null && linkEntry.link()) {
+                // A link entry has no process and no jar: the tile shows and opens its address and nothing else
+                // (DashboardBuilder_261118_oo01).
+                String url = linkEntry.resolvedUrl().orElse("");
+                tiles.add(new CatalogTile(linkEntry.name(), shown.heading(), List.of(), null,
+                        url.isEmpty() ? "no address is set (gpu.broker.url)" : "", false, "", "", "",
+                        iconUrl(linkEntry.name()), "", true, url, linkEntry.view() == null ? "" : linkEntry.view()));
+                continue;
+            }
             var tool = views.get(shown.name());
             if (tool == null) continue;
             var entry = registry.get(tool.name());
@@ -265,7 +279,7 @@ public class DashboardResource {
             tiles.add(new CatalogTile(tool.name(), shown.heading(), tool.params(),
                                       tool.github(), tool.status(), library,
                                       installed, remote.latestRelease(), remote.latestSnapshot(),
-                                      iconUrl(tool.name()), shown.branch()));
+                                      iconUrl(tool.name()), shown.branch(), false, "", ""));
         }
         return tiles;
     }

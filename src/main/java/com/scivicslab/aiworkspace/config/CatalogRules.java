@@ -26,6 +26,10 @@ public final class CatalogRules {
         Map<String, ToolRegistryEntry> owner = new LinkedHashMap<>();
         for (ToolRegistryEntry e : catalog) {
             if (e.library()) continue;
+            if (e.link()) {
+                linkViolations(e, out);
+                continue;
+            }
             List<String> links = new ArrayList<>();
             if (e.jarFileName() != null) links.add(e.jarFileName());
             links.addAll(e.companionJars());
@@ -42,5 +46,27 @@ public final class CatalogRules {
             }
         }
         return out;
+    }
+
+    /**
+     * A link entry has a {@code url} and nothing a launched tool has: it starts, stops and builds nothing, so a
+     * {@code jar}, a repository or launch arguments on it would be read by nobody, or worse, by something that starts
+     * a process (DashboardBuilder_261118_oo01).
+     */
+    private static void linkViolations(ToolRegistryEntry e, List<String> out) {
+        if (e.url() == null || e.url().isBlank()) out.add(e.name() + ": a link entry needs a url");
+        List<String> launchFields = new ArrayList<>();
+        if (e.jarFileName() != null) launchFields.add("jar");
+        if (e.githubRepo() != null) launchFields.add("github");
+        if (e.branch() != null) launchFields.add("branch");
+        if (e.artifact() != null) launchFields.add("artifact");
+        if (!e.companionJars().isEmpty()) launchFields.add("companionJars");
+        if (!e.dependsOn().isEmpty()) launchFields.add("dependsOn");
+        if (!e.args().isEmpty()) launchFields.add("args");
+        if (!e.jvmArgs().isEmpty()) launchFields.add("jvmArgs");
+        if (!e.params().isEmpty()) launchFields.add("params");
+        if (!launchFields.isEmpty()) {
+            out.add(e.name() + ": a link entry starts nothing, so it cannot have " + String.join(", ", launchFields));
+        }
     }
 }

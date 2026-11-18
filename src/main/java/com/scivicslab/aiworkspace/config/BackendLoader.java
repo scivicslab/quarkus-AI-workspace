@@ -26,7 +26,7 @@ public class BackendLoader {
         // live at render/launch time (see JvmBackend), not frozen here, so a freshly built tool
         // becomes launchable without a restart.
         List<ToolRegistryEntry> tools = registry.stream()
-            .filter(e -> !e.library())   // library entries install to ~/.m2; no runnable jar
+            .filter(e -> !e.library() && !e.link())   // library entries install to ~/.m2; no runnable jar
             .toList();
         logger.info("Launchable tools: " + tools.size() + " / Registry: " + registry.size());
 
@@ -39,7 +39,7 @@ public class BackendLoader {
     /** The configuration the backend is initialised with. */
     public static AiWorkspaceConfig loadConfig() {
         List<ToolRegistryEntry> tools = ToolRegistryLoader.load().stream()
-            .filter(e -> !e.library())
+            .filter(e -> !e.library() && !e.link())
             .toList();
         return toConfig(tools);
     }

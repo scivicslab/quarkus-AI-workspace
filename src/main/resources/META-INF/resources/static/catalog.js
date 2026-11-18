@@ -40,8 +40,9 @@
             titleCell.appendChild(input);
             tr.appendChild(titleCell);
             tr.appendChild(cell(t.name, true));
-            tr.appendChild(cell(t.branch || '(default)', true));
-            tr.appendChild(cell(t.jar, true));
+            // A link entry has no branch and no jar link (DashboardBuilder_261118_oo01).
+            tr.appendChild(cell(t.link ? '' : (t.branch || '(default)'), true));
+            tr.appendChild(cell(t.link ? '' : t.jar, true));
             const act = document.createElement('td');
             act.appendChild(button('Hide', function () { hidden.push(shown.splice(i, 1)[0]); draw(); }));
             tr.appendChild(act);
@@ -52,8 +53,9 @@
             const tr = document.createElement('tr');
             tr.appendChild(cell(t.name, true));
             tr.appendChild(cell(t.defaultTitle, false));
-            tr.appendChild(cell(t.branch || '(default)', true));
-            tr.appendChild(cell(t.jar, true));
+            // A link entry has no branch and no jar link (DashboardBuilder_261118_oo01).
+            tr.appendChild(cell(t.link ? '' : (t.branch || '(default)'), true));
+            tr.appendChild(cell(t.link ? '' : t.jar, true));
             const act = document.createElement('td');
             act.appendChild(button('Show', function () { shown.push(hidden.splice(i, 1)[0]); draw(); }));
             tr.appendChild(act);

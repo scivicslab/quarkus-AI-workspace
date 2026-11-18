@@ -70,10 +70,11 @@ class ToolRegistryLoaderTest {
     }
 
     // Without a heap cap the JVM grows to a quarter of RAM, and without the periodic GC it keeps
-    // that heap after the work is done; every tile runs a JVM, so every tile carries both flags.
+    // that heap after the work is done; every launchable tile runs a JVM, so every one carries both
+    // flags. A link entry runs nothing here (DashboardBuilder_261118_oo01).
     @Test void every_tile_caps_heap_and_returns_it() {
         for (ToolRegistryEntry e : ToolRegistryLoader.load()) {
-            if (e.library()) continue;
+            if (e.library() || e.link()) continue;
             assertTrue(e.jvmArgs().stream().anyMatch(a -> a.startsWith("-Xmx")),
                     e.name() + " must cap its heap");
             assertTrue(e.jvmArgs().contains("-XX:G1PeriodicGCInterval=60000"),
@@ -98,13 +99,20 @@ class ToolRegistryLoaderTest {
         // One broker stands in front of the cluster's GPU nodes and runs inside the cluster. A tile
         // that launches one would let anyone start a second here, dividing the same GPUs between two
         // schedulers that cannot see each other's queues. Every launchable tile comes from the
-        // registry, so the registry must hold no broker under any name, jar or repository.
+        // registry, so no launchable entry may name a broker under any name, jar or repository. The
+        // broker is a link entry: it is shown and opened, and has nothing to launch or build
+        // (DashboardBuilder_261118_oo01).
         for (ToolRegistryEntry e : ToolRegistryLoader.load()) {
+            if (e.link()) continue;
             String said = (e.name() + " " + e.jarFileName() + " " + e.githubRepo()).toLowerCase();
             assertFalse(said.contains("gpu-broker"), "the registry must not offer a GPU broker to launch: " + e.name());
         }
-        // The Catalog shows the broker in a tile of its own, which only reads it: no launch form, no
-        // action list, no Run, and nothing that builds, downloads or restarts.
+        ToolRegistryEntry broker = byName(ToolRegistryLoader.load(), "gpu-broker");
+        assertTrue(broker.link(), "the broker is a link entry");
+        assertNull(broker.jarFileName());
+        assertNull(broker.githubRepo());
+        // A link entry's tile only reads what it shows: no launch form, no action list, no Run, and
+        // nothing that builds, downloads or restarts.
         String tile = brokerTileOf(templateText("/templates/dashboard.html"));
         assertTrue(tile.contains("data-view-only=\"true\""), "the broker tile is marked view-only");
         assertTrue(tile.contains("target=\"_blank\""), "the broker tile opens the broker's own page in a new tab");
@@ -114,12 +122,13 @@ class ToolRegistryLoaderTest {
         }
     }
 
-    /** The markup of the GPU broker tile: from its opening tag to the end of the Catalog's grid. */
+    /** The markup of a link entry's tile, the GPU broker's among them: the {@code tool.link} branch of the tile loop. */
     private static String brokerTileOf(String dashboard) {
-        int start = dashboard.indexOf("id=\"gpu-broker-tile\"");
-        assertTrue(start >= 0, "the Catalog has a GPU broker tile");
-        int end = dashboard.indexOf("{/body}", start);
-        return dashboard.substring(start, end < 0 ? dashboard.length() : end);
+        int start = dashboard.indexOf("{#if tool.link}");
+        assertTrue(start >= 0, "the Dashboard tab draws link entries");
+        int end = dashboard.indexOf("{! data-github marks the tiles", start);
+        assertTrue(end > start, "the link tile ends where the launchable tile begins");
+        return dashboard.substring(start, end);
     }
 
     private static String templateText(String resource) throws IOException {

@@ -28,6 +28,13 @@
 #                  install from different places never share a link name. AI-workspace refuses to start
 #                  on a catalog that breaks this (CatalogRules, DashboardBuilder_261118_oo01).
 #   title          the tile's heading when the user's dashboard gives none; omit for the name
+#   kind           "link" for a link entry: a service that runs elsewhere, shown on the Dashboard tab
+#                  and opened in a new browser tab, never started, stopped or built. It has a url and
+#                  none of jar, github, branch, artifact, companionJars, dependsOn, args, jvmArgs,
+#                  params. Omit for a tool this portal launches (DashboardBuilder_261118_oo01).
+#   url            a link entry's address; ${gpu.broker.url} is the broker address this portal hands
+#                  every tool (-Dgpu.broker.url, else GPU_BROKER_URL), so it is written in one place
+#   view           what a link entry's tile adds: gpu-broker-queues shows the broker's queues
 #   params         dashboard form fields (key,label,type[dir|select|text],default,jvmProp,workingDir,argPos,options)
 #
 # Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
@@ -184,3 +191,13 @@ tools:
     library: true
     dependsOn: [turing-workflow, pluggable-cli]
     modules: [plugin-llm, plugin-log-db, plugin-codedoc]
+
+  # The GPU broker, shown and opened, never started: the one broker runs inside the W206 cluster,
+  # and a second one started from here would divide the same GPUs between two schedulers that cannot
+  # see each other's queues (3f37a84 dropped the launchable tile for that reason). Its address is the
+  # one every tool is given, not written here a second time.
+  - name: gpu-broker
+    kind: link
+    title: "GPU broker (W206 cluster)"
+    url: "${gpu.broker.url}"
+    view: gpu-broker-queues

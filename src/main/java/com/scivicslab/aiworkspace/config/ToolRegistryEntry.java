@@ -41,8 +41,36 @@ public record ToolRegistryEntry(
     String branch,
     /** The tile's heading when the user's dashboard gives none; null for the entry's name
      *  ({@code DashboardBuilder_261118_oo01}). */
-    String title
+    String title,
+    /** {@value #LINK} for a link entry, which starts nothing and only shows and opens {@code url}; null for a tool
+     *  this portal launches. */
+    String kind,
+    /** A link entry's address; {@value #GPU_BROKER_URL} stands for the broker address the portal hands every tool. */
+    String url,
+    /** A view a link entry's tile adds, such as {@value #VIEW_GPU_BROKER_QUEUES}; null for none. */
+    String view
 ) {
+    /** The kind of a link entry. */
+    public static final String LINK = "link";
+    /** In a link entry's {@code url}: the GPU broker's address, as {@code GpuBrokerUrl} resolves it. */
+    public static final String GPU_BROKER_URL = "${gpu.broker.url}";
+    /** The view that adds the GPU broker's queues to a link entry's tile. */
+    public static final String VIEW_GPU_BROKER_QUEUES = "gpu-broker-queues";
+
+    /** @return whether this is a link entry: no process, no jar, nothing started, stopped or built */
+    public boolean link() {
+        return LINK.equals(kind);
+    }
+
+    /**
+     * @return a link entry's address with {@value #GPU_BROKER_URL} replaced by the broker address the portal hands
+     *         every tool, or empty when it names that address and none is configured
+     */
+    public java.util.Optional<String> resolvedUrl() {
+        if (url == null || url.isBlank()) return java.util.Optional.empty();
+        if (!url.contains(GPU_BROKER_URL)) return java.util.Optional.of(url.strip());
+        return GpuBrokerUrl.resolve().map(b -> url.strip().replace(GPU_BROKER_URL, b));
+    }
     /**
      * The base name the build's jar is found by: {@code artifact}, else the link name without {@code .jar} and without
      * its {@code @<branch>} ({@code BranchVariant#baseOf}).

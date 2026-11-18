@@ -77,8 +77,9 @@ public final class ToolRegistryLoader {
             String jar     = str(entry.get("jar"));
             String github  = str(entry.get("github"));
             boolean library = bool(entry.get("library"), false);
-            // A valid entry needs a name, and either a jar (deployable tool) or library:true.
-            if (name == null || (jar == null && !library)) continue;
+            boolean link = ToolRegistryEntry.LINK.equals(str(entry.get("kind")));
+            // A valid entry needs a name, and a jar (deployable tool), library:true, or kind:link.
+            if (name == null || (jar == null && !library && !link)) continue;
             result.add(new ToolRegistryEntry(
                 name, jar, github, library,
                 intOf(entry.get("port"), 0),
@@ -93,7 +94,10 @@ public final class ToolRegistryLoader {
                 strList(entry.get("companionJars")),
                 str(entry.get("artifact")),
                 str(entry.get("branch")),
-                str(entry.get("title"))
+                str(entry.get("title")),
+                str(entry.get("kind")),
+                str(entry.get("url")),
+                str(entry.get("view"))
             ));
         }
         logger.info("Loaded tool registry: " + result.size() + " entries from ai-workspace-tools.yaml");

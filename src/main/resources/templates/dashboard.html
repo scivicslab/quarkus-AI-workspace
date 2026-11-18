@@ -83,6 +83,39 @@
 
     <div class="tool-grid">
     {#for tool in launchTools}
+        {#if tool.link}
+        {! A link entry: a service that runs elsewhere, shown and opened, never started, stopped or built
+           (DashboardBuilder_261118_oo01). The GPU broker is one: it runs once, inside the W206 cluster, and a
+           second one started here would divide the same GPUs between two schedulers that cannot see each
+           other's queues. Its view, gpu-broker-queues, reads the broker's GET /queues through
+           api/gpu-broker/queues every few seconds, at the same address every tool is given (gpu.broker.url). !}
+        <div class="tool-tile tool-tile-view" id="tool-tile-{tool.name}" data-view-only="true">
+            <div class="tool-head">
+                {#if tool.iconUrl}
+                <img class="tool-icon" src="{tool.iconUrl}" alt="">
+                {#else}
+                <span class="tool-icon tool-icon-letter">{tool.displayName.charAt(0)}</span>
+                {/if}
+                <div>
+                    <div class="tool-tile-name">{tool.displayName}</div>
+                    <div class="tool-tile-status"{#if tool.view == 'gpu-broker-queues'} id="gpu-broker-status"{/if}>{#if tool.status}{tool.status}{#else if tool.view == 'gpu-broker-queues'}reading…{/if}</div>
+                </div>
+            </div>
+            <div class="broker-view-note">View only. It runs elsewhere and is not started from here.</div>
+            {#if tool.url}
+            <div class="broker-view-head">
+                <span class="inst-mono">{tool.url}</span>
+                <a class="btn btn-small" id="link-open-{tool.name}" href="{tool.url}/" target="_blank" rel="noopener">Open</a>
+            </div>
+            {#if tool.view == 'gpu-broker-queues'}
+            <table class="broker-queues" id="gpu-broker-queues">
+                <thead><tr><th>Queue</th><th>Endpoints</th><th>Slots</th><th>Pending</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            {/if}
+            {/if}
+        </div>
+        {#else}
         {! data-github marks the tiles that Refresh versions asks GitHub about, so the
            browser can skip the ones with no repository instead of collecting a 404. !}
         <div class="tool-tile" id="tool-tile-{tool.name}"{#if tool.github} data-github="{tool.github}"{/if}>
@@ -168,33 +201,8 @@
                 <button class="btn btn-launch" onclick="launchTool('{tool.name}')">Start</button>
             </div>
         </div>
+        {/if}
     {/for}
-        {! The GPU broker, watched and not started. It runs once, inside the W206 cluster, and a
-           second one started here would divide the same GPUs between two schedulers that cannot see
-           each other's queues. So this tile has no launch form, no action list and no Run: it reads
-           the broker's GET /queues through api/gpu-broker/queues every few seconds, at the same
-           address every tool is given (gpu.broker.url). !}
-        <div class="tool-tile tool-tile-view" id="gpu-broker-tile" data-view-only="true"
-             data-broker-url="{gpuBrokerUrl}">
-            <div class="tool-head">
-                <span class="tool-icon tool-icon-letter">G</span>
-                <div>
-                    <div class="tool-tile-name">GPU broker</div>
-                    <div class="tool-tile-status" id="gpu-broker-status">{#if gpuBrokerUrl}reading…{#else}no broker address is set (gpu.broker.url){/if}</div>
-                </div>
-            </div>
-            <div class="broker-view-note">View only. The one broker runs in the W206 cluster; it is not started from here.</div>
-            {#if gpuBrokerUrl}
-            <div class="broker-view-head">
-                <span class="inst-mono">{gpuBrokerUrl}</span>
-                <a class="btn btn-small" id="gpu-broker-open" href="{gpuBrokerUrl}/" target="_blank" rel="noopener">Open</a>
-            </div>
-            <table class="broker-queues" id="gpu-broker-queues">
-                <thead><tr><th>Queue</th><th>Endpoints</th><th>Slots</th><th>Pending</th></tr></thead>
-                <tbody></tbody>
-            </table>
-            {/if}
-        </div>
     </div>
 {/body}
 {/include}

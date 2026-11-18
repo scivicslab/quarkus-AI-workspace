@@ -105,6 +105,6 @@ public final class Dashboard {
 
     private static Layout.Tile tile(ToolRegistryEntry e, String title) {
         return new Layout.Tile(e.name(), e.defaultTitle(), title,
-                e.branch() == null ? "" : e.branch(), e.jarFileName() == null ? "" : e.jarFileName());
+                e.branch() == null ? "" : e.branch(), e.jarFileName() == null ? "" : e.jarFileName(), e.link());
     }
 }
