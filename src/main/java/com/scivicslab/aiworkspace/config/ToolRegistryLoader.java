@@ -35,20 +35,38 @@ public final class ToolRegistryLoader {
     }
 
     private static List<ToolRegistryEntry> loadFromClasspath() {
+        List<ToolRegistryEntry> entries;
         try (InputStream is = ToolRegistryLoader.class.getResourceAsStream("/ai-workspace-tools.yaml")) {
             if (is == null) {
                 logger.warning("ai-workspace-tools.yaml not found on classpath — registry is empty");
                 return List.of();
             }
-            return parse(is);
+            entries = parse(is);
         } catch (Exception e) {
             logger.warning("Failed to load ai-workspace-tools.yaml: " + e.getMessage() + " — registry is empty");
             return List.of();
         }
+        return checked(entries);
+    }
+
+    /**
+     * Refuses a catalog in which installing one entry would replace another entry's jar ({@link CatalogRules}).
+     * Not swallowed like a missing file: an AI-workspace started on such a catalog would let two branches overwrite
+     * each other's link, so it does not start (DashboardBuilder_261118_oo01).
+     *
+     * @return {@code entries}, when they keep the rules
+     * @throws IllegalStateException naming every broken rule
+     */
+    static List<ToolRegistryEntry> checked(List<ToolRegistryEntry> entries) {
+        List<String> broken = CatalogRules.violations(entries);
+        if (!broken.isEmpty()) {
+            throw new IllegalStateException("ai-workspace-tools.yaml breaks the catalog rules: " + String.join("; ", broken));
+        }
+        return entries;
     }
 
     @SuppressWarnings("unchecked")
-    private static List<ToolRegistryEntry> parse(InputStream is) {
+    static List<ToolRegistryEntry> parse(InputStream is) {
         Yaml yaml = new Yaml();
         Map<String, Object> root = yaml.load(is);
         List<Map<String, Object>> tools = (List<Map<String, Object>>) root.get("tools");
@@ -74,7 +92,8 @@ public final class ToolRegistryLoader {
                 strList(entry.get("modules")),
                 strList(entry.get("companionJars")),
                 str(entry.get("artifact")),
-                str(entry.get("branch"))
+                str(entry.get("branch")),
+                str(entry.get("title"))
             ));
         }
         logger.info("Loaded tool registry: " + result.size() + " entries from ai-workspace-tools.yaml");

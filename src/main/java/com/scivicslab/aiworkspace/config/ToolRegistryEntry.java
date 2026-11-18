@@ -38,14 +38,27 @@ public record ToolRegistryEntry(
      *  names ({@code TwoTilesOneRepository_260930_oo01}). */
     String artifact,
     /** The branch Build Snapshot checks out and Latest SNAPSHOT reads; null for the default branch. */
-    String branch
+    String branch,
+    /** The tile's heading when the user's dashboard gives none; null for the entry's name
+     *  ({@code DashboardBuilder_261118_oo01}). */
+    String title
 ) {
-    /** The base name the build's jar is found by: {@code artifact}, else the link name without {@code .jar}. */
+    /**
+     * The base name the build's jar is found by: {@code artifact}, else the link name without {@code .jar} and without
+     * its {@code @<branch>} ({@code BranchVariant#baseOf}).
+     */
     public String artifactBase() {
         if (artifact != null && !artifact.isBlank()) return artifact;
-        if (jarFileName == null) return null;
-        return jarFileName.endsWith(".jar")
-            ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
-            : jarFileName;
+        return BranchVariant.baseOf(jarFileName);
+    }
+
+    /** @return the tile's default heading: {@code title}, else the entry's name */
+    public String defaultTitle() {
+        return title != null && !title.isBlank() ? title : name;
+    }
+
+    /** @return whether this entry builds a branch other than the repository's default */
+    public boolean branchVariant() {
+        return branch != null && !branch.isBlank();
     }
 }

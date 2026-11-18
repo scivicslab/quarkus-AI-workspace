@@ -63,4 +63,25 @@ class AdoptionToolChoiceTest {
     void pickToolForProcess_otherJar_isNull() {
         assertNull(JvmBackend.pickToolForProcess(TOOLS, new String[] {"-jar", "/home/x/works/other.jar"}));
     }
+
+    /**
+     * Two entries of one repository that build different branches have different links
+     * (DashboardBuilder_261118_oo01), so a process is credited by the link on its command line even when the jvmArgs
+     * are the same.
+     */
+    @Test
+    void pickToolForProcess_branchEntries_areToldApartByTheLinkPath() {
+        List<String> args = List.of("-Xmx2g");
+        AiWorkspaceConfig.ToolDefinition main = new AiWorkspaceConfig.ToolDefinition("cloud", "chat-ui-with-audit-trail.jar",
+                28031, false, false, false, null, args, List.of(), "scivicslab/x");
+        AiWorkspaceConfig.ToolDefinition v5x = new AiWorkspaceConfig.ToolDefinition("cloud-v5x", "chat-ui-with-audit-trail@v5.x.jar",
+                28033, false, false, false, null, args, List.of(), "scivicslab/x");
+        String jarV5x = "/home/x/works/chat-ui-with-audit-trail@v5.x.jar";
+        List<Map.Entry<String, AiWorkspaceConfig.ToolDefinition>> tools =
+                List.of(Map.entry(JAR, main), Map.entry(jarV5x, v5x));
+        assertEquals("cloud-v5x", JvmBackend.pickToolForProcess(tools, new String[] {"-Xmx2g", "-jar", jarV5x}).name());
+        assertEquals("cloud", JvmBackend.pickToolForProcess(tools, new String[] {"-Xmx2g", "-jar", JAR}).name());
+        assertEquals("cloud-v5x", JvmBackend.pickToolForProcess(tools,
+                new String[] {"-Xmx2g", "-jar", "chat-ui-with-audit-trail@v5.x.jar"}).name(), "started with the bare link name");
+    }
 }

@@ -1,5 +1,7 @@
 package com.scivicslab.aiworkspace.build;
 
+import com.scivicslab.aiworkspace.config.BranchVariant;
+
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -12,7 +14,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -138,25 +139,24 @@ public class SnapshotBuildService {
 
             if (jarFileName != null && !jarFileName.isBlank()) {
                 job.tell(j -> j.step("locating jar"));
+                // A branch entry's link carries @<branch>; the build's output does not
+                // (DashboardBuilder_261118_oo01).
                 String jarBase = (artifactBase != null && !artifactBase.isBlank())
                     ? artifactBase
-                    : jarFileName.endsWith(".jar")
-                        ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
-                        : jarFileName;
+                    : BranchVariant.baseOf(jarFileName);
                 Path uberJar = locateUberJar(repoDir, jarBase);
                 job.tell(j -> j.append("Found uber-jar: " + uberJar));
 
                 job.tell(j -> j.step("installing to ~/works"));
-                Path dest = installToWorks(job, uberJar, jarFileName);
+                // One stamp for the tool's jar and its companions, so the files of one build carry one time.
+                String stamp = BranchVariant.stamp(java.time.LocalDateTime.now());
+                Path dest = installToWorks(job, uberJar, jarFileName, stamp, branch);
                 // The jars that accompany the tool's jar — its plugins — go the same way, each
                 // found by its own base name and linked under its own name.
                 for (String companion : companionJars) {
-                    String base = companion.endsWith(".jar")
-                        ? companion.substring(0, companion.length() - ".jar".length())
-                        : companion;
-                    Path companionJar = locateUberJar(repoDir, base);
+                    Path companionJar = locateUberJar(repoDir, BranchVariant.baseOf(companion));
                     job.tell(j -> j.append("Found companion jar: " + companionJar));
-                    installToWorks(job, companionJar, companion);
+                    installToWorks(job, companionJar, companion, stamp, branch);
                 }
                 job.tell(j -> j.resultFile(dest.getFileName().toString()));
                 job.tell(j -> j.append("SUCCESS: installed " + dest));
@@ -282,9 +282,11 @@ public class SnapshotBuildService {
     private Path cloneOrUpdate(ActorRef<BuildJobActor> job, String githubRepo, String branch) throws Exception {
         Path buildRoot = Path.of(expand(buildDirTemplate));
         Files.createDirectories(buildRoot);
-        String leaf = githubRepo.contains("/")
+        // One checkout per repository and branch: two branches of one repository built at once would otherwise
+        // reset each other's checkout (DashboardBuilder_261118_oo01).
+        String leaf = BranchVariant.checkoutDir(githubRepo.contains("/")
             ? githubRepo.substring(githubRepo.indexOf('/') + 1)
-            : githubRepo;
+            : githubRepo, branch);
         Path repoDir = buildRoot.resolve(leaf);
 
         if (Files.isDirectory(repoDir.resolve(".git"))) {
@@ -391,18 +393,32 @@ public class SnapshotBuildService {
         }
     }
 
-    private Path installToWorks(ActorRef<BuildJobActor> job, Path uberJar, String jarFileName) throws Exception {
-        Path worksDir = Path.of(expand(worksDirTemplate));
-        Files.createDirectories(worksDir);
-        String versioned = uberJar.getFileName().toString();
-        Path dest = worksDir.resolve(versioned);
-        Files.copy(uberJar, dest, StandardCopyOption.REPLACE_EXISTING);
-        job.tell(j -> j.append("Copied " + versioned + " → " + dest));
+    private Path installToWorks(ActorRef<BuildJobActor> job, Path uberJar, String jarFileName,
+                                String stamp, String branch) throws Exception {
+        Path dest = install(Path.of(expand(worksDirTemplate)), uberJar, jarFileName, stamp, branch);
+        job.tell(j -> j.append("Copied " + uberJar.getFileName() + " → " + dest));
+        job.tell(j -> j.append("Symlink " + jarFileName + " → " + dest.getFileName()));
+        return dest;
+    }
 
-        Path symlink = worksDir.resolve(jarFileName);
+    /**
+     * Places a built jar in {@code worksDir} under a name of its own and points {@code linkName} at it.
+     *
+     * <p>The name carries the time the build finished ({@code BranchVariant#versionedName}), so a rebuild of the same
+     * {@code -SNAPSHOT} version is a new file and the file a running JVM has open is never written to. Only the link
+     * moves; the earlier file stays, so the link can be pointed back (DashboardBuilder_261118_oo01). A file of that
+     * name already there is never replaced: the copy fails instead.</p>
+     *
+     * @return the placed file
+     */
+    static Path install(Path worksDir, Path uberJar, String linkName, String stamp, String branch) throws Exception {
+        Files.createDirectories(worksDir);
+        String versioned = BranchVariant.versionedName(uberJar.getFileName().toString(), stamp, branch);
+        Path dest = worksDir.resolve(versioned);
+        Files.copy(uberJar, dest);
+        Path symlink = worksDir.resolve(linkName);
         Files.deleteIfExists(symlink);
         Files.createSymbolicLink(symlink, Path.of(versioned));
-        job.tell(j -> j.append("Symlink " + jarFileName + " → " + versioned));
         return dest;
     }
 

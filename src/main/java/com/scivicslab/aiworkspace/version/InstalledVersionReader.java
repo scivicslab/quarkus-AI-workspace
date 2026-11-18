@@ -66,13 +66,14 @@ public class InstalledVersionReader {
      */
     static String versionOf(String targetFileName, String jarFileName) {
         if (!targetFileName.endsWith(".jar")) return "";
-        String base = jarFileName.endsWith(".jar")
-                ? jarFileName.substring(0, jarFileName.length() - ".jar".length())
-                : jarFileName;
+        // A branch entry's link and files carry @<branch>; the version is read from the name without it.
+        String base = com.scivicslab.aiworkspace.config.BranchVariant.baseOf(jarFileName);
         String prefix = base + "-";
         if (!targetFileName.startsWith(prefix)) return "";
-        String version = targetFileName.substring(prefix.length(),
-                targetFileName.length() - ".jar".length());
+        // The build time Build Snapshot adds (twelve digits) or a file placed by hand carries (ten) is not part of
+        // the version either (DashboardBuilder_261118_oo01).
+        String version = com.scivicslab.aiworkspace.config.BranchVariant.withoutBranchAndStamp(
+                targetFileName.substring(prefix.length(), targetFileName.length() - ".jar".length()));
         return version.endsWith(RUNNER_SUFFIX)
                 ? version.substring(0, version.length() - RUNNER_SUFFIX.length())
                 : version;

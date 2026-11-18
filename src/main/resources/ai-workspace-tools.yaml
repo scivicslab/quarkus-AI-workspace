@@ -22,11 +22,18 @@
 #                  target/ directory); omit when it is the link name without ".jar". Needed when two
 #                  entries link one repository's jar under different names (TwoTilesOneRepository_260930_oo01)
 #   branch         the branch Build Snapshot checks out and Latest SNAPSHOT reads the pom from;
-#                  omit for the repository's default branch
+#                  omit for the repository's default branch. An entry with a branch names its jar and
+#                  each companion jar "<base>@<branch, / as ->.jar" (chat-ui-with-audit-trail@v5.x.jar),
+#                  builds in its own checkout and offers no Download Latest Release; two entries that
+#                  install from different places never share a link name. AI-workspace refuses to start
+#                  on a catalog that breaks this (CatalogRules, DashboardBuilder_261118_oo01).
+#   title          the tile's heading when the user's dashboard gives none; omit for the name
 #   params         dashboard form fields (key,label,type[dir|select|text],default,jvmProp,workingDir,argPos,options)
 #
 # Tools are plain standalone programs; they carry NO AI-workspace-specific code. All launch
-# metadata lives here — there is no per-tool plugin and no external override file.
+# metadata lives here — there is no per-tool plugin and no external override file. The user's
+# dashboard file (~/.config/ai-workspace/dashboard.yaml) only chooses, orders and titles these
+# entries by name; it defines no tool (DashboardBuilder_261118_oo01).
 tools:
   # chat-ui-with-audit-trail carries plugin jars beside its body (ProviderAndToolPlugins_260912_oo01);
   # which are passed on the command line is the start-up configuration, so it is three tiles rather

@@ -152,6 +152,14 @@ public class ServiceResource {
     @POST
     @Path("/tool/{name}/download")
     public Response downloadLatest(@PathParam("name") String name) {
+        // A release is made from the default branch. Putting it on a branch entry's link would leave that link
+        // pointing at another branch's jar, so a branch entry installs only by Build Snapshot
+        // (DashboardBuilder_261118_oo01).
+        String branch = toolRegistry.getBranch(name).orElse(null);
+        if (branch != null && !branch.isBlank())
+            return Response.status(409).entity(Map.of("error", name + " builds branch " + branch
+                + "; Download Latest Release installs the default branch's release, so it is not offered here. "
+                + "Use Build Snapshot.")).build();
         String github = backend.getGithubRepo(name).orElse(null);
         if (github == null)
             return Response.status(404).entity(Map.of("error", "No GitHub repo configured for " + name)).build();
