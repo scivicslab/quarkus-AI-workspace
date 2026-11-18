@@ -62,6 +62,21 @@ public interface ServiceBackend {
         return List.of();
     }
 
+    /**
+     * Gives a tool's announcement of itself to the instance on its HTTP port, which must be READY
+     * (ActorNodesForWorkspaceAndPortal_261118_oo01, question 11).
+     *
+     * @return empty when it was taken, or why it was refused
+     */
+    default Optional<String> announceNode(com.scivicslab.aiworkspace.model.NodeAnnouncement announcement) {
+        return Optional.of("this backend runs no instances");
+    }
+
+    /** What the READY instances announced about themselves, in HTTP port order. */
+    default List<com.scivicslab.aiworkspace.model.NodeAnnouncement> announcedNodes() {
+        return List.of();
+    }
+
     /** Update the memo for a specific instance. No-op if instance not found. */
     default void updateMemo(String toolName, int port, String memo) {}
 

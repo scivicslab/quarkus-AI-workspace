@@ -57,6 +57,15 @@ public class ServiceDirectoryResource {
     @GET
     public List<ServiceEntry> services(@QueryParam("name") String name,
                                        @QueryParam("readyOnly") boolean readyOnly) {
+        return list(backend, name, readyOnly);
+    }
+
+    /**
+     * The running tools as {@code GET /api/services} lists them. Also what another node reads through
+     * {@code ai-workspace-remote}'s {@code listInstances} (ActorNodesForWorkspaceAndPortal_261118_oo01), so the
+     * two cannot answer differently.
+     */
+    public static List<ServiceEntry> list(ServiceBackend backend, String name, boolean readyOnly) {
         DashboardModel model = backend.getDashboardModel();
         List<SessionView> all = new ArrayList<>();
         all.addAll(model.managementServices());

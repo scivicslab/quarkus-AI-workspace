@@ -58,10 +58,11 @@ public class JvmBackend implements ServiceBackend {
      */
     public void setActorSystem(com.scivicslab.aiworkspace.actor.AiWorkspaceActorSystem actors) {
         this.actors = actors;
-        this.instances = actors.actorSystem().actorOf("instances", new InstanceRegistryActor());
+        this.instances = new InstanceTree(actors.actorSystem());
     }
 
-    ActorRef<InstanceRegistryActor> instances;
+    /** Which instances exist: the children of the actor "instances" (ActorNodesForWorkspaceAndPortal_261118_oo01). */
+    InstanceTree instances;
 
     private AiWorkspaceConfig config;
     private String accessHost;
@@ -111,9 +112,8 @@ public class JvmBackend implements ServiceBackend {
         scanAndAdoptByPort();
 
         for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
-            // computeIfAbsent preserves any supervisors already adopted by the port scan
-            List<ActorRef<ProcessSupervisor>> existing =
-                instances.ask(r -> r.ensureAndList(tool.name())).join();
+            // Includes any instance the port scan has just adopted.
+            List<ActorRef<ProcessSupervisor>> existing = instances.forTool(tool.name());
             if (tool.autoStart()) {
                 boolean alreadyRunning = existing.stream()
                     .anyMatch(s -> s.ask(ProcessSupervisor::getState).join() == SessionState.READY || s.ask(ProcessSupervisor::getState).join() == SessionState.STARTING);
@@ -185,17 +185,14 @@ public class JvmBackend implements ServiceBackend {
             if (matchedTool == null) continue;
 
             final AiWorkspaceConfig.ToolDefinition adopted = matchedTool;
-            List<ActorRef<ProcessSupervisor>> list =
-                instances.ask(r -> r.ensureAndList(adopted.name())).join();
+            List<ActorRef<ProcessSupervisor>> list = instances.forTool(adopted.name());
 
             final int p = port;
             boolean alreadyAdopted = list.stream().anyMatch(s -> s.ask(ProcessSupervisor::getPort).join() == p
                 && (s.ask(ProcessSupervisor::getState).join() == SessionState.READY || s.ask(ProcessSupervisor::getState).join() == SessionState.STARTING));
             if (alreadyAdopted) continue;
 
-            // Into the registry, not into the copy the ask returned.
-            ActorRef<ProcessSupervisor> instance = adoptInstance(adopted, port, pid);
-            instances.tell(r -> r.add(adopted.name(), instance));
+            adoptInstance(adopted, port, pid);
             logger.info("Range scan adopted: " + matchedTool.name() + ":" + port + " (PID " + pid + ")");
         }
     }
@@ -209,8 +206,7 @@ public class JvmBackend implements ServiceBackend {
                 ProcessSupervisor.expandEnvVars(tool.jar()));
             if (resolvedJar == null || resolvedJar.isBlank()) continue;
 
-            List<ActorRef<ProcessSupervisor>> list =
-                instances.ask(r -> r.ensureAndList(tool.name())).join();
+            List<ActorRef<ProcessSupervisor>> list = instances.forTool(tool.name());
 
             for (int port = tool.port(); port < tool.port() + 100; port++) {
                 final int p = port;
@@ -237,8 +233,7 @@ public class JvmBackend implements ServiceBackend {
                     continue;
                 }
 
-                ActorRef<ProcessSupervisor> scanned = adoptInstance(tool, port, pid);
-                instances.tell(r -> r.add(tool.name(), scanned));
+                adoptInstance(tool, port, pid);
                 logger.info("Port scan adopted: " + tool.name() + ":" + port + " (PID " + pid + ")");
             }
         }
@@ -348,8 +343,7 @@ public class JvmBackend implements ServiceBackend {
         AiWorkspaceConfig.ToolDefinition def = findTool(toolName);
         // Dropping what has finished and reading what is left is one message: the port chosen
         // below depends on the same list the dropping produced.
-        List<ActorRef<ProcessSupervisor>> list =
-            instances.ask(r -> r.dropFinishedAndList(toolName)).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.dropFinished(toolName);
 
         if (def.singleInstance() && !list.isEmpty()) {
             throw new ServiceException(toolName + " is already running (singleInstance=true).");
@@ -358,7 +352,8 @@ public class JvmBackend implements ServiceBackend {
         // autoStart tools: stop any running instance before (re)starting
         if (def.autoStart() && !list.isEmpty()) {
             for (ActorRef<ProcessSupervisor> s : list) s.tell(ProcessSupervisor::stop);
-            instances.tell(r -> r.clear(toolName));
+            // Each stop above runs before its actor is closed: removeAll asks each one first.
+            instances.removeAll(toolName);
             list = List.of();
         }
 
@@ -379,9 +374,7 @@ public class JvmBackend implements ServiceBackend {
 
         int port = choosePort(def, params);
 
-        ActorRef<ProcessSupervisor> instance =
-            actors.newInstance(new ProcessSupervisor(def, port, params), def.name(), port);
-        instances.tell(r -> r.add(toolName, instance));
+        ActorRef<ProcessSupervisor> instance = instances.add(new ProcessSupervisor(def, port, params));
         instance.tell(s -> s.start(instance));
     }
 
@@ -398,15 +391,14 @@ public class JvmBackend implements ServiceBackend {
      */
     private ActorRef<ProcessSupervisor> adoptInstance(AiWorkspaceConfig.ToolDefinition tool,
                                                       int port, long pid) {
-        ActorRef<ProcessSupervisor> instance =
-            actors.newInstance(ProcessSupervisor.adopt(tool, port, pid), tool.name(), port);
+        ActorRef<ProcessSupervisor> instance = instances.add(ProcessSupervisor.adopt(tool, port, pid));
         instance.tell(s -> s.watchAdopted(instance));
         return instance;
     }
 
     @Override
     public void stopService(String toolName, int port) throws ServiceException {
-        List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(toolName)).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.forTool(toolName);
         ActorRef<ProcessSupervisor> target = list.stream()
             .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
             .findFirst()
@@ -424,8 +416,7 @@ public class JvmBackend implements ServiceBackend {
     @Override
     public void restartAll(String toolName, java.util.function.Consumer<String> progress) throws ServiceException {
         findTool(toolName);
-        List<ActorRef<ProcessSupervisor>> list =
-            instances.ask(r -> r.dropFinishedAndList(toolName)).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.dropFinished(toolName);
         List<Running> running = new ArrayList<>();
         for (ActorRef<ProcessSupervisor> ref : list) {
             running.add(new Running(ref, ref.ask(ProcessSupervisor::getPort).join(),
@@ -468,7 +459,7 @@ public class JvmBackend implements ServiceBackend {
     private void awaitReady(String toolName, int port) throws ServiceException {
         long deadline = System.currentTimeMillis() + READY_TIMEOUT_MS;
         while (true) {
-            SessionState state = instances.ask(r -> r.forTool(toolName)).join().stream()
+            SessionState state = instances.forTool(toolName).stream()
                 .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
                 .map(s -> s.ask(ProcessSupervisor::getState).join())
                 .findFirst().orElse(null);
@@ -504,7 +495,7 @@ public class JvmBackend implements ServiceBackend {
      */
     @Override
     public List<String> getServiceLogs(String toolName, int port, int lines) {
-        return instances.ask(r -> r.forTool(toolName)).join().stream()
+        return instances.forTool(toolName).stream()
             .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
             .findFirst()
             .map(s -> s.ask(a -> a.getRecentLogs(lines)).join())
@@ -518,12 +509,22 @@ public class JvmBackend implements ServiceBackend {
         if (config == null || config.jvm() == null) return out;
         for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
             if (!com.scivicslab.aiworkspace.chatui.ChatUiPeers.isChatUi(tool.jar())) continue;
-            for (ActorRef<ProcessSupervisor> s : instances.ask(r -> r.forTool(tool.name())).join()) {
+            for (ActorRef<ProcessSupervisor> s : instances.forTool(tool.name())) {
                 out.add(s.ask(p -> new com.scivicslab.aiworkspace.chatui.ChatUiPeers.Instance(
                         p.getPort(), p.getState(), p.commandLine())).join());
             }
         }
         return out;
+    }
+
+    @Override
+    public java.util.Optional<String> announceNode(com.scivicslab.aiworkspace.model.NodeAnnouncement announcement) {
+        return instances.announce(announcement);
+    }
+
+    @Override
+    public List<com.scivicslab.aiworkspace.model.NodeAnnouncement> announcedNodes() {
+        return instances.announcedNodes();
     }
 
     @Override
@@ -537,7 +538,7 @@ public class JvmBackend implements ServiceBackend {
         }
 
         for (AiWorkspaceConfig.ToolDefinition tool : config.jvm().tools()) {
-            List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(tool.name())).join();
+            List<ActorRef<ProcessSupervisor>> list = instances.forTool(tool.name());
 
             if (tool.autoStart()) {
                 List<ActorRef<ProcessSupervisor>> active = list.stream()
@@ -577,7 +578,7 @@ public class JvmBackend implements ServiceBackend {
 
     @Override
     public void updateMemo(String toolName, int port, String memo) {
-        instances.ask(r -> r.forTool(toolName)).join().stream()
+        instances.forTool(toolName).stream()
             .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
             .findFirst()
             .ifPresent(s -> s.tell(a -> a.setMemo(memo)));
@@ -630,7 +631,7 @@ public class JvmBackend implements ServiceBackend {
         }
 
         // Legacy mode (no port-range): unchanged behaviour.
-        List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(def.name())).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.forTool(def.name());
         if (def.fixedPort()) {
             if (!isPortFree(def.port())) {
                 throw new ServiceException(def.name() + " requires fixed port :" + def.port()
@@ -650,7 +651,7 @@ public class JvmBackend implements ServiceBackend {
      * for testing.
      */
     ActorRef<ProcessSupervisor> liveInstanceOn(String toolName, int port) {
-        List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(toolName)).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.forTool(toolName);
         return list.stream()
             .filter(s -> s.ask(ProcessSupervisor::getPort).join() == port)
             .filter(s -> {
@@ -672,7 +673,7 @@ public class JvmBackend implements ServiceBackend {
      * Port-range mode: finds the first free port in [start, end] across all tool instances.
      */
     private int findFreePortInRange(int start, int end) throws ServiceException {
-        Set<Integer> usedPorts = instances.ask(InstanceRegistryActor::all).join().stream()
+        Set<Integer> usedPorts = instances.all().stream()
             .filter(s -> s.ask(ProcessSupervisor::getState).join() != SessionState.STOPPED && s.ask(ProcessSupervisor::getState).join() != SessionState.FAILED)
             .map(s -> s.ask(ProcessSupervisor::getPort).join())
             .collect(java.util.stream.Collectors.toSet());
@@ -702,7 +703,7 @@ public class JvmBackend implements ServiceBackend {
 
     /** @return true if any live instance (any tool) already holds this port. */
     private boolean portUsedByInstances(int port) {
-        return instances.ask(InstanceRegistryActor::all).join().stream()
+        return instances.all().stream()
             .filter(s -> s.ask(ProcessSupervisor::getState).join() != SessionState.STOPPED && s.ask(ProcessSupervisor::getState).join() != SessionState.FAILED)
             .anyMatch(s -> s.ask(ProcessSupervisor::getPort).join() == port);
     }
@@ -879,7 +880,7 @@ public class JvmBackend implements ServiceBackend {
      * "Ready" and becomes launchable without a restart.
      */
     private String liveStatus(AiWorkspaceConfig.ToolDefinition tool) {
-        List<ActorRef<ProcessSupervisor>> list = instances.ask(r -> r.forTool(tool.name())).join();
+        List<ActorRef<ProcessSupervisor>> list = instances.forTool(tool.name());
         if (!list.isEmpty()) {
             List<Integer> ports = list.stream()
                 .filter(s -> s.ask(ProcessSupervisor::getState).join() == SessionState.READY || s.ask(ProcessSupervisor::getState).join() == SessionState.STARTING)

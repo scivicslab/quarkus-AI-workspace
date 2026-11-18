@@ -41,7 +41,7 @@ class JvmBackendPortTest {
         // Which instances exist lives in an actor now, and the producer normally creates it. This
         // test builds the backend directly, so it supplies one (ActorBasedState_260907_oo01).
         actorSystem = new ActorSystem("jvm-backend-test");
-        backend.instances = actorSystem.actorOf("instances", new InstanceRegistryActor());
+        backend.instances = new InstanceTree(actorSystem);
         // config.jvm()==null makes initialize() set the range then return before the port scan.
         backend.initialize(AiWorkspaceConfig.defaultConfig());
     }
@@ -77,9 +77,7 @@ class JvmBackendPortTest {
     @DisplayName("reserved tool falls forward when an instance holds its port before it listens")
     void fixedPort_heldByInstance_fallsForwardToPool() throws Exception {
         AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
-        ActorRef<ProcessSupervisor> instance = actorSystem.actorOf(
-            "instance-html-saurus-28001", ProcessSupervisor.adopt(def, 28001, 12345L));
-        backend.instances.tell(r -> r.add("html-saurus", instance));
+        backend.instances.add(ProcessSupervisor.adopt(def, 28001, 12345L));
         // Nothing listens on 28001 yet (occupied is empty), but the instance holds it.
         assertEquals(28010, backend.choosePort(def, Map.of()));
     }
@@ -125,11 +123,8 @@ class JvmBackendPortTest {
     @DisplayName("liveInstanceOn returns the READY instance on the reserved port (reuse basis)")
     void liveInstanceOn_adopted_returnsInstance() {
         AiWorkspaceConfig.ToolDefinition def = tool("html-saurus", 28001, true);
-        // The registry holds actor references now, so the supervisor is wrapped before it goes in.
         // No watching threads are started here: this test only asks which instance is on a port.
-        ActorRef<ProcessSupervisor> instance = actorSystem.actorOf(
-            "instance-html-saurus-28001", ProcessSupervisor.adopt(def, 28001, 12345L));
-        backend.instances.tell(r -> r.add("html-saurus", instance));
+        backend.instances.add(ProcessSupervisor.adopt(def, 28001, 12345L));
 
         assertNotNull(backend.liveInstanceOn("html-saurus", 28001));
         assertNull(backend.liveInstanceOn("html-saurus", 28002));
