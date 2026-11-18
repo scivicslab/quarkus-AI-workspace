@@ -11,7 +11,7 @@ const PORTAL_URL = resolvePortalUrl();
 test('the Catalog tab hides a tile, retitles another, saves, and the Dashboard tab follows', async ({ page }) => {
   await page.goto(PORTAL_URL + '/catalog');
   await expect(page.locator('.screen-tab-active')).toHaveText('Catalog');
-  const shownRows = page.locator('#catalog-shown tr');
+  const shownRows = page.locator('#catalog-shown-tools tr');
   await expect(shownRows.first()).toBeVisible();
   const before = await shownRows.count();
   expect(before).toBeGreaterThan(2);
@@ -40,5 +40,5 @@ test('the Catalog tab hides a tile, retitles another, saves, and the Dashboard t
 
   // The Catalog tab shows the saved state after a reload.
   await page.goto(PORTAL_URL + '/catalog');
-  await expect(page.locator('#catalog-shown tr').first().locator('input')).toHaveValue('E2E heading');
+  await expect(page.locator('#catalog-shown-tools tr').first().locator('input')).toHaveValue('E2E heading');
 });

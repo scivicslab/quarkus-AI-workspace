@@ -9,14 +9,23 @@
         <button class="btn btn-small" id="catalog-save">Save</button>
         <span class="download-status" id="catalog-status"></span>
     </div>
+    {! The Dashboard tab draws tools and services (link entries) in two sections, each in the order set here;
+       an entry moves up and down only among its own kind (DashboardBuilder_261118_oo01). !}
+    <p class="section-label">Tools — what can be started</p>
     <table class="settings-table catalog-table">
         <thead><tr><th>Order</th><th>Heading (blank = catalog's)</th><th>Entry</th><th>Branch</th><th>Jar link</th><th></th></tr></thead>
-        <tbody id="catalog-shown"></tbody>
+        <tbody id="catalog-shown-tools"></tbody>
+    </table>
+
+    <p class="section-label" style="margin-top:1.5rem;">Services — opened, not started</p>
+    <table class="settings-table catalog-table">
+        <thead><tr><th>Order</th><th>Heading (blank = catalog's)</th><th>Entry</th><th></th></tr></thead>
+        <tbody id="catalog-shown-services"></tbody>
     </table>
 
     <p class="section-label" style="margin-top:1.5rem;">Not shown</p>
     <table class="settings-table catalog-table">
-        <thead><tr><th>Entry</th><th>Heading</th><th>Branch</th><th>Jar link</th><th></th></tr></thead>
+        <thead><tr><th>Entry</th><th>Kind</th><th>Heading</th><th>Branch</th><th>Jar link</th><th></th></tr></thead>
         <tbody id="catalog-hidden"></tbody>
     </table>
 

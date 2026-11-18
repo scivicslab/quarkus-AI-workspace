@@ -170,6 +170,7 @@ public class DashboardResource {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance dashboard() {
         List<InstanceRow> rows = withActivity(rows());
+        List<CatalogTile> tiles = catalogTiles();
         return dashboard
             .data("screen", "dashboard")
             .data("version", appVersion)
@@ -180,7 +181,9 @@ public class DashboardResource {
             .data("starting", count(rows, SessionState.STARTING))
             .data("failed", count(rows, SessionState.FAILED))
             .data("stopped", count(rows, SessionState.STOPPED))
-            .data("launchTools", catalogTiles())
+            // Tools and link entries are two sections, each in the order the user set (DashboardBuilder_261118_oo01).
+            .data("launchTools", tiles.stream().filter(t -> !t.link()).toList())
+            .data("linkTiles", tiles.stream().filter(CatalogTile::link).toList())
             // The broker is watched from the Catalog, not started from it (GpuBrokerViewResource).
             .data("gpuBrokerUrl", com.scivicslab.aiworkspace.config.GpuBrokerUrl.resolve().orElse(""))
             .data("versionsFetchedAt", fetchedAtText())

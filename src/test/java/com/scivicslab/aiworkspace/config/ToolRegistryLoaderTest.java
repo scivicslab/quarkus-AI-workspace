@@ -122,12 +122,14 @@ class ToolRegistryLoaderTest {
         }
     }
 
-    /** The markup of a link entry's tile, the GPU broker's among them: the {@code tool.link} branch of the tile loop. */
+    /** The markup of a link entry's tile, the GPU broker's among them: the loop of the Services section. */
     private static String brokerTileOf(String dashboard) {
-        int start = dashboard.indexOf("{#if tool.link}");
-        assertTrue(start >= 0, "the Dashboard tab draws link entries");
-        int end = dashboard.indexOf("{! data-github marks the tiles", start);
-        assertTrue(end > start, "the link tile ends where the launchable tile begins");
+        int start = dashboard.indexOf("{#for tool in linkTiles}");
+        assertTrue(start >= 0, "the Dashboard tab draws link entries in a section of their own");
+        int end = dashboard.indexOf("{/for}", start);
+        assertTrue(end > start, "the Services loop ends");
+        assertTrue(dashboard.indexOf("{#for tool in launchTools}") < start,
+                "the Services section comes after the tools");
         return dashboard.substring(start, end);
     }
 
