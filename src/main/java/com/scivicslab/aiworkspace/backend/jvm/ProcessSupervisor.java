@@ -276,20 +276,7 @@ public class ProcessSupervisor {
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile); // truncates existing file for fresh log
 
-            // Where the GPU work goes. quarkus-gpu-broker stands once in front of the cluster's
-            // GPU nodes and need not run on this machine, so a tool cannot assume an address for
-            // it. This portal is the one place that knows, and it tells each tool it launches.
-            // A tool started with this unset keeps whatever fixed node it was written to use.
-            String brokerUrl = gpuBrokerUrl();
-            if (brokerUrl != null) {
-                pb.environment().put("GPU_BROKER_URL", brokerUrl);
-            }
-
-            // Where to ask about everything that changes while this tool runs. The set of running
-            // tools cannot be handed over at launch — it is different an hour later — so what is
-            // handed over is the address to ask at (ServiceDirectory_260905_oo01). A tool that
-            // wants to reach another tool reads GET /api/services from here.
-            pb.environment().put("AI_WORKSPACE_URL", ownBaseUrl());
+            fillEnvironment(pb.environment());
 
             java.io.File workingDir = resolveWorkingDir();
             if (workingDir != null) {
@@ -718,6 +705,32 @@ public class ProcessSupervisor {
             HTTP_CLIENT = HttpClient.newHttpClient();
         }
         return HTTP_CLIENT;
+    }
+
+    /**
+     * What every tool this portal launches is told in its environment. Package-private so it can be checked
+     * without starting a process.
+     */
+    void fillEnvironment(Map<String, String> env) {
+        // Where the GPU work goes. quarkus-gpu-broker stands once in front of the cluster's
+        // GPU nodes and need not run on this machine, so a tool cannot assume an address for
+        // it. This portal is the one place that knows, and it tells each tool it launches.
+        // A tool started with this unset keeps whatever fixed node it was written to use.
+        String brokerUrl = gpuBrokerUrl();
+        if (brokerUrl != null) {
+            env.put("GPU_BROKER_URL", brokerUrl);
+        }
+
+        // Where to ask about everything that changes while this tool runs. The set of running
+        // tools cannot be handed over at launch — it is different an hour later — so what is
+        // handed over is the address to ask at (ServiceDirectory_260905_oo01). A tool that
+        // wants to reach another tool reads GET /api/services from here.
+        env.put("AI_WORKSPACE_URL", ownBaseUrl());
+
+        // Where this portal's node of the distributed actor system is. Every tool is told, whatever it is: this
+        // portal keeps no list of which tools are nodes. A tool that is one announces itself to this address
+        // (ActorNodesForWorkspaceAndPortal_261118_oo01, decision 4); any other tool ignores it.
+        env.put("AI_WORKSPACE_NODE", com.scivicslab.aiworkspace.node.WorkspaceNode.address());
     }
 
     /**

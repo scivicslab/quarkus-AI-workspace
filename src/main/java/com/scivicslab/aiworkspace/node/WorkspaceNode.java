@@ -83,7 +83,7 @@ public class WorkspaceNode {
     void onStart(@Observes StartupEvent event) {
         DistributedIIActorSystem system = actors.actorSystem();
         NodeInfo me = system.getMyNode();
-        WorkspaceGateway gateway = new WorkspaceGateway(me.getNodeId(), me.getPort(),
+        WorkspaceGateway gateway = new WorkspaceGateway(() -> nodes(system),
                 q -> ServiceDirectoryResource.list(backend, q.tool(), q.readyOnly()), this::catalog);
         try {
             open(system, gateway, BIND);
@@ -110,6 +110,24 @@ public class WorkspaceNode {
                     remote.latestRelease(), remote.latestSnapshot()));
         }
         return out;
+    }
+
+    /**
+     * The nodes this AI-workspace knows, as {@code GET /api/nodes} and {@code listNodes} list them: for now, itself.
+     * Nodes that announce themselves are added in step 4.
+     */
+    public static List<WorkspaceGateway.NodeEntry> nodes(DistributedIIActorSystem system) {
+        NodeInfo me = system.getMyNode();
+        return List.of(new WorkspaceGateway.NodeEntry(me.getNodeId(), me.getHost(), me.getPort(), KIND));
+    }
+
+    /**
+     * Where this AI-workspace's node is, as every tool it launches is told in {@code AI_WORKSPACE_NODE}:
+     * {@code <node name>@<host>:<actor port>}, for example {@code ai-workspace-28000@127.0.0.1:29000}.
+     */
+    public static String address() {
+        NodeInfo me = identity();
+        return me.getNodeId() + "@" + me.getHost() + ":" + me.getPort();
     }
 
     /** The node name and actor port this portal takes, from its HTTP port. */

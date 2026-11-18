@@ -33,22 +33,19 @@ public final class WorkspaceGateway {
     /** One node, as {@code listNodes} and {@code GET /api/nodes} list it. */
     public record NodeEntry(String name, String host, int actorPort, String kind) {}
 
-    private final String nodeName;
-    private final int actorPort;
+    private final Supplier<List<NodeEntry>> nodes;
     private final Function<InstanceQuery, List<ServiceDirectoryResource.ServiceEntry>> instances;
     private final Supplier<List<CatalogEntry>> catalog;
 
     /**
-     * @param nodeName  this node's name
-     * @param actorPort this node's actor port
+     * @param nodes     answers {@code listNodes}: the same as {@code GET /api/nodes}
      * @param instances answers {@code listInstances}: the same as {@code GET /api/services}
      * @param catalog   answers {@code listCatalog}
      */
-    public WorkspaceGateway(String nodeName, int actorPort,
+    public WorkspaceGateway(Supplier<List<NodeEntry>> nodes,
                             Function<InstanceQuery, List<ServiceDirectoryResource.ServiceEntry>> instances,
                             Supplier<List<CatalogEntry>> catalog) {
-        this.nodeName = nodeName;
-        this.actorPort = actorPort;
+        this.nodes = nodes;
         this.instances = instances;
         this.catalog = catalog;
     }
@@ -67,9 +64,9 @@ public final class WorkspaceGateway {
         return answer("listCatalog", catalog::get);
     }
 
-    /** -> the nodes AI-workspace knows: for now, itself. */
+    /** -> the nodes AI-workspace knows, as {@code GET /api/nodes} lists them. */
     public ActionResult listNodes(String args) {
-        return answer("listNodes", () -> List.of(new NodeEntry(nodeName, "127.0.0.1", actorPort, WorkspaceNode.KIND)));
+        return answer("listNodes", nodes::get);
     }
 
     private static JsonNode parse(String args) throws Exception {

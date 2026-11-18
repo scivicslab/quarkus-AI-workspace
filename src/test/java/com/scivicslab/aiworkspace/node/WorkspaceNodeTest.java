@@ -85,7 +85,7 @@ class WorkspaceNodeTest {
         workspace.actorOf("build-registry", new Object());
 
         ServiceBackend backend = new Fixed();
-        WorkspaceNode.open(workspace, new WorkspaceGateway(NODE, actorPort,
+        WorkspaceNode.open(workspace, new WorkspaceGateway(() -> WorkspaceNode.nodes(workspace),
                 q -> ServiceDirectoryResource.list(backend, q.tool(), q.readyOnly()),
                 () -> List.of(new WorkspaceGateway.CatalogEntry("html-saurus", "html-saurus", "installed", "2.6.0", "2.6.0", ""))),
                 "127.0.0.1");
