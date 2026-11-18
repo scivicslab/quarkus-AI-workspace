@@ -122,7 +122,7 @@ public class SnapshotBuildService {
 
     /** @return the tracked build, if this portal started it. */
     public Optional<ActorRef<BuildJobActor>> get(String jobId) {
-        return actors.buildRegistry().ask(r -> r.get(jobId)).join();
+        return actors.buildJob(jobId);
     }
 
     // ---------------------------------------------------------------
