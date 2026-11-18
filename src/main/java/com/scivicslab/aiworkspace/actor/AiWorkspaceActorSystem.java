@@ -37,6 +37,7 @@ public class AiWorkspaceActorSystem {
     private com.scivicslab.pojoactor.distributed.DistributedIIActorSystem actorSystem;
     private ActorRef<ToolVersionActor> toolVersions;
     private ActorRef<Builds> buildRegistry;
+    private ActorRef<com.scivicslab.aiworkspace.dashboard.Dashboard> dashboard;
     private ActorRef<com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor>
             conversationLogMerge;
 
@@ -46,6 +47,9 @@ public class AiWorkspaceActorSystem {
         actorSystem = com.scivicslab.aiworkspace.node.WorkspaceNode.buildSystem(me.getNodeId(), me.getPort());
         toolVersions = actorSystem.actorOf("tool-versions", new ToolVersionActor(fetcher));
         buildRegistry = actorSystem.actorOf("build-registry", new Builds());
+        // The user's choice of tiles; it reads its file now and writes it on every save (DashboardBuilder_261118_oo01).
+        dashboard = actorSystem.actorOf("dashboard", com.scivicslab.aiworkspace.dashboard.Dashboard.open(
+                com.scivicslab.aiworkspace.dashboard.DashboardFile.location()));
         conversationLogMerge = actorSystem.actorOf("conversation-log-merge",
                 new com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor());
         logger.info("AiWorkspaceActorSystem initialized");
@@ -69,6 +73,11 @@ public class AiWorkspaceActorSystem {
     public ActorRef<com.scivicslab.aiworkspace.conversation.ConversationLogMergeActor>
             conversationLogMerge() {
         return conversationLogMerge;
+    }
+
+    /** The actor holding which catalog entries the user shows on the Dashboard tab, in what order and under what heading. */
+    public ActorRef<com.scivicslab.aiworkspace.dashboard.Dashboard> dashboard() {
+        return dashboard;
     }
 
     /** The actor holding which snapshot builds have been started. */

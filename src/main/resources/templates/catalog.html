@@ -1,0 +1,31 @@
+{#include layout}
+{#body}
+    {! The Catalog tab: which catalog entries the Dashboard tab shows, in what order and under what
+       heading (DashboardBuilder_261118_oo01). The catalog itself is the list bundled in this
+       portal's jar and is not changed here; what is saved is the user's dashboard file. The lists
+       are drawn and saved by static/catalog.js through GET/PUT /api/dashboard/layout. !}
+    <div class="section-head">
+        <h2 class="section-label">Shown on the Dashboard tab</h2>
+        <button class="btn btn-small" id="catalog-save">Save</button>
+        <span class="download-status" id="catalog-status"></span>
+    </div>
+    <table class="settings-table catalog-table">
+        <thead><tr><th>Order</th><th>Heading (blank = catalog's)</th><th>Entry</th><th>Branch</th><th>Jar link</th><th></th></tr></thead>
+        <tbody id="catalog-shown"></tbody>
+    </table>
+
+    <p class="section-label" style="margin-top:1.5rem;">Not shown</p>
+    <table class="settings-table catalog-table">
+        <thead><tr><th>Entry</th><th>Heading</th><th>Branch</th><th>Jar link</th><th></th></tr></thead>
+        <tbody id="catalog-hidden"></tbody>
+    </table>
+
+    <div id="catalog-missing-block" style="display:none;">
+        <p class="section-label" style="margin-top:1.5rem;">No longer in the catalog</p>
+        <table class="settings-table catalog-table">
+            <thead><tr><th>Entry</th><th>Heading</th><th></th></tr></thead>
+            <tbody id="catalog-missing"></tbody>
+        </table>
+    </div>
+    <script src="static/catalog.js?v={assetVersion}"></script>
+{/include}

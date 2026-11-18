@@ -745,6 +745,9 @@
     <a href="/" class="screen-tab{#if screen == 'dashboard'} screen-tab-active{/if}">Dashboard</a>
     <a href="/conversations" class="screen-tab{#if screen == 'conversations'} screen-tab-active{/if}">Conversations</a>
     <a href="/settings" class="screen-tab{#if screen == 'settings'} screen-tab-active{/if}">Settings</a>
+    {! Which catalog entries the Dashboard tab shows, in what order and under what heading
+       (DashboardBuilder_261118_oo01). !}
+    <a href="/catalog" class="screen-tab{#if screen == 'catalog'} screen-tab-active{/if}">Catalog</a>
 </nav>
 
 {#insert body /}

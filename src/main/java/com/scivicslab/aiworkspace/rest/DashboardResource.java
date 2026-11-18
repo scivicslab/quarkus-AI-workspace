@@ -49,6 +49,9 @@ public class DashboardResource {
     Template settings;
 
     @Inject
+    Template catalog;
+
+    @Inject
     ServiceBackend backend;
 
     @Inject
@@ -112,12 +115,14 @@ public class DashboardResource {
      * @param installed      the version the symbolic link in the works directory points at, or ""
      * @param latestRelease  the version of the newest release's tag, or ""
      * @param latestSnapshot the version the default branch's pom.xml declares, or ""
+     * @param branch         the branch the entry builds, or "" for the default branch; a branch entry offers no
+     *                       Download Latest Release (DashboardBuilder_261118_oo01)
      */
     public record CatalogTile(String name, String displayName,
                               java.util.List<com.scivicslab.aiworkspace.model.ParamDefinition> params,
                               String github, String status, boolean library,
                               String installed, String latestRelease, String latestSnapshot,
-                              String iconUrl) {}
+                              String iconUrl, String branch) {}
 
     /** The extensions a tool icon may be held in, tried in this order. */
     private static final List<String> ICON_EXTENSIONS = List.of(".svg", ".ico");
@@ -240,18 +245,27 @@ public class DashboardResource {
             registry.put(e.name(), e);
         }
 
+        // The tiles the user's dashboard file shows, in its order and under its headings; before the user's first
+        // save, every launchable entry in catalog order (DashboardBuilder_261118_oo01).
+        java.util.Map<String, com.scivicslab.aiworkspace.model.ToolView> views = new java.util.LinkedHashMap<>();
+        for (var tool : backend.getDashboardModel().launchTools()) views.put(tool.name(), tool);
+        List<com.scivicslab.aiworkspace.config.ToolRegistryEntry> catalogEntries = List.copyOf(registry.values());
+        var layout = actors.dashboard().ask(d -> d.layout(catalogEntries)).join();
+
         List<CatalogTile> tiles = new ArrayList<>();
-        for (var tool : backend.getDashboardModel().launchTools()) {
+        for (var shown : layout.shown()) {
+            var tool = views.get(shown.name());
+            if (tool == null) continue;
             var entry = registry.get(tool.name());
             boolean library = entry != null && entry.library();
             String installed = (entry == null || library)
                 ? ""
                 : installedVersionReader.read(entry.jarFileName());
             var remote = actors.toolVersions().ask(a -> a.get(tool.name())).join();
-            tiles.add(new CatalogTile(tool.name(), tool.displayName(), tool.params(),
+            tiles.add(new CatalogTile(tool.name(), shown.heading(), tool.params(),
                                       tool.github(), tool.status(), library,
                                       installed, remote.latestRelease(), remote.latestSnapshot(),
-                                      iconUrl(tool.name())));
+                                      iconUrl(tool.name()), shown.branch()));
         }
         return tiles;
     }
@@ -272,6 +286,23 @@ public class DashboardResource {
      * <p>Read-only, and read the same way {@code ProcessSupervisor} reads them at launch, so what
      * is shown here is what a tool started now would receive ({@code ServiceDirectory_260905_oo01}).</p>
      */
+    /**
+     * The Catalog tab: every launchable catalog entry, in three groups — shown on the Dashboard tab, not shown, and no
+     * longer in the catalog — where the user shows or hides an entry, orders the shown ones and gives each a heading
+     * (DashboardBuilder_261118_oo01). The lists are drawn and saved by the page itself through
+     * {@code GET}/{@code PUT /api/dashboard/layout}.
+     */
+    @GET
+    @Path("/catalog")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance catalog() {
+        return catalog
+            .data("screen", "catalog")
+            .data("version", appVersion)
+            .data("assetVersion", assetVersionBean.value())
+            .data("imageTag", imageTag.orElse(""));
+    }
+
     @GET
     @Path("/settings")
     @Produces(MediaType.TEXT_HTML)
