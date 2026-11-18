@@ -82,6 +82,13 @@ public class ProcessSupervisor {
     /** The command this supervisor started its process with; {@code null} for an adopted process. */
     private List<String> launchedCommand;
 
+    /**
+     * What this instance said about itself when it joined the distributed actor system, or {@code null} while it has
+     * not (ActorNodesForWorkspaceAndPortal_261118_oo01, step 4). Kept here, not in a table of its own, so that it
+     * leaves with the instance. Not recorded: the tool announces itself again every 60 seconds.
+     */
+    private com.scivicslab.aiworkspace.model.NodeAnnouncement announcement;
+
 
     public ProcessSupervisor(AiWorkspaceConfig.ToolDefinition config,
                              int port,
@@ -106,6 +113,16 @@ public class ProcessSupervisor {
 
     public SessionState getState() {
         return state;
+    }
+
+    /** Keeps what this instance announced about itself; the latest announcement replaces the one before. */
+    public void announce(com.scivicslab.aiworkspace.model.NodeAnnouncement announcement) {
+        this.announcement = announcement;
+    }
+
+    /** What this instance announced about itself, or {@code null} while it has not. */
+    public com.scivicslab.aiworkspace.model.NodeAnnouncement getAnnouncement() {
+        return announcement;
     }
 
     public String getCachedAccessUrl() {

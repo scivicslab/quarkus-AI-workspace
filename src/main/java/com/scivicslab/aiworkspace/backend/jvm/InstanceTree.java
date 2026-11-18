@@ -1,9 +1,13 @@
 package com.scivicslab.aiworkspace.backend.jvm;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletionException;
 
+import com.scivicslab.aiworkspace.model.NodeAnnouncement;
 import com.scivicslab.aiworkspace.model.SessionState;
 import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.core.ActorSystem;
@@ -107,6 +111,41 @@ public final class InstanceTree {
                 forget(c);
             }
             return null;
+        });
+    }
+
+    /**
+     * Gives an announcement to the instance it is about: the one on its HTTP port, which must be READY
+     * (ActorNodesForWorkspaceAndPortal_261118_oo01, question 11).
+     *
+     * @return empty when the instance took it, or why it was refused
+     */
+    public Optional<String> announce(NodeAnnouncement announcement) {
+        int port = announcement.httpPort();
+        return inRoot(() -> {
+            for (ActorRef<ProcessSupervisor> c : children(null)) {
+                if (c.ask(ProcessSupervisor::getPort).join() != port) continue;
+                SessionState state = c.ask(ProcessSupervisor::getState).join();
+                if (state != SessionState.READY) {
+                    return Optional.of("the instance on port " + port + " is " + state + ", not READY");
+                }
+                c.ask(s -> { s.announce(announcement); return null; }).join();
+                return Optional.<String>empty();
+            }
+            return Optional.of("this AI-workspace runs no instance on port " + port);
+        });
+    }
+
+    /** What the READY instances announced about themselves, in HTTP port order. */
+    public List<NodeAnnouncement> announcedNodes() {
+        return inRoot(() -> {
+            List<NodeAnnouncement> out = new ArrayList<>();
+            for (ActorRef<ProcessSupervisor> c : children(null)) {
+                NodeAnnouncement a = c.ask(s -> s.getState() == SessionState.READY ? s.getAnnouncement() : null).join();
+                if (a != null) out.add(a);
+            }
+            out.sort(Comparator.comparingInt(NodeAnnouncement::httpPort));
+            return out;
         });
     }
 

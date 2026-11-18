@@ -36,7 +36,7 @@ import com.scivicslab.pojoactor.distributed.discovery.StaticNodeDiscovery;
 
 /**
  * AI-workspace's own actor system is a node of the distributed actor system, and other nodes may call only the
- * read actions of {@code ai-workspace-remote} (ActorNodesForWorkspaceAndPortal_261118_oo01, step 2; decisions 1, 2).
+ * actions of {@code ai-workspace-remote} on its allow-list (ActorNodesForWorkspaceAndPortal_261118_oo01, step 2; decisions 1, 2).
  *
  * <p>Two real {@code DistributedIIActorSystem}s talk over HTTP on 127.0.0.1: AI-workspace's, with the gateway and an
  * {@code instances} tree beside it as in the portal, and a caller's.</p>
@@ -85,9 +85,10 @@ class WorkspaceNodeTest {
         workspace.actorOf("build-registry", new Object());
 
         ServiceBackend backend = new Fixed();
-        WorkspaceNode.open(workspace, new WorkspaceGateway(() -> WorkspaceNode.nodes(workspace),
+        WorkspaceNode.open(workspace, new WorkspaceGateway(() -> WorkspaceNode.nodes(workspace, List.of()),
                 q -> ServiceDirectoryResource.list(backend, q.tool(), q.readyOnly()),
-                () -> List.of(new WorkspaceGateway.CatalogEntry("html-saurus", "html-saurus", "installed", "2.6.0", "2.6.0", ""))),
+                () -> List.of(new WorkspaceGateway.CatalogEntry("html-saurus", "html-saurus", "installed", "2.6.0", "2.6.0", "")),
+                WorkspaceNode.announcer(workspace, instances::announce)),
                 "127.0.0.1");
 
         NodeInfo me = new NodeInfo("caller", "127.0.0.1", freePort());

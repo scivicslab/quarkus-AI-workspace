@@ -23,4 +23,7 @@ public class WorkspaceGatewayIIAR extends IIActorRef<WorkspaceGateway> {
 
     @Action("listNodes")
     public ActionResult listNodes(String args) { return object.listNodes(args); }
+
+    @Action("announceNode")
+    public ActionResult announceNode(String args) { return object.announceNode(args); }
 }

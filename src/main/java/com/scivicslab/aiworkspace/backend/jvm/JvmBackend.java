@@ -518,6 +518,16 @@ public class JvmBackend implements ServiceBackend {
     }
 
     @Override
+    public java.util.Optional<String> announceNode(com.scivicslab.aiworkspace.model.NodeAnnouncement announcement) {
+        return instances.announce(announcement);
+    }
+
+    @Override
+    public List<com.scivicslab.aiworkspace.model.NodeAnnouncement> announcedNodes() {
+        return instances.announcedNodes();
+    }
+
+    @Override
     public DashboardModel getDashboardModel() {
         List<SessionView> managementServices = new ArrayList<>();
         List<SessionView> activeSessions = new ArrayList<>();
