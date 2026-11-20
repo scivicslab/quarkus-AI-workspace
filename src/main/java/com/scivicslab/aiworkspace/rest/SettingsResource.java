@@ -99,7 +99,7 @@ public class SettingsResource {
         return ids;
     }
 
-    private static String jsonString(String s) {
+    static String jsonString(String s) {
         String v = s == null ? "" : s;
         return "\"" + v.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }

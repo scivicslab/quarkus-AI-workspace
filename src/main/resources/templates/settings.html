@@ -39,6 +39,15 @@
                 </td>
                 <td>The model html-saurus translates with. It asks here at each translation, so a change applies to the next one without restarting it. Blank keeps html-saurus's own default.</td>
             </tr>
+            <tr>
+                <td class="inst-mono">Revision model</td>
+                <td>
+                    <select id="revision-model"></select>
+                    <button class="btn" type="button" id="revision-model-save">Save</button>
+                    <span id="revision-model-status" class="settings-unset"></span>
+                </td>
+                <td>The model html-saurus's Revise panel proposes and makes revisions with. Blank uses the translation model.</td>
+            </tr>
         </tbody>
     </table>
 
@@ -48,30 +57,40 @@
     </p>
     <script>
     (function () {
-        const sel = document.getElementById('translation-model');
-        const status = document.getElementById('translation-model-status');
-        async function load() {
-            const current = (await (await fetch('api/settings/translation-model')).json()).model;
+        // Two model choices for html-saurus, from the same list of candidates.
+        function modelChoice(id, blankLabel) {
+            const sel = document.getElementById(id);
+            const status = document.getElementById(id + '-status');
+            async function load(models) {
+                const current = (await (await fetch('api/settings/' + id)).json()).model;
+                const list = models.slice();
+                if (current && list.indexOf(current) < 0) list.unshift(current);
+                sel.innerHTML = '';
+                const none = document.createElement('option');
+                none.value = ''; none.textContent = blankLabel;
+                sel.appendChild(none);
+                list.forEach(function (m) {
+                    const o = document.createElement('option');
+                    o.value = m; o.textContent = m;
+                    sel.appendChild(o);
+                });
+                sel.value = current;
+            }
+            document.getElementById(id + '-save').addEventListener('click', async function () {
+                const r = await fetch('api/settings/' + id, {
+                    method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: sel.value });
+                status.textContent = r.ok ? 'Saved.' : 'Error: ' + r.status;
+            });
+            return load;
+        }
+        const loadTranslation = modelChoice('translation-model', '(html-saurus default)');
+        const loadRevision = modelChoice('revision-model', '(the translation model)');
+        (async function () {
             let models = [];
             try { models = (await (await fetch('api/settings/translation-model/candidates')).json()).models; } catch (e) {}
-            if (current && models.indexOf(current) < 0) models.unshift(current);
-            sel.innerHTML = '';
-            const none = document.createElement('option');
-            none.value = ''; none.textContent = '(html-saurus default)';
-            sel.appendChild(none);
-            models.forEach(function (m) {
-                const o = document.createElement('option');
-                o.value = m; o.textContent = m;
-                sel.appendChild(o);
-            });
-            sel.value = current;
-        }
-        document.getElementById('translation-model-save').addEventListener('click', async function () {
-            const r = await fetch('api/settings/translation-model', {
-                method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: sel.value });
-            status.textContent = r.ok ? 'Saved.' : 'Error: ' + r.status;
-        });
-        load();
+            await loadTranslation(models);
+            await loadRevision(models);
+        })();
     })();
     </script>
 {/body}
